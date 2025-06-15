@@ -169,9 +169,40 @@ class TestSeedManager:
     def test_record_drift_nonexistent_seed(self):
         """Test drift recording for non-existent seed."""
         manager = SeedManager()
-        
+
         # Should not raise an exception
         manager.record_drift("nonexistent", 0.123)
+
+    def test_request_germination_logs(self):
+        """Verify that germination events are logged via ExperimentLogger."""
+        manager = SeedManager()
+        manager.seeds.clear()
+        manager.germination_log.clear()
+
+        mock_seed = Mock()
+        mock_seed.initialize_child = Mock()
+        mock_logger = Mock()
+        manager.set_logger(mock_logger)
+        manager.register_seed(mock_seed, "log_seed")
+
+        result = manager.request_germination("log_seed", epoch=3)
+
+        assert result is True
+        mock_logger.log_germination.assert_called_once_with(3, "log_seed")
+        assert manager.germination_log[0]["epoch"] == 3
+
+    def test_record_transition_logs_event(self):
+        """Verify that state transitions invoke ExperimentLogger."""
+        manager = SeedManager()
+        manager.germination_log.clear()
+
+        mock_logger = Mock()
+        manager.set_logger(mock_logger)
+
+        manager.record_transition("seedX", "dormant", "training", epoch=4)
+
+        mock_logger.log_seed_event.assert_called_once_with(4, "seedX", "dormant", "training")
+        assert manager.germination_log[0]["epoch"] == 4
 
 
 class TestKasminaMicro:
