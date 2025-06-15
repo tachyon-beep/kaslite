@@ -1,16 +1,11 @@
 """Comprehensive tests for the run_morphogenetic_experiment script."""
 
-import os
-import sys
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
 import torch
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from morphogenetic_engine.core import SeedManager
 from scripts.run_morphogenetic_experiment import (
     create_complex_moons,
