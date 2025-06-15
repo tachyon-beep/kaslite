@@ -1,11 +1,19 @@
+"""Components module for morphogenetic engine."""
+import logging
+
 import torch
 from torch import nn
-import logging
 
 from .core import SeedManager
 
 
 class SentinelSeed(nn.Module):
+    """
+    A sentinel seed that monitors activations and can evolve when needed.
+    
+    This module starts as dormant, monitors activation patterns, and can be
+    germinated to learn adaptive transformations when bottlenecks are detected.
+    """
     def __init__(
         self,
         seed_id: str,
@@ -13,12 +21,13 @@ class SentinelSeed(nn.Module):
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
         progress_thresh: float = 0.6,
-        drift_warn: float = 0.1,
+        drift_warn: float = 0.12,
     ):
         super().__init__()
         self.seed_id = seed_id
         self.dim = dim
         self.blend_steps = blend_steps
+        self.shadow_lr = shadow_lr
         self.progress_thresh = progress_thresh
         self.alpha = 0.0
         self.state = "dormant"
@@ -33,11 +42,13 @@ class SentinelSeed(nn.Module):
         )
         self._initialize_as_identity()
 
-        self.child_optim = torch.optim.Adam(self.child.parameters(), lr=shadow_lr)
+        self.child_optim = torch.optim.Adam(
+            self.child.parameters(), lr=shadow_lr, weight_decay=0.0
+        )
         self.child_loss = nn.MSELoss()
 
         # Register with seed manager
-        self.seed_manager = SeedManager()
+        self.seed_manager = SeedManager()  # type: SeedManager
         self.seed_manager.register_seed(self, seed_id)
 
     # ------------------------------------------------------------------
@@ -81,6 +92,7 @@ class SentinelSeed(nn.Module):
 
     # ------------------------------------------------------------------
     def train_child_step(self, inputs: torch.Tensor):
+        """Train the child network on input data when in training state."""
         if self.state != "training" or inputs.numel() == 0:
             return
         inputs = inputs.detach()       # block trunk grads
@@ -99,6 +111,7 @@ class SentinelSeed(nn.Module):
 
     # ------------------------------------------------------------------
     def update_blending(self):
+        """Update the blending alpha value during blending phase."""
         if self.state == "blending":
             self.alpha = min(1.0, self.alpha + 1 / self.blend_steps)
             self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
@@ -106,6 +119,7 @@ class SentinelSeed(nn.Module):
                 self._set_state("active")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the sentinel seed."""
 
         if self.state != "active":
             self.seed_manager.append_to_buffer(self.seed_id, x)
@@ -125,8 +139,10 @@ class SentinelSeed(nn.Module):
         with torch.no_grad():
             cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
             drift = 1.0 - cos_sim.item()
-            if drift > self.drift_warn > 0:
-                logging.warning(f"High drift {drift:.4f} at {self.seed_id}")
+            # only warn during blending
+            if self.state == "blending" and drift > self.drift_warn > 0:
+                logging.warning("High drift %.4f at %s (blending)", drift, self.seed_id)
+        # always record drift for telemetry
         self.seed_manager.record_drift(self.seed_id, drift)
         return output
 
@@ -137,7 +153,7 @@ class SentinelSeed(nn.Module):
             return float("inf")  # Return worst possible signal if insufficient data
 
         # Calculate variance across all buffered activations
-        return torch.var(torch.cat(list(buffer))).item()
+        return torch.var(torch.cat(list(buffer)), dim=0).mean().item()
 
 
 class BaseNet(nn.Module):
@@ -260,6 +276,7 @@ class BaseNet(nn.Module):
 
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the complete network."""
         x = self.act1(self.fc1(x))
         x = self.seed1(x)
         x = self.act2(self.fc2(x))

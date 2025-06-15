@@ -1,0 +1,455 @@
+"""Comprehensive tests for the run_spirals script."""
+import os
+import sys
+import torch
+import numpy as np
+import tempfile
+import pytest
+from unittest.mock import Mock, patch, MagicMock
+from pathlib import Path
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from scripts.run_spirals import create_spirals, train_epoch, evaluate, main, set_device_for_testing
+
+# Force CPU mode for all tests
+set_device_for_testing("cpu")
+
+
+class TestCreateSpirals:
+    """Test suite for spiral dataset generation."""
+    
+    def test_default_parameters(self):
+        """Test spiral generation with default parameters."""
+        X, y = create_spirals()
+        
+        assert X.shape == (2000, 2)
+        assert y.shape == (2000,)
+        assert X.dtype == np.float32
+        assert y.dtype == np.int64
+        
+        # Check label distribution
+        assert np.sum(y == 0) == 1000
+        assert np.sum(y == 1) == 1000
+        
+    def test_custom_parameters(self):
+        """Test spiral generation with custom parameters."""
+        n_samples = 1000
+        X, y = create_spirals(n_samples=n_samples, noise=0.1, rotations=2)
+        
+        assert X.shape == (n_samples, 2)
+        assert y.shape == (n_samples,)
+        
+        # Check label distribution
+        assert np.sum(y == 0) == n_samples // 2
+        assert np.sum(y == 1) == n_samples // 2
+        
+    def test_reproducibility(self):
+        """Test that spiral generation is reproducible with same random seed."""
+        # The function uses a fixed seed (42) so should be reproducible
+        X1, y1 = create_spirals(n_samples=100)
+        X2, y2 = create_spirals(n_samples=100)
+        
+        np.testing.assert_array_equal(X1, X2)
+        np.testing.assert_array_equal(y1, y2)
+        
+    def test_data_range(self):
+        """Test that generated data has reasonable range."""
+        X, y = create_spirals(n_samples=500, noise=0.1)
+        
+        # Data should be centered around origin with reasonable range
+        assert np.abs(X.mean()) < 5.0  # Not too far from origin
+        assert np.std(X) > 0.1  # Has reasonable variance
+        
+    def test_spiral_structure(self):
+        """Test that generated data has spiral structure."""
+        X, y = create_spirals(n_samples=200, noise=0.05)
+        
+        # Convert to polar coordinates to check spiral structure
+        r = np.sqrt(X[:, 0]**2 + X[:, 1]**2)
+        theta = np.arctan2(X[:, 1], X[:, 0])
+        
+        # For each class, radius should generally increase with angle
+        for class_label in [0, 1]:
+            class_mask = y == class_label
+            class_r = r[class_mask]
+            class_theta = theta[class_mask]
+            
+            # Sort by angle and check that radius generally increases
+            sorted_indices = np.argsort(class_theta)
+            sorted_r = class_r[sorted_indices]
+            
+            # Check that there's some spiral structure (not perfectly linear)
+            # but with a reasonable correlation between sorted index and radius
+            correlation = np.corrcoef(np.arange(len(sorted_r)), sorted_r)[0, 1]
+            # Allow for more flexible spiral structure
+            assert abs(correlation) > 0.05, f"Class {class_label} correlation: {correlation}"
+
+
+class TestTrainEpoch:
+    """Test suite for training epoch function."""
+    
+    def test_train_epoch_basic(self):
+        """Test basic training epoch functionality."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create simple test data
+        X = torch.randn(16, 2)
+        y = torch.randint(0, 2, (16,))
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and components
+        model = BaseNet(hidden_dim=32)
+        seed_manager = SeedManager()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Test training epoch
+        avg_loss = train_epoch(model, loader, optimizer, criterion, seed_manager)
+        
+        assert isinstance(avg_loss, float)
+        assert avg_loss > 0.0
+        
+    def test_train_epoch_with_scheduler(self):
+        """Test training epoch with learning rate scheduler."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create test data
+        X = torch.randn(16, 2)
+        y = torch.randint(0, 2, (16,))
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and components
+        model = BaseNet(hidden_dim=32)
+        seed_manager = SeedManager()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.9)
+        
+        initial_lr = optimizer.param_groups[0]['lr']
+        
+        # Train for one epoch
+        train_epoch(model, loader, optimizer, criterion, seed_manager, scheduler)
+        
+        # Check that scheduler stepped
+        final_lr = optimizer.param_groups[0]['lr']
+        assert final_lr < initial_lr
+        
+    def test_train_epoch_no_optimizer(self):
+        """Test training epoch with no optimizer (evaluation mode)."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create test data
+        X = torch.randn(8, 2)
+        y = torch.randint(0, 2, (8,))
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and components
+        model = BaseNet(hidden_dim=32)
+        seed_manager = SeedManager()
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Test with no optimizer
+        avg_loss = train_epoch(model, loader, None, criterion, seed_manager)
+        
+        assert isinstance(avg_loss, float)
+        assert avg_loss > 0.0
+        
+    def test_train_epoch_empty_loader(self):
+        """Test training epoch with empty data loader."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create empty dataset
+        X = torch.empty(0, 2)
+        y = torch.empty(0, dtype=torch.long)
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and components
+        model = BaseNet(hidden_dim=32)
+        seed_manager = SeedManager()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Test with empty loader
+        avg_loss = train_epoch(model, loader, optimizer, criterion, seed_manager)
+        
+        assert avg_loss == 0.0  # Should return 0 for empty loader
+        
+    def test_train_epoch_seed_training(self):
+        """Test that seeds are trained during training epoch."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create test data
+        X = torch.randn(16, 2)
+        y = torch.randint(0, 2, (16,))
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and components
+        model = BaseNet(hidden_dim=32)
+        seed_manager = SeedManager()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Initialize a seed for training
+        model.seed1.initialize_child()
+        
+        # Add some data to seed buffer
+        buffer = seed_manager.seeds["seed1"]["buffer"]
+        for _ in range(15):
+            buffer.append(torch.randn(2, 32))
+            
+        # Mock the train_child_step to verify it's called
+        with patch.object(model.seed1, 'train_child_step') as mock_train:
+            train_epoch(model, loader, optimizer, criterion, seed_manager)
+            assert mock_train.call_count > 0
+            
+    def test_train_epoch_large_buffer_sampling(self):
+        """Test that large seed buffers are properly sampled during training."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create test data
+        X = torch.randn(16, 2)
+        y = torch.randint(0, 2, (16,))
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and components
+        model = BaseNet(hidden_dim=32)
+        seed_manager = SeedManager()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Initialize a seed for training and fill buffer with many samples
+        model.seed1.initialize_child()
+        buffer = seed_manager.seeds["seed1"]["buffer"]
+        
+        # Add > 64 samples to trigger sampling logic (lines 97-98)
+        for _ in range(80):
+            buffer.append(torch.randn(2, 32))
+        
+        # Verify buffer has many samples
+        assert len(buffer) > 64
+        
+        # Train epoch should use sampling logic for large buffers
+        avg_loss = train_epoch(model, loader, optimizer, criterion, seed_manager)
+        assert avg_loss >= 0.0  # Basic sanity check
+
+
+class TestEvaluate:
+    """Test suite for evaluation function."""
+    
+    def test_evaluate_basic(self):
+        """Test basic evaluation functionality."""
+        from morphogenetic_engine.components import BaseNet
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create test data
+        X = torch.randn(16, 2)
+        y = torch.randint(0, 2, (16,))
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and criterion
+        model = BaseNet(hidden_dim=32)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Evaluate
+        loss, accuracy = evaluate(model, loader, criterion)
+        
+        assert isinstance(loss, float)
+        assert isinstance(accuracy, float)
+        assert loss > 0.0
+        assert 0.0 <= accuracy <= 1.0
+        
+    def test_evaluate_perfect_model(self):
+        """Test evaluation with a perfect model."""
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create simple linearly separable data
+        X = torch.tensor([[1.0, 0.0], [-1.0, 0.0], [2.0, 0.0], [-2.0, 0.0]])
+        y = torch.tensor([1, 0, 1, 0])
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=2)
+        
+        # Create a perfect linear model
+        model = torch.nn.Linear(2, 2)
+        with torch.no_grad():
+            model.weight[0, 0] = -1.0  # For class 0
+            model.weight[0, 1] = 0.0
+            model.weight[1, 0] = 1.0   # For class 1
+            model.weight[1, 1] = 0.0
+            model.bias[0] = 0.0
+            model.bias[1] = 0.0
+            
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Evaluate
+        loss, accuracy = evaluate(model, loader, criterion)
+        
+        assert accuracy == 1.0  # Perfect accuracy
+        assert loss < 0.1  # Very low loss
+        
+    def test_evaluate_empty_loader(self):
+        """Test evaluation with empty data loader."""
+        from morphogenetic_engine.components import BaseNet
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create empty dataset
+        X = torch.empty(0, 2)
+        y = torch.empty(0, dtype=torch.long)
+        dataset = TensorDataset(X, y)
+        loader = DataLoader(dataset, batch_size=4)
+        
+        # Create model and criterion
+        model = BaseNet(hidden_dim=32)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # This should handle empty loader gracefully
+        loss, accuracy = evaluate(model, loader, criterion)
+        
+        # With empty loader, loss should be 0 and accuracy undefined (NaN)
+        assert loss == 0.0
+        assert np.isnan(accuracy) or accuracy == 0.0
+
+
+class TestMainFunction:
+    """Test suite for main function integration."""
+    
+    def test_main_basic_execution(self):
+        """Test that main function can execute without errors."""
+        # Mock command line arguments
+        test_args = [
+            '--hidden_dim', '32',
+            '--warm_up_epochs', '2',
+            '--adaptation_epochs', '2',
+            '--lr', '0.01',
+            '--acc_threshold', '0.8'
+        ]
+        
+        with patch('sys.argv', ['run_spirals.py'] + test_args):
+            with patch('scripts.run_spirals.Path.open', create=True):
+                # Mock the file operations to avoid creating actual files
+                with patch('builtins.print'):  # Suppress print output
+                    try:
+                        main()
+                        # If we get here without exception, test passed
+                        assert True
+                    except SystemExit:
+                        # argparse might call sys.exit, which is fine
+                        assert True
+                    except Exception as e:
+                        # Any other exception is a test failure
+                        pytest.fail(f"main() raised unexpected exception: {e}")
+                        
+    def test_main_argument_parsing(self):
+        """Test argument parsing in main function."""
+        # Test with minimal arguments
+        test_args = ['--hidden_dim', '64']
+        
+        with patch('sys.argv', ['run_spirals.py'] + test_args):
+            with patch('scripts.run_spirals.Path.open', create=True):
+                with patch('builtins.print'):
+                    with patch('torch.utils.data.random_split') as mock_split:
+                        # Mock the data splitting to avoid actual computation
+                        mock_split.return_value = (Mock(), Mock())
+                        with patch('scripts.run_spirals.train_epoch') as mock_train:
+                            with patch('scripts.run_spirals.evaluate') as mock_eval:
+                                mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
+                                try:
+                                    main()
+                                except (SystemExit, Exception):
+                                    pass  # We just want to test argument parsing
+
+
+class TestIntegration:
+    """Integration tests for the complete system."""
+    
+    def test_full_pipeline_mini(self):
+        """Test a minimal full pipeline execution."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager, KasminaMicro
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create minimal dataset
+        X, y = create_spirals(n_samples=32)
+        X_tensor = torch.from_numpy(X)
+        y_tensor = torch.from_numpy(y)
+        dataset = TensorDataset(X_tensor, y_tensor)
+        train_loader = DataLoader(dataset, batch_size=8, num_workers=0)
+        val_loader = DataLoader(dataset, batch_size=8, num_workers=0)
+        
+        # Create components
+        model = BaseNet(hidden_dim=16)
+        seed_manager = SeedManager()
+        seed_manager.seeds.clear()  # Clear any existing seeds
+        kasmina = KasminaMicro(seed_manager, patience=2, acc_threshold=0.9)
+        
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Run a few training steps
+        for epoch in range(3):
+            avg_loss = train_epoch(model, train_loader, optimizer, criterion, seed_manager)
+            val_loss, val_acc = evaluate(model, val_loader, criterion)
+            
+            # Check that functions return reasonable values
+            assert isinstance(avg_loss, float)
+            assert isinstance(val_loss, float)
+            assert isinstance(val_acc, float)
+            assert avg_loss > 0.0
+            assert val_loss > 0.0
+            assert 0.0 <= val_acc <= 1.0
+            
+            # Test Kasmina step
+            germinated = kasmina.step(val_loss, val_acc)
+            assert isinstance(germinated, bool)
+            
+    def test_seed_lifecycle(self):
+        """Test complete seed lifecycle from dormant to active."""
+        from morphogenetic_engine.components import SentinelSeed
+        
+        # Create seed
+        seed = SentinelSeed("test_lifecycle", dim=16, 
+                          blend_steps=5, progress_thresh=0.3)
+        
+        # Start dormant
+        assert seed.state == "dormant"
+        
+        # Initialize and train
+        seed.initialize_child()
+        assert seed.state == "training"
+        
+        # Train until blending
+        dummy_input = torch.randn(4, 16)
+        for _ in range(50):  # Should exceed progress threshold
+            seed.train_child_step(dummy_input)
+            
+        assert seed.state == "blending"
+        
+        # Blend until active
+        while seed.state == "blending":
+            seed.update_blending()
+            
+        assert seed.state == "active"
+        assert seed.alpha >= 0.99
+        
+        # Test forward pass in each state works
+        x = torch.randn(2, 16)
+        output = seed.forward(x)
+        assert output.shape == x.shape

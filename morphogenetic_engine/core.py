@@ -1,25 +1,36 @@
+"""Core module for morphogenetic engine containing seed management and germination control."""
 import logging
 import threading
 import time
 from collections import deque
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 import torch
 
 
 class SeedManager:
-    _instance = None
+    """
+    Singleton manager for sentinel seeds with thread-safe operations.
+    """
+    _instance: Optional['SeedManager'] = None
     _singleton_lock = threading.Lock()
 
-    def __new__(cls):
+    def __init__(self) -> None:
+        """Initialize SeedManager with empty state."""
+        # Only initialize once, even if __init__ is called multiple times
+        if not hasattr(self, '_initialized'):
+            self.seeds: Dict[str, Dict] = {}
+            self.germination_log: List[Dict[str, Any]] = []
+            self.lock = threading.RLock()
+            self._initialized = True
+
+    def __new__(cls) -> 'SeedManager':
         with cls._singleton_lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
-                cls._instance.seeds: Dict[str, Dict] = {}
-                cls._instance.germination_log = []
-                cls._instance.lock = threading.RLock()
             return cls._instance
 
-    def register_seed(self, seed_module, seed_id: str):
+    def register_seed(self, seed_module, seed_id: str) -> None:
+        """Register a new seed module with the manager."""
         with self.lock:
             self.seeds[seed_id] = {
                 "module": seed_module,
@@ -30,12 +41,14 @@ class SeedManager:
                 "telemetry": {"drift": 0.0, "variance": 0.0},
             }
 
-    def append_to_buffer(self, seed_id: str, x: torch.Tensor):
+    def append_to_buffer(self, seed_id: str, x: torch.Tensor) -> None:
+        """Append tensor data to the specified seed's buffer."""
         with self.lock:
             if seed_id in self.seeds:
                 self.seeds[seed_id]["buffer"].append(x.detach().clone())
 
     def request_germination(self, seed_id: str) -> bool:
+        """Request germination for a specific seed. Returns True if successful."""
         with self.lock:
             seed_info = self.seeds.get(seed_id)
             if not seed_info or seed_info["status"] != "dormant":
@@ -46,13 +59,14 @@ class SeedManager:
                 seed_info["status"] = "active"
                 self._log_event(seed_id, True)
                 return True
-            except Exception as e:
-                logging.exception(f"Germination failed for '{seed_id}': {e}")
+            except (RuntimeError, ValueError) as e:
+                logging.exception("Germination failed for '%s': %s", seed_id, e)
                 seed_info["status"] = "failed"
                 self._log_event(seed_id, False)
                 return False
 
-    def _log_event(self, seed_id: str, success: bool):
+    def _log_event(self, seed_id: str, success: bool) -> None:
+        """Log a germination event with timestamp."""
         self.germination_log.append(
             {
                 "seed_id": seed_id,
@@ -61,7 +75,7 @@ class SeedManager:
             }
         )
 
-    def record_transition(self, seed_id: str, old_state: str, new_state: str):
+    def record_transition(self, seed_id: str, old_state: str, new_state: str) -> None:
         """Record a state change for analytics."""
         self.germination_log.append(
             {
@@ -72,20 +86,27 @@ class SeedManager:
             }
         )
 
-    def record_drift(self, seed_id: str, drift: float):
+    def record_drift(self, seed_id: str, drift: float) -> None:
+        """Record drift telemetry for a specific seed."""
         with self.lock:
             if seed_id in self.seeds:
                 self.seeds[seed_id]["telemetry"]["drift"] = drift
 
 
 class KasminaMicro:
+    """
+    Micro-germination controller that monitors training progress and triggers seed germination.
+    
+    This class watches for training plateaus and low accuracy to decide when to activate
+    dormant seeds to increase model capacity.
+    """
     def __init__(
         self,
         seed_manager: SeedManager,
         patience: int = 15,
         delta: float = 1e-4,
         acc_threshold: float = 0.95,
-    ):
+    ) -> None:
         self.seed_manager = seed_manager
         self.patience = patience
         self.delta = delta
@@ -94,6 +115,16 @@ class KasminaMicro:
         self.prev_loss = float("inf")
 
     def step(self, val_loss: float, val_acc: float) -> bool:
+        """
+        Process a training step and determine if germination should occur.
+        
+        Args:
+            val_loss: Current validation loss
+            val_acc: Current validation accuracy
+            
+        Returns:
+            True if germination occurred, False otherwise
+        """
         # Calculate absolute difference
         loss_diff = abs(val_loss - self.prev_loss)
 
