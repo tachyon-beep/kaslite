@@ -5,3 +5,6 @@ __pycache__/
 *.egg-info*
 # Keep experiment logs tracked
 !results_*.log
+# Log directory (but track the log files inside)
+log/
+!log/*.log

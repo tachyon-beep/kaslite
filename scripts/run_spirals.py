@@ -12,6 +12,7 @@ import logging
 import random
 import time
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -220,14 +221,40 @@ def main():
     print(f"LR        : {lr}")
     print(f"Hidden dim: {hidden_dim}\n")
 
+    # Create comprehensive slug with all configuration parameters
     slug = (
-        f"h{hidden_dim}_bs{args.blend_steps}"
+        f"{args.problem_type}_dim{args.input_dim}_{args.device}"
+        f"_h{hidden_dim}_bs{args.blend_steps}"
         f"_lr{args.shadow_lr}_pt{args.progress_thresh}"
+        f"_dw{args.drift_warn}"
     )
 
     # ---- open log file with context-manager ----
-    with Path(f"results_{slug}.log").open("w", encoding="utf-8") as log_f:
+    # Get the project root directory (parent of scripts)
+    project_root = Path(__file__).parent.parent
+    log_dir = project_root / "log"
+    log_dir.mkdir(exist_ok=True)  # Create log directory if it doesn't exist
+    with (log_dir / f"results_{slug}.log").open("w", encoding="utf-8") as log_f:
         _last_report.clear()
+        
+        # Write comprehensive configuration header
+        log_f.write("# Morphogenetic Architecture Experiment Log\n")
+        log_f.write(f"# Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log_f.write("# Configuration:\n")
+        log_f.write(f"# problem_type: {args.problem_type}\n")
+        log_f.write(f"# input_dim: {args.input_dim}\n")
+        log_f.write(f"# device: {device}\n")
+        log_f.write(f"# warm_up_epochs: {warm_up_epochs}\n")
+        log_f.write(f"# adaptation_epochs: {adaptation_epochs}\n")
+        log_f.write(f"# lr: {lr}\n")
+        log_f.write(f"# hidden_dim: {hidden_dim}\n")
+        log_f.write(f"# blend_steps: {args.blend_steps}\n")
+        log_f.write(f"# shadow_lr: {args.shadow_lr}\n")
+        log_f.write(f"# progress_thresh: {args.progress_thresh}\n")
+        log_f.write(f"# drift_warn: {args.drift_warn}\n")
+        log_f.write(f"# acc_threshold: {acc_threshold}\n")
+        log_f.write("#\n")
+        log_f.write("# Data format: epoch,seed,state,alpha\n")
         log_f.write("epoch,seed,state,alpha\n")
 
         # ---------- data ----------
@@ -369,6 +396,19 @@ def main():
 
         if acc_pre is not None and acc_post is not None:
             logging.info("accuracy dip %.3f, recovery %s epochs", acc_pre - acc_post, t_recover)
+
+        # ------------- log footer -------------
+        log_f.write("#\n")
+        log_f.write("# Experiment completed successfully\n")
+        log_f.write(f"# End timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log_f.write(f"# Final best accuracy: {best_acc:.4f}\n")
+        if seeds_activated:
+            active_seeds = sum(1 for info in seed_manager.seeds.values() 
+                             if info["module"].state == "active")
+            log_f.write(f"# Seeds activated: {active_seeds}/{len(seed_manager.seeds)}\n")
+        else:
+            log_f.write("# Seeds activated: 0/{}\n".format(len(seed_manager.seeds)))
+        log_f.write("# ===== LOG COMPLETE =====\n")
 
 
 if __name__ == "__main__":
