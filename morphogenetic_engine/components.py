@@ -1,4 +1,5 @@
 """Components module for morphogenetic engine."""
+
 import logging
 
 import torch
@@ -10,10 +11,11 @@ from morphogenetic_engine.core import SeedManager
 class SentinelSeed(nn.Module):
     """
     A sentinel seed that monitors activations and can evolve when needed.
-    
+
     This module starts as dormant, monitors activation patterns, and can be
     germinated to learn adaptive transformations when bottlenecks are detected.
     """
+
     def __init__(
         self,
         seed_id: str,
@@ -96,7 +98,7 @@ class SentinelSeed(nn.Module):
         """Train the child network on input data when in training state."""
         if self.state != "training" or inputs.numel() == 0:
             return
-        inputs = inputs.detach()       # block trunk grads
+        inputs = inputs.detach()  # block trunk grads
 
         self.child_optim.zero_grad(set_to_none=True)
         outputs = self.child(inputs)

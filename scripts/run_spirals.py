@@ -10,22 +10,16 @@ from __future__ import annotations
 import argparse
 import logging
 import random
-import time
 from collections import defaultdict
 from datetime import datetime
+from typing import cast
 from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
 import torch
 from sklearn.preprocessing import StandardScaler
-
-try:
-    from sklearn.datasets import make_blobs, make_moons
-except ImportError:
-    raise ImportError(
-        "This script requires scikit-learn. Please install it with: pip install scikit-learn"
-    )
+from sklearn.datasets import make_blobs, make_moons
 
 from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
@@ -67,7 +61,7 @@ def create_complex_moons(n_samples: int = 2000, noise: float = 0.1, input_dim: i
 
     # Generate two interleaved half-moons
     n_moons = n_samples // 2
-    X_moons, y_moons = make_moons(n_samples=n_moons, noise=noise, random_state=42)
+    x_moons, y_moons = make_moons(n_samples=n_moons, noise=noise, random_state=42)
 
     # Generate two Gaussian clusters
     n_clusters = n_samples - n_moons
@@ -85,7 +79,7 @@ def create_complex_moons(n_samples: int = 2000, noise: float = 0.1, input_dim: i
     y_cluster2 = np.ones(n_cluster2)
 
     # Concatenate all data
-    X = np.vstack((X_moons, cluster1, cluster2))
+    X = np.vstack((x_moons, cluster1, cluster2))
     y = np.hstack((y_moons, y_cluster1, y_cluster2))
 
     # Shuffle the data
@@ -157,13 +151,16 @@ def create_clusters(
         centers.append(center)
 
     # Generate data using make_blobs
-    X, y = make_blobs(
-        n_samples=n_samples,
-        centers=np.array(centers),
-        cluster_std=cluster_std,
-        n_features=input_dim,
-        random_state=42,
-        return_centers=False,
+    X, y = cast(  # pylint: disable=unbalanced-tuple-unpacking
+        tuple[np.ndarray, np.ndarray],
+        make_blobs(
+            n_samples=n_samples,
+            centers=np.array(centers),
+            cluster_std=cluster_std,
+            n_features=input_dim,
+            random_state=42,
+            return_centers=False,
+        )
     )
 
     # Convert to binary classification by grouping clusters
@@ -190,7 +187,7 @@ def create_spheres(
             f"Number of radii ({len(radii)}) must match sphere_count ({sphere_count})"
         )
 
-    X_list = []
+    x_list = []
     y_list = []
 
     for i, radius in enumerate(radii):
@@ -224,13 +221,13 @@ def create_spheres(
             noise = rng.normal(0, sphere_noise, points.shape)
             points += noise
 
-        X_list.append(points)
+        x_list.append(points)
         # Convert to binary classification by grouping spheres
         # Odd spheres become class 0, even spheres become class 1
         y_list.append(np.full(sphere_size, i % 2))
 
     # Concatenate all spheres
-    X = np.vstack(X_list)
+    X = np.vstack(x_list)
     y = np.hstack(y_list)
 
     # Shuffle the data
@@ -749,7 +746,9 @@ def main():
                     logging.info("epoch %d %s %s", epoch, sid, tag)
                     alpha_val = getattr(mod, "alpha", 0.0)
                     try:
-                        alpha_str = f"{float(alpha_val):.3f}" if mod.state == "blending" else ""
+                        alpha_str = (
+                            f"{float(alpha_val):.3f}" if mod.state == "blending" else ""
+                        )
                     except (TypeError, ValueError):
                         alpha_str = str(alpha_val)
                     log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")

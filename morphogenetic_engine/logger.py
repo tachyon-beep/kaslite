@@ -97,7 +97,12 @@ class ExperimentLogger:
         self._record_event(event)
 
     def log_seed_event(
-        self, epoch: int, seed_id: str, from_state: str, to_state: str, description: str | None = None
+        self,
+        epoch: int,
+        seed_id: str,
+        from_state: str,
+        to_state: str,
+        description: str | None = None,
     ) -> None:
         """Record a seed state transition."""
 
@@ -198,4 +203,3 @@ class ExperimentLogger:
             event_name = event.event_type.value
             summary[event_name] = summary.get(event_name, 0) + 1
         return dict(sorted(summary.items()))
-

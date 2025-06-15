@@ -1,11 +1,12 @@
 import os
-import sys
-import torch
 import random
+import sys
+
 import pytest
+import torch
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from morphogenetic_engine.components import SentinelSeed, BaseNet
+from morphogenetic_engine.components import BaseNet, SentinelSeed
 from morphogenetic_engine.core import SeedManager
 
 
@@ -55,7 +56,7 @@ def test_forward_shapes():
 def test_grad_leak_blocked():
     model = BaseNet(hidden_dim=4, seed_manager=SeedManager(), input_dim=2)
     seed = model.seed1
-    
+
     # Ensure the seed is registered and initialize it
     seed.initialize_child()
     x = torch.randn(3, 4, requires_grad=True)

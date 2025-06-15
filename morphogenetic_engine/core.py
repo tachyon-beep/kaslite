@@ -1,21 +1,24 @@
 """Core module for morphogenetic engine containing seed management and germination control."""
+
 import logging
 import threading
 import time
 from collections import deque
-from typing import Dict, Optional, List, Any
+from typing import Any, Dict, List, Optional
+
+import torch
 
 from .logger import ExperimentLogger
-import torch
 
 
 class SeedManager:
     """
     Singleton manager for sentinel seeds with thread-safe operations.
     """
-    _instance: Optional['SeedManager'] = None
+
+    _instance: Optional["SeedManager"] = None
     _singleton_lock = threading.Lock()
-    
+
     # Declare instance attributes for type checking
     seeds: Dict[str, Dict]
     germination_log: List[Dict[str, Any]]
@@ -23,7 +26,7 @@ class SeedManager:
     logger: Optional[ExperimentLogger]
     _initialized: bool
 
-    def __new__(cls, *args, **kwargs) -> 'SeedManager':
+    def __new__(cls, *args, **kwargs) -> "SeedManager":
         with cls._singleton_lock:
             if cls._instance is None:
                 # Create the instance
@@ -32,7 +35,7 @@ class SeedManager:
                 instance.seeds = {}
                 instance.germination_log = []
                 instance.lock = threading.RLock()
-                instance.logger = kwargs.get('logger')
+                instance.logger = kwargs.get("logger")
                 instance._initialized = True  # Optional: for clarity
                 cls._instance = instance
         return cls._instance
@@ -119,10 +122,11 @@ class SeedManager:
 class KasminaMicro:
     """
     Micro-germination controller that monitors training progress and triggers seed germination.
-    
+
     This class watches for training plateaus and low accuracy to decide when to activate
     dormant seeds to increase model capacity.
     """
+
     def __init__(
         self,
         seed_manager: SeedManager,
@@ -140,11 +144,11 @@ class KasminaMicro:
     def step(self, val_loss: float, val_acc: float) -> bool:
         """
         Process a training step and determine if germination should occur.
-        
+
         Args:
             val_loss: Current validation loss
             val_acc: Current validation accuracy
-            
+
         Returns:
             True if germination occurred, False otherwise
         """
