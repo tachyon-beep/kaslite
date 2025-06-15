@@ -55,7 +55,7 @@ class TestCreateSpirals:
 
     def test_data_range(self):
         """Test that generated data has reasonable range."""
-        X, y = create_spirals(n_samples=500, noise=0.1)
+        X, _ = create_spirals(n_samples=500, noise=0.1)
 
         # Data should be centered around origin with reasonable range
         assert np.abs(X.mean()) < 5.0  # Not too far from origin
@@ -152,7 +152,7 @@ class TestCreateComplexMoons:
 
     def test_data_structure(self):
         """Test that complex moons has expected structure (moons + clusters)."""
-        X, y = create_complex_moons(n_samples=400, noise=0.1)
+        X, _ = create_complex_moons(n_samples=400, noise=0.1)
 
         # Should have reasonable spread (combination of moons and clusters)
         assert X.std() > 0.5  # Should have some variance
@@ -167,13 +167,12 @@ class TestTrainEpoch:
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create simple test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and components
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -192,13 +191,12 @@ class TestTrainEpoch:
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and components
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -217,17 +215,16 @@ class TestTrainEpoch:
         assert final_lr < initial_lr
 
     def test_train_epoch_no_optimizer(self):
-        """Test training epoch with no optimizer (evaluation mode)."""
+        """Test train_epoch with no optimizer."""
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create test data
         X = torch.randn(8, 2)
         y = torch.randint(0, 2, (8,))
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and components
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -241,17 +238,16 @@ class TestTrainEpoch:
         assert avg_loss > 0.0
 
     def test_train_epoch_empty_loader(self):
-        """Test training epoch with empty data loader."""
+        """Test train_epoch with empty loader."""
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create empty dataset
         X = torch.empty(0, 2)
         y = torch.empty(0, dtype=torch.long)
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and components
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -262,20 +258,19 @@ class TestTrainEpoch:
         # Test with empty loader
         avg_loss = train_epoch(model, loader, optimizer, criterion, seed_manager)
 
-        assert avg_loss == 0.0  # Should return 0.0 for empty loader
+        assert np.isclose(avg_loss, 0.0)  # Should return 0.0 for empty loader
 
     def test_train_epoch_seed_training(self):
         """Test that seeds are trained during training epoch."""
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and components
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -301,13 +296,12 @@ class TestTrainEpoch:
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and components
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -344,7 +338,7 @@ class TestEvaluate:
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and criterion
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -366,7 +360,7 @@ class TestEvaluate:
         X = torch.tensor([[1.0, 0.0], [-1.0, 0.0], [2.0, 0.0], [-2.0, 0.0]])
         y = torch.tensor([1, 0, 1, 0])
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=2)
+        loader = DataLoader(dataset, batch_size=2, num_workers=0)
 
         # Create a perfect linear model
         model = torch.nn.Linear(2, 2)
@@ -383,7 +377,7 @@ class TestEvaluate:
         # Evaluate
         loss, accuracy = evaluate(model, loader, criterion)
 
-        assert accuracy == 1.0  # Perfect accuracy
+        assert np.isclose(accuracy, 1.0)  # Perfect accuracy
         assert loss < 0.1  # Very low loss
 
     def test_evaluate_empty_loader(self):
@@ -396,7 +390,7 @@ class TestEvaluate:
         X = torch.empty(0, 2)
         y = torch.empty(0, dtype=torch.long)
         dataset = TensorDataset(X, y)
-        loader = DataLoader(dataset, batch_size=4)
+        loader = DataLoader(dataset, batch_size=4, num_workers=0)
 
         # Create model and criterion
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
@@ -406,8 +400,8 @@ class TestEvaluate:
         loss, accuracy = evaluate(model, loader, criterion)
 
         # With empty loader, loss should be 0 and accuracy undefined (NaN)
-        assert loss == 0.0
-        assert np.isnan(accuracy) or accuracy == 0.0
+        assert np.isclose(loss, 0.0)
+        assert np.isnan(accuracy) or np.isclose(accuracy, 0.0)
 
 
 class TestMainFunction:
@@ -438,13 +432,12 @@ class TestMainFunction:
                         try:
                             main()
                             # If we get here without exception, test passed
-                            assert True
-                        except SystemExit:
+                        except SystemExit:  # pylint: disable=broad-except
                             # argparse might call sys.exit, which is fine
-                            assert True
-                        except Exception as e:
+                            pass
+                        except Exception:  # pylint: disable=broad-except
                             # Any other exception is a test failure
-                            pytest.fail(f"main() raised unexpected exception: {e}")
+                            pytest.fail("main() raised unexpected exception")
 
     def test_main_argument_parsing(self):
         """Test argument parsing in main function."""
@@ -460,16 +453,13 @@ class TestMainFunction:
                             # Mock the data splitting to avoid actual computation
                             mock_split.return_value = (Mock(), Mock())
                             with patch(
-                                "scripts.run_morphogenetic_experiment.train_epoch"
-                            ) as mock_train:
-                                with patch(
-                                    "scripts.run_morphogenetic_experiment.evaluate"
-                                ) as mock_eval:
-                                    mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
-                                    try:
-                                        main()
-                                    except (SystemExit, Exception):
-                                        pass  # We just want to test argument parsing
+                                "scripts.run_morphogenetic_experiment.evaluate"
+                            ) as mock_eval:
+                                mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
+                                try:
+                                    main()
+                                except (SystemExit, Exception):  # pylint: disable=broad-except
+                                    pass  # We just want to test argument parsing
 
     def test_main_new_arguments(self):
         """Test that main function accepts new CLI arguments."""
@@ -495,16 +485,17 @@ class TestMainFunction:
                 "builtins.open", create=True
             ):
                 # Mock expensive operations
+                rng = np.random.default_rng(42)
                 mock_create.return_value = (
-                    np.random.randn(100, 4),
-                    np.random.randint(0, 2, 100),
+                    rng.standard_normal((100, 4)),
+                    rng.integers(0, 2, 100),
                 )
                 mock_net.return_value = Mock()
                 mock_optim.return_value = Mock()
 
                 try:
                     main()
-                except (SystemExit, Exception):
+                except (SystemExit, Exception):  # pylint: disable=broad-except
                     # Expected since we're mocking critical components
                     pass
 
@@ -520,7 +511,7 @@ class TestIntegration:
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import KasminaMicro, SeedManager
+        from morphogenetic_engine.core import KasminaMicro
 
         # Create minimal dataset
         X, y = create_spirals(n_samples=32)
@@ -540,7 +531,7 @@ class TestIntegration:
         criterion = torch.nn.CrossEntropyLoss()
 
         # Run a few training steps
-        for epoch in range(3):
+        for _ in range(3):
             avg_loss = train_epoch(model, train_loader, optimizer, criterion, seed_manager)
             val_loss, val_acc = evaluate(model, val_loader, criterion)
 
@@ -599,7 +590,6 @@ class TestHighDimensionalIntegration:
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create 4D spirals data
         X, y = create_spirals(n_samples=64, input_dim=4)
@@ -631,7 +621,6 @@ class TestHighDimensionalIntegration:
         from torch.utils.data import DataLoader, TensorDataset
 
         from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import SeedManager
 
         # Create 4D complex moons data
         X, y = create_complex_moons(n_samples=64, input_dim=4)
@@ -740,9 +729,6 @@ class TestCLIDispatch:
 
     def test_problem_type_dispatch(self):
         """Test that different problem types are dispatched correctly."""
-        from unittest.mock import Mock, patch
-
-        from scripts.run_morphogenetic_experiment import main
 
         test_cases = [
             ("spirals", "create_spirals"),
@@ -766,16 +752,17 @@ class TestCLIDispatch:
                     "builtins.open", create=True
                 ):
                     # Mock return values
+                    rng = np.random.default_rng(42)
                     mock_func.return_value = (
-                        np.random.randn(100, 3),
-                        np.random.randint(0, 2, 100),
+                        rng.standard_normal((100, 3)),
+                        rng.integers(0, 2, 100),
                     )
                     mock_net.return_value = Mock()
                     mock_optim.return_value = Mock()
 
                     try:
                         main()
-                    except (SystemExit, Exception):
+                    except (SystemExit, Exception):  # pylint: disable=broad-except
                         # Expected since we're mocking critical components
                         pass
 
@@ -784,9 +771,6 @@ class TestCLIDispatch:
 
     def test_irrelevant_flags_ignored(self):
         """Test that flags irrelevant to chosen problem_type are silently ignored."""
-        from unittest.mock import Mock, patch
-
-        from scripts.run_morphogenetic_experiment import main
 
         # Use spirals with cluster-specific flags (should be ignored)
         test_args = [
@@ -812,20 +796,21 @@ class TestCLIDispatch:
             ) as mock_optim, patch(
                 "builtins.open", create=True
             ):
+                rng = np.random.default_rng(42)
                 mock_spirals.return_value = (
-                    np.random.randn(100, 3),
-                    np.random.randint(0, 2, 100),
+                    rng.standard_normal((100, 3)),
+                    rng.integers(0, 2, 100),
                 )
                 mock_net.return_value = Mock()
                 mock_optim.return_value = Mock()
 
                 try:
                     main()
-                except (SystemExit, Exception):
+                except (SystemExit, Exception):  # pylint: disable=broad-except
                     pass
 
                 # Verify spirals was called with only relevant arguments
                 call_args = mock_spirals.call_args
                 assert "noise" in call_args.kwargs
-                assert call_args.kwargs["noise"] == 0.3
+                assert np.isclose(call_args.kwargs["noise"], 0.3)
                 # cluster_count and sphere_radii should not affect the call
