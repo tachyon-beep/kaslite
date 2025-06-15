@@ -412,6 +412,33 @@ def main():
         help="Jitter magnitude on sphere surface",
     )
 
+    # Additional hyper-parameters
+    parser.add_argument(
+        "--warm_up_epochs",
+        type=int,
+        default=50,
+        help="Number of warm-up epochs before adaptation phase",
+    )
+    parser.add_argument(
+        "--adaptation_epochs",
+        type=int,
+        default=200,
+        help="Number of epochs for the adaptation phase",
+    )
+    parser.add_argument("--lr", type=float, default=3e-3, help="Learning rate")
+    parser.add_argument(
+        "--hidden_dim",
+        type=int,
+        default=128,
+        help="Hidden dimension size for the network",
+    )
+    parser.add_argument(
+        "--acc_threshold",
+        type=float,
+        default=0.95,
+        help="Accuracy threshold for Kasmina germination",
+    )
+
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -422,11 +449,11 @@ def main():
     )
 
     # ---------------- hyper-parameters ----------------
-    warm_up_epochs = 50
-    adaptation_epochs = 200
-    lr = 3e-3
-    hidden_dim = 128
-    acc_threshold = 0.95
+    warm_up_epochs = args.warm_up_epochs
+    adaptation_epochs = args.adaptation_epochs
+    lr = args.lr
+    hidden_dim = args.hidden_dim
+    acc_threshold = args.acc_threshold
     # --------------------------------------------------
 
     # Construct configuration for the experiment logger
@@ -634,7 +661,12 @@ def main():
                 if should:
                     _last_report[sid] = tag
                     logging.info("epoch %d %s %s", epoch, sid, tag)
-                    log_f.write(f"{epoch},{sid},{mod.state},{mod.alpha:.3f}\n")
+                    alpha_val = getattr(mod, "alpha", 0.0)
+                    try:
+                        alpha_str = f"{float(alpha_val):.3f}"
+                    except (TypeError, ValueError):
+                        alpha_str = str(alpha_val)
+                    log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")
 
         logger.log_phase_transition(warm_up_epochs, "phase_1", "phase_2")
         model.freeze_backbone()
@@ -714,7 +746,11 @@ def main():
                 if should:
                     _last_report[sid] = tag
                     logging.info("epoch %d %s %s", epoch, sid, tag)
-                    alpha_str = f"{mod.alpha:.3f}" if mod.state == "blending" else ""
+                    alpha_val = getattr(mod, "alpha", 0.0)
+                    try:
+                        alpha_str = f"{float(alpha_val):.3f}" if mod.state == "blending" else ""
+                    except (TypeError, ValueError):
+                        alpha_str = str(alpha_val)
                     log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")
 
         # ------------- final stats -------------

@@ -1,0 +1,42 @@
+# Morphogenetic Architecture Experiment Log
+# Timestamp: 2025-06-15 15:30:04
+# Configuration:
+# problem_type: spirals
+# n_samples: 200
+# input_dim: 2
+# train_frac: 0.8
+# batch_size: 64
+# device: cpu
+# seed: 42
+# noise: 0.25
+# rotations: 4
+# warm_up_epochs: 1
+# adaptation_epochs: 1
+# lr: 0.001
+# hidden_dim: 16
+# blend_steps: 30
+# shadow_lr: 0.001
+# progress_thresh: 0.6
+# drift_warn: 0.12
+# acc_threshold: 0.8
+#
+# Data format: epoch,seed,state,alpha
+epoch,seed,state,alpha
+1,seed1,dormant,0.000
+1,seed2,dormant,0.000
+1,seed3,dormant,0.000
+1,seed4,dormant,0.000
+1,seed5,dormant,0.000
+1,seed6,dormant,0.000
+1,seed7,dormant,0.000
+1,seed8,dormant,0.000
+#
+# Experiment completed successfully
+# End timestamp: 2025-06-15 15:30:05
+# Final best accuracy: 0.4750
+# Seeds activated: 0/8
+# ===== LOG COMPLETE =====
+": {"from": "phase_1", "to": "phase_2"}, "epoch": 1, "event_type": "phase_transition", "message": "Phase transition phase_1 -> phase_2", "timestamp": 1750001405.7184155}
+{"data": {"from": "phase_1_frozen", "to": "phase_2"}, "epoch": 1, "event_type": "phase_transition", "message": "Phase transition phase_1_frozen -> phase_2", "timestamp": 1750001405.7188094}
+{"data": {"best_acc": 0.475, "seeds": "seed1:dormant, seed2:dormant, seed3:dormant, seed4:dormant, seed5:dormant, seed6:dormant, seed7:dormant, seed8:dormant", "val_acc": 0.475, "val_loss": 0.6936972737312317}, "epoch": 2, "event_type": "epoch_progress", "message": "Epoch progress", "timestamp": 1750001405.7199745}
+{"data": {"summary": {"epoch_progress": 2, "experiment_start": 1, "phase_transition": 3}}, "epoch": 2, "event_type": "experiment_end", "message": "Experiment finished", "timestamp": 1750001405.7201092}
