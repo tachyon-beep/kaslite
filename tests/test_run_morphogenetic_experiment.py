@@ -5,10 +5,15 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 import torch
+from torch.utils.data import DataLoader, TensorDataset
 
-from morphogenetic_engine.core import SeedManager
+from morphogenetic_engine.components import BaseNet, SentinelSeed
+from morphogenetic_engine.core import KasminaMicro, SeedManager
 from scripts.run_morphogenetic_experiment import (
+    create_clusters,
     create_complex_moons,
+    create_moons,
+    create_spheres,
     create_spirals,
     evaluate,
     main,
@@ -164,10 +169,6 @@ class TestTrainEpoch:
 
     def test_train_epoch_basic(self):
         """Test basic training epoch functionality."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create simple test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
@@ -188,10 +189,6 @@ class TestTrainEpoch:
 
     def test_train_epoch_with_scheduler(self):
         """Test training epoch with learning rate scheduler."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
@@ -216,10 +213,6 @@ class TestTrainEpoch:
 
     def test_train_epoch_no_optimizer(self):
         """Test train_epoch with no optimizer."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create test data
         X = torch.randn(8, 2)
         y = torch.randint(0, 2, (8,))
@@ -239,10 +232,6 @@ class TestTrainEpoch:
 
     def test_train_epoch_empty_loader(self):
         """Test train_epoch with empty loader."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create empty dataset
         X = torch.empty(0, 2)
         y = torch.empty(0, dtype=torch.long)
@@ -262,10 +251,6 @@ class TestTrainEpoch:
 
     def test_train_epoch_seed_training(self):
         """Test that seeds are trained during training epoch."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
@@ -293,10 +278,6 @@ class TestTrainEpoch:
 
     def test_train_epoch_large_buffer_sampling(self):
         """Test that large seed buffers are properly sampled during training."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
@@ -330,10 +311,6 @@ class TestEvaluate:
 
     def test_evaluate_basic(self):
         """Test basic evaluation functionality."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create test data
         X = torch.randn(16, 2)
         y = torch.randint(0, 2, (16,))
@@ -354,8 +331,6 @@ class TestEvaluate:
 
     def test_evaluate_perfect_model(self):
         """Test evaluation with a perfect model."""
-        from torch.utils.data import DataLoader, TensorDataset
-
         # Create simple linearly separable data
         X = torch.tensor([[1.0, 0.0], [-1.0, 0.0], [2.0, 0.0], [-2.0, 0.0]])
         y = torch.tensor([1, 0, 1, 0])
@@ -382,10 +357,6 @@ class TestEvaluate:
 
     def test_evaluate_empty_loader(self):
         """Test evaluation with empty data loader."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create empty dataset
         X = torch.empty(0, 2)
         y = torch.empty(0, dtype=torch.long)
@@ -508,11 +479,6 @@ class TestIntegration:
 
     def test_full_pipeline_mini(self):
         """Test a minimal full pipeline execution."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-        from morphogenetic_engine.core import KasminaMicro
-
         # Create minimal dataset
         X, y = create_spirals(n_samples=32)
         X_tensor = torch.from_numpy(X)
@@ -549,8 +515,6 @@ class TestIntegration:
 
     def test_seed_lifecycle(self):
         """Test complete seed lifecycle from dormant to active."""
-        from morphogenetic_engine.components import SentinelSeed
-
         # Create seed
         seed_manager = SeedManager()
         seed = SentinelSeed("test_lifecycle", 16, seed_manager, blend_steps=5, progress_thresh=0.3)
@@ -587,10 +551,6 @@ class TestHighDimensionalIntegration:
 
     def test_spirals_4d_integration(self):
         """Test spirals dataset with 4D input through complete pipeline."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create 4D spirals data
         X, y = create_spirals(n_samples=64, input_dim=4)
         assert X.shape == (64, 4)
@@ -618,10 +578,6 @@ class TestHighDimensionalIntegration:
 
     def test_complex_moons_4d_integration(self):
         """Test complex moons dataset with 4D input through complete pipeline."""
-        from torch.utils.data import DataLoader, TensorDataset
-
-        from morphogenetic_engine.components import BaseNet
-
         # Create 4D complex moons data
         X, y = create_complex_moons(n_samples=64, input_dim=4)
         assert X.shape == (64, 4)
@@ -657,8 +613,6 @@ class TestHighDimensionalIntegration:
         np.testing.assert_array_equal(y_default, y_explicit)
 
         # Default BaseNet should work with 2D input
-        from morphogenetic_engine.components import BaseNet
-
         model = BaseNet(hidden_dim=32, seed_manager=SeedManager())  # Should default to input_dim=2
         x = torch.randn(4, 2)
         output = model(x)
@@ -670,8 +624,6 @@ class TestNewDatasets:
 
     def test_create_moons(self):
         """Test moons dataset generation."""
-        from scripts.run_morphogenetic_experiment import create_moons
-
         # Test basic functionality
         X, y = create_moons(n_samples=100, moon_noise=0.1, moon_sep=0.5, input_dim=2)
         assert X.shape == (100, 2)
@@ -685,8 +637,6 @@ class TestNewDatasets:
 
     def test_create_clusters(self):
         """Test clusters dataset generation."""
-        from scripts.run_morphogenetic_experiment import create_clusters
-
         # Test 2 clusters
         X, y = create_clusters(cluster_count=2, cluster_size=50, input_dim=3)
         assert X.shape == (100, 3)
@@ -701,8 +651,6 @@ class TestNewDatasets:
 
     def test_create_spheres(self):
         """Test spheres dataset generation."""
-        from scripts.run_morphogenetic_experiment import create_spheres
-
         # Test 2 spheres
         X, y = create_spheres(sphere_count=2, sphere_size=50, sphere_radii="1,2", input_dim=3)
         assert X.shape == (100, 3)
@@ -717,8 +665,6 @@ class TestNewDatasets:
 
     def test_dataset_validation(self):
         """Test dataset validation and error handling."""
-        from scripts.run_morphogenetic_experiment import create_spheres
-
         # Test mismatched radii and sphere_count
         with pytest.raises(ValueError, match="Number of radii"):
             create_spheres(sphere_count=2, sphere_size=50, sphere_radii="1,2,3", input_dim=3)
