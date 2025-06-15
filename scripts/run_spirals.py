@@ -209,7 +209,7 @@ def main():
         if epoch % 10 == 0 or val_acc > best_acc:
             best_acc = max(best_acc, val_acc)
             status = ", ".join(
-                f"{sid}:{info['status'][0]}" for sid, info in seed_manager.seeds.items()
+                f"{sid}:{info['status']}" for sid, info in seed_manager.seeds.items()
             )
             print(
                 f"Ep {epoch:>3}: loss {val_loss:.4f}  acc {val_acc:.4f} "
