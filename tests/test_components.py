@@ -1,17 +1,13 @@
 """Comprehensive tests for the components module."""
+# pylint: disable=protected-access
 
-import logging
-import os
-import sys
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 import torch
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from morphogenetic_engine.components import BaseNet, SentinelSeed
 from morphogenetic_engine.core import SeedManager
-
 
 class TestSentinelSeed:
     """Test suite for SentinelSeed class."""
@@ -440,7 +436,6 @@ class TestBaseNet:
                     param.requires_grad
                 ), f"Seed parameter {name} should remain trainable"
                 # Seed parameters might be frozen (if not initialized) or trainable
-                pass  # Don't check seed parameters as they have their own logic
 
     def test_forward_pass_shapes(self):
         """Test forward pass produces correct output shapes."""
@@ -482,7 +477,7 @@ class TestBaseNet:
         assert not torch.allclose(x.grad, torch.zeros_like(x.grad))
 
         # Check that non-frozen parameters have gradients
-        for name, param in net.named_parameters():
+        for _, param in net.named_parameters():
             if param.requires_grad:
                 assert param.grad is not None
 

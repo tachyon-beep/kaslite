@@ -1,7 +1,6 @@
 """Comprehensive tests for the core module."""
+# pylint: disable=protected-access
 
-import os
-import sys
 import threading
 import time
 from unittest.mock import Mock, patch
@@ -9,7 +8,6 @@ from unittest.mock import Mock, patch
 import pytest
 import torch
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 
 
@@ -50,7 +48,7 @@ class TestSeedManager:
         assert manager.seeds["test_seed"]["module"] is mock_seed
         assert manager.seeds["test_seed"]["status"] == "dormant"
         assert manager.seeds["test_seed"]["state"] == "dormant"
-        assert manager.seeds["test_seed"]["alpha"] == 0.0
+        assert manager.seeds["test_seed"]["alpha"] == pytest.approx(0.0)
         assert len(manager.seeds["test_seed"]["buffer"]) == 0
 
     def test_append_to_buffer(self):
@@ -190,7 +188,7 @@ class TestSeedManager:
 
         manager.record_drift("test_seed", 0.123)
 
-        assert manager.seeds["test_seed"]["telemetry"]["drift"] == 0.123
+        assert manager.seeds["test_seed"]["telemetry"]["drift"] == pytest.approx(0.123)
 
     def test_record_drift_nonexistent_seed(self):
         """Test drift recording for non-existent seed."""
@@ -210,8 +208,8 @@ class TestKasminaMicro:
 
         assert km.seed_manager is manager
         assert km.patience == 10
-        assert km.delta == 1e-3
-        assert km.acc_threshold == 0.9
+        assert km.delta == pytest.approx(1e-3)
+        assert km.acc_threshold == pytest.approx(0.9)
         assert km.plateau == 0
         assert km.prev_loss == float("inf")
 
@@ -224,13 +222,13 @@ class TestKasminaMicro:
         result = km.step(1.0, 0.5)
         assert result is False
         assert km.plateau == 0
-        assert km.prev_loss == 1.0
+        assert km.prev_loss == pytest.approx(1.0)
 
         # Improving loss should reset plateau
         result = km.step(0.8, 0.6)
         assert result is False
         assert km.plateau == 0
-        assert km.prev_loss == 0.8
+        assert km.prev_loss == pytest.approx(0.8)
 
     def test_step_plateau_detection(self):
         """Test plateau detection without triggering germination."""
@@ -241,7 +239,7 @@ class TestKasminaMicro:
         km.step(1.0, 0.95)  # High accuracy, above threshold
 
         # Create plateau but with high accuracy (shouldn't germinate)
-        for i in range(5):
+        for _ in range(5):
             result = km.step(1.0001, 0.95)  # Minimal loss change, high accuracy
             assert result is False  # No germination due to high accuracy
 
@@ -353,8 +351,8 @@ class TestKasminaMicro:
 
         # Build up plateau
         km.step(1.0, 0.5)
-        km.step(1.0001, 0.5)  # plateau = 1
-        km.step(1.0002, 0.5)  # plateau = 2
+        km.step(1.0001, 0.5)
+        km.step(1.0002, 0.5)
 
         assert km.plateau == 2
 

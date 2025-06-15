@@ -1,16 +1,15 @@
-import os
+"""Tests for soft landing functionality and state transitions in the morphogenetic engine."""
+# pylint: disable=protected-access
 import random
-import sys
-
 import pytest
 import torch
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from morphogenetic_engine.components import BaseNet, SentinelSeed
 from morphogenetic_engine.core import SeedManager
 
 
 def test_training_to_blending():
+    """Test that seed transitions from training to blending state after sufficient training steps."""
     seed_manager = SeedManager()
     seed = SentinelSeed("s1", 4, seed_manager)
     seed.initialize_child()
@@ -22,6 +21,7 @@ def test_training_to_blending():
 
 
 def test_blending_to_active():
+    """Test that seed transitions from blending to active state and alpha reaches 1.0."""
     seed_manager = SeedManager()
     seed = SentinelSeed("s2", 4, seed_manager)
     seed.initialize_child()
@@ -36,6 +36,7 @@ def test_blending_to_active():
 
 
 def test_forward_shapes():
+    """Test that seed forward pass maintains correct tensor shapes throughout state transitions."""
     seed_manager = SeedManager()
     seed = SentinelSeed("s3", 4, seed_manager)
     x = torch.randn(5, 4)
@@ -54,6 +55,7 @@ def test_forward_shapes():
 
 
 def test_grad_leak_blocked():
+    """Test that gradient computation is properly isolated during seed training."""
     model = BaseNet(hidden_dim=4, seed_manager=SeedManager(), input_dim=2)
     seed = model.seed1
 
@@ -69,6 +71,7 @@ def test_grad_leak_blocked():
 
 
 def test_redundant_transition_logged_once():
+    """Test that redundant state transitions are logged only once to avoid spam."""
     manager = SeedManager()
     manager.seeds.clear()
     manager.germination_log.clear()
@@ -83,6 +86,7 @@ def test_redundant_transition_logged_once():
 
 
 def test_buffer_shape_sampling():
+    """Test that buffer sampling produces correct batch shapes with proper tensor concatenation."""
     buf = [torch.randn(64, 128), torch.randn(16, 128)]
     sample_tensors = random.sample(list(buf), min(64, len(buf)))
     batch = torch.cat(sample_tensors, dim=0)

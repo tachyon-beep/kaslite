@@ -12,9 +12,8 @@ import logging
 import random
 from collections import defaultdict
 from datetime import datetime
-from typing import cast
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 import numpy as np
 import torch
@@ -61,7 +60,7 @@ def create_complex_moons(n_samples: int = 2000, noise: float = 0.1, input_dim: i
 
     # Generate two interleaved half-moons
     n_moons = n_samples // 2
-    x_moons, y_moons = make_moons(n_samples=n_moons, noise=noise, random_state=42)
+    X_moons, y_moons = make_moons(n_samples=n_moons, noise=noise, random_state=42)
 
     # Generate two Gaussian clusters
     n_clusters = n_samples - n_moons
@@ -79,7 +78,7 @@ def create_complex_moons(n_samples: int = 2000, noise: float = 0.1, input_dim: i
     y_cluster2 = np.ones(n_cluster2)
 
     # Concatenate all data
-    X = np.vstack((x_moons, cluster1, cluster2))
+    X = np.vstack((X_moons, cluster1, cluster2))
     y = np.hstack((y_moons, y_cluster1, y_cluster2))
 
     # Shuffle the data
@@ -187,7 +186,7 @@ def create_spheres(
             f"Number of radii ({len(radii)}) must match sphere_count ({sphere_count})"
         )
 
-    x_list = []
+    X_list = []
     y_list = []
 
     for i, radius in enumerate(radii):
@@ -221,13 +220,13 @@ def create_spheres(
             noise = rng.normal(0, sphere_noise, points.shape)
             points += noise
 
-        x_list.append(points)
+        X_list.append(points)
         # Convert to binary classification by grouping spheres
         # Odd spheres become class 0, even spheres become class 1
         y_list.append(np.full(sphere_size, i % 2))
 
     # Concatenate all spheres
-    X = np.vstack(x_list)
+    X = np.vstack(X_list)
     y = np.hstack(y_list)
 
     # Shuffle the data
@@ -779,7 +778,7 @@ def main():
                 f"# Seeds activated: {active_seeds}/{len(seed_manager.seeds)}\n"
             )
         else:
-            log_f.write("# Seeds activated: 0/{}\n".format(len(seed_manager.seeds)))
+            log_f.write(f"# Seeds activated: 0/{len(seed_manager.seeds)}\n")
         log_f.write("# ===== LOG COMPLETE =====\n")
 
 
