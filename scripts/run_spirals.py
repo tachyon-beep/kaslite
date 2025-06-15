@@ -250,3 +250,14 @@ def main():
         if acc_pre is not None and acc_post is not None:
             logging.info(f"accuracy dip {acc_pre - acc_post:.3f}, "
                          f"recovery {t_recover} epochs")
+
+
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    torch.manual_seed(42)
+    random.seed(42)
+    np.random.seed(42)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    main()
