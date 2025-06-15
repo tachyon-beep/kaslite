@@ -3,3 +3,5 @@ env/
 __pycache__/
 .env
 *.egg-info*
+# Keep experiment logs tracked
+!results_*.log

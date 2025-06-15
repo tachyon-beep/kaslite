@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import logging
 
 from .core import SeedManager
 
@@ -12,6 +13,7 @@ class SentinelSeed(nn.Module):
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
         progress_thresh: float = 0.6,
+        drift_warn: float = 0.1,
     ):
         super().__init__()
         self.seed_id = seed_id
@@ -21,6 +23,7 @@ class SentinelSeed(nn.Module):
         self.alpha = 0.0
         self.state = "dormant"
         self.training_progress = 0.0
+        self.drift_warn = drift_warn
 
         # Create child network with residual connection
         self.child = nn.Sequential(
@@ -39,12 +42,15 @@ class SentinelSeed(nn.Module):
 
     # ------------------------------------------------------------------
     def _set_state(self, new_state: str):
+        if self.state == new_state:  # DeepSeek redundant-transition check
+            return
         old_state = self.state
-        if old_state != new_state:
-            self.state = new_state
-            info = self.seed_manager.seeds[self.seed_id]
-            info["state"] = new_state
-            self.seed_manager.record_transition(self.seed_id, old_state, new_state)
+        self.state = new_state
+        info = self.seed_manager.seeds[self.seed_id]
+        info["state"] = new_state
+        if new_state == "active":
+            info["status"] = "active"  # keep Kasmina filter
+        self.seed_manager.record_transition(self.seed_id, old_state, new_state)
 
     def _initialize_as_identity(self):
         """Initialize to near-zero output (identity function)"""
@@ -74,6 +80,12 @@ class SentinelSeed(nn.Module):
         if self.state != "training":
             return
 
+        buf = self.seed_manager.seeds[self.seed_id]["buffer"]
+        if len(buf) == 0:
+            return        # DeepSeek resource guard
+
+        inputs = inputs.detach()  # stop grad leak
+
         self.child_optim.zero_grad(set_to_none=True)
         outputs = self.child(inputs)
         loss = self.child_loss(outputs, inputs)
@@ -84,7 +96,7 @@ class SentinelSeed(nn.Module):
         if self.training_progress > self.progress_thresh:
             self._set_state("blending")
             self.alpha = 0.0
-            self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
+        self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
 
     # ------------------------------------------------------------------
     def update_blending(self):
@@ -114,6 +126,8 @@ class SentinelSeed(nn.Module):
         with torch.no_grad():
             cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
             drift = 1.0 - cos_sim.item()
+            if drift > self.drift_warn:  # thresh via CLI later if desired
+                logging.warning(f"High drift {drift:.4f} at {self.seed_id}")
         self.seed_manager.record_drift(self.seed_id, drift)
         return output
 
@@ -139,7 +153,8 @@ class BaseNet(nn.Module):
         *,
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
-        progress_thresh: float = 0.6
+        progress_thresh: float = 0.6,
+        drift_warn: float = 0.1
     ):
         super().__init__()
 
@@ -151,6 +166,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
 
         self.fc2 = nn.Linear(hidden_dim, hidden_dim)
@@ -161,6 +177,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
 
         self.fc3 = nn.Linear(hidden_dim, hidden_dim)
@@ -171,6 +188,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
 
         # extra capacity layers + seeds --------------------
@@ -182,6 +200,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
 
         self.fc5 = nn.Linear(hidden_dim, hidden_dim)
@@ -192,6 +211,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
 
         self.fc6 = nn.Linear(hidden_dim, hidden_dim)
@@ -202,6 +222,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
 
         self.fc7 = nn.Linear(hidden_dim, hidden_dim)
@@ -212,6 +233,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
 
         self.fc8 = nn.Linear(hidden_dim, hidden_dim)
@@ -222,6 +244,7 @@ class BaseNet(nn.Module):
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
+            drift_warn=drift_warn,
         )
         # ---------------------------------------------------
 
