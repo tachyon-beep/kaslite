@@ -15,10 +15,14 @@ class EventType(Enum):
     """Enumeration of supported log event types."""
 
     EXPERIMENT_START = "experiment_start"
+    EXPERIMENT_END = "experiment_end"
     EPOCH_PROGRESS = "epoch_progress"
-    SEED_EVENT = "seed_event"
     PHASE_TRANSITION = "phase_transition"
+    SEED_STATE_CHANGE = "seed_state_change"
+    GERMINATION = "germination"
+    BLENDING_PROGRESS = "blending_progress"
     ACCURACY_DIP = "accuracy_dip"
+    SCHEDULER_STEP = "scheduler_step"
 
 
 @dataclass
@@ -27,8 +31,9 @@ class LogEvent:
 
     timestamp: float
     epoch: int
+    event_type: EventType
     message: str
-    metadata: Dict[str, Any]
+    data: Dict[str, Any]
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON serialisable representation of the event."""
@@ -36,8 +41,9 @@ class LogEvent:
         return {
             "timestamp": self.timestamp,
             "epoch": self.epoch,
+            "event_type": self.event_type.value,
             "message": self.message,
-            "metadata": self.metadata,
+            "data": self.data,
         }
 
 
@@ -71,8 +77,9 @@ class ExperimentLogger:
         event = LogEvent(
             timestamp=time.time(),
             epoch=0,
+            event_type=EventType.EXPERIMENT_START,
             message="Experiment started",
-            metadata={"type": EventType.EXPERIMENT_START.value, "config": self.config},
+            data={"config": self.config},
         )
         self._record_event(event)
 
@@ -82,8 +89,9 @@ class ExperimentLogger:
         event = LogEvent(
             timestamp=time.time(),
             epoch=epoch,
+            event_type=EventType.EPOCH_PROGRESS,
             message="Epoch progress",
-            metadata={"type": EventType.EPOCH_PROGRESS.value, **metrics},
+            data={**metrics},
         )
         self._record_event(event)
 
@@ -93,8 +101,9 @@ class ExperimentLogger:
         event = LogEvent(
             timestamp=time.time(),
             epoch=epoch,
+            event_type=EventType.SEED_STATE_CHANGE,
             message=description,
-            metadata={"type": EventType.SEED_EVENT.value, "seed_id": seed_id},
+            data={"seed_id": seed_id},
         )
         self._record_event(event)
 
@@ -104,9 +113,9 @@ class ExperimentLogger:
         event = LogEvent(
             timestamp=time.time(),
             epoch=epoch,
+            event_type=EventType.PHASE_TRANSITION,
             message=f"Phase transition {from_phase} -> {to_phase}",
-            metadata={
-                "type": EventType.PHASE_TRANSITION.value,
+            data={
                 "from": from_phase,
                 "to": to_phase,
             },
@@ -119,8 +128,9 @@ class ExperimentLogger:
         event = LogEvent(
             timestamp=time.time(),
             epoch=epoch,
+            event_type=EventType.ACCURACY_DIP,
             message="Accuracy dip detected",
-            metadata={"type": EventType.ACCURACY_DIP.value, "accuracy": accuracy},
+            data={"accuracy": accuracy},
         )
         self._record_event(event)
 
@@ -135,7 +145,7 @@ class ExperimentLogger:
         """Print a human readable version of the event."""
 
         ts = datetime.fromtimestamp(event.timestamp).strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{ts}] {event.message} | {event.metadata}")
+        print(f"[{ts}] {event.message} | {event.data}")
 
     # ------------------------------------------------------------------
     def generate_final_report(self) -> Dict[str, int]:
@@ -143,7 +153,7 @@ class ExperimentLogger:
 
         summary: Dict[str, int] = {}
         for event in self.events:
-            event_type = str(event.metadata.get("type", "unknown"))
-            summary[event_type] = summary.get(event_type, 0) + 1
+            event_name = event.event_type.value
+            summary[event_name] = summary.get(event_name, 0) + 1
         return summary
 
