@@ -4,6 +4,8 @@ import threading
 import time
 from collections import deque
 from typing import Dict, Optional, List, Any
+
+from .logger import ExperimentLogger
 import torch
 
 
@@ -14,16 +16,20 @@ class SeedManager:
     _instance: Optional['SeedManager'] = None
     _singleton_lock = threading.Lock()
 
-    def __init__(self) -> None:
-        """Initialize SeedManager with empty state."""
-        # Only initialize once, even if __init__ is called multiple times
+    def __init__(self, logger: Optional[ExperimentLogger] = None) -> None:
+        """Initialize SeedManager with optional logger and empty state."""
+        # Only initialize once for core state
         if not hasattr(self, '_initialized'):
             self.seeds: Dict[str, Dict] = {}
             self.germination_log: List[Dict[str, Any]] = []
             self.lock = threading.RLock()
+            self.logger: Optional[ExperimentLogger] = logger
             self._initialized = True
+        elif logger is not None:
+            # Allow logger injection after first construction
+            self.logger = logger
 
-    def __new__(cls) -> 'SeedManager':
+    def __new__(cls, *args, **kwargs) -> 'SeedManager':
         with cls._singleton_lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
@@ -47,7 +53,7 @@ class SeedManager:
             if seed_id in self.seeds:
                 self.seeds[seed_id]["buffer"].append(x.detach().clone())
 
-    def request_germination(self, seed_id: str) -> bool:
+    def request_germination(self, seed_id: str, epoch: int = 0) -> bool:
         """Request germination for a specific seed. Returns True if successful."""
         with self.lock:
             seed_info = self.seeds.get(seed_id)
@@ -58,6 +64,8 @@ class SeedManager:
                 seed_info["module"].initialize_child()
                 seed_info["status"] = "active"
                 self._log_event(seed_id, True)
+                if getattr(self, "logger", None) is not None:
+                    self.logger.log_germination(epoch, seed_id)
                 return True
             except (RuntimeError, ValueError) as e:
                 logging.exception("Germination failed for '%s': %s", seed_id, e)
@@ -75,8 +83,10 @@ class SeedManager:
             }
         )
 
-    def record_transition(self, seed_id: str, old_state: str, new_state: str) -> None:
-        """Record a state change for analytics."""
+    def record_transition(
+        self, seed_id: str, old_state: str, new_state: str, epoch: int = 0
+    ) -> None:
+        """Record a state change for analytics and log the event."""
         self.germination_log.append(
             {
                 "seed_id": seed_id,
@@ -85,6 +95,8 @@ class SeedManager:
                 "timestamp": time.time(),
             }
         )
+        if getattr(self, "logger", None) is not None:
+            self.logger.log_seed_event(epoch, seed_id, old_state, new_state)
 
     def record_drift(self, seed_id: str, drift: float) -> None:
         """Record drift telemetry for a specific seed."""

@@ -142,7 +142,7 @@ class TestSeedManager:
         """Test state transition recording."""
         manager = SeedManager()
         manager.germination_log.clear()
-        
+
         before_time = time.time()
         manager.record_transition("test_seed", "dormant", "training")
         after_time = time.time()
@@ -153,6 +153,30 @@ class TestSeedManager:
         assert log_entry["from"] == "dormant"
         assert log_entry["to"] == "training"
         assert before_time <= log_entry["timestamp"] <= after_time
+
+    def test_logger_called_on_germination(self):
+        """Ensure ExperimentLogger.log_germination is invoked."""
+        logger = Mock()
+        manager = SeedManager(logger=logger)
+        manager.seeds.clear()
+        mock_seed = Mock()
+        mock_seed.initialize_child = Mock()
+        manager.register_seed(mock_seed, "test_seed")
+
+        result = manager.request_germination("test_seed", epoch=5)
+
+        assert result is True
+        logger.log_germination.assert_called_once_with(5, "test_seed")
+
+    def test_logger_called_on_transition(self):
+        """Ensure ExperimentLogger.log_seed_event is invoked."""
+        logger = Mock()
+        manager = SeedManager(logger=logger)
+        manager.germination_log.clear()
+
+        manager.record_transition("seedX", "dormant", "training", epoch=7)
+
+        logger.log_seed_event.assert_called_once_with(7, "seedX", "dormant", "training")
         
     def test_record_drift(self):
         """Test drift recording functionality."""
