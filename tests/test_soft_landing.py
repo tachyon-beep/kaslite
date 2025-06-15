@@ -25,7 +25,7 @@ def test_blending_to_active():
     for _ in range(seed.blend_steps):
         seed.update_blending()
     assert seed.state == "active"
-    assert pytest.approx(seed.alpha, 1e-6) == 1.0
+    assert seed.alpha == pytest.approx(1.0, abs=1e-6)
 
 
 def test_forward_shapes():
