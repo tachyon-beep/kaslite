@@ -102,7 +102,7 @@ def main():
     parser.add_argument("--shadow_lr", type=float, default=1e-3)
     parser.add_argument("--progress_thresh", type=float, default=0.6)
     parser.add_argument(
-        "--drift_warn", type=float, default=0.1,
+        "--drift_warn", type=float, default=0.12,
         help="Drift warning threshold (0=disable)",
     )
     args = parser.parse_args()
@@ -244,13 +244,15 @@ def main():
             print("Seed events:")
             for ev in seed_manager.germination_log:
                 t = time.strftime("%H:%M:%S", time.localtime(ev["timestamp"]))
-                print(f"  {ev['seed_id']} – "
-                      f"{'OK' if ev['success'] else 'FAIL'} at {t}")
-
+                if "success" in ev:          # germination
+                    print(f"  {ev['seed_id']} germination "
+                          f"{'✓' if ev['success'] else '✗'} @ {t}")
+                else:                        # state transition
+                    print(f"  {ev['seed_id']} {ev['from']}→{ev['to']} @ {t}")
+        
         if acc_pre is not None and acc_post is not None:
             logging.info(f"accuracy dip {acc_pre - acc_post:.3f}, "
                          f"recovery {t_recover} epochs")
-
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
