@@ -1,6 +1,8 @@
 """Tests for soft landing functionality and state transitions in the morphogenetic engine."""
+
 # pylint: disable=protected-access
 import random
+
 import pytest
 import torch
 

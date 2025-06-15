@@ -1,4 +1,4 @@
-"""Comprehensive tests for the run_spirals script."""
+"""Comprehensive tests for the run_morphogenetic_experiment script."""
 
 import os
 import sys
@@ -436,18 +436,20 @@ class TestMainFunction:
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch("scripts.run_morphogenetic_experiment.Path.open", create=True):
-                # Mock the file operations to avoid creating actual files
-                with patch("builtins.print"):  # Suppress print output
-                    try:
-                        main()
-                        # If we get here without exception, test passed
-                        assert True
-                    except SystemExit:
-                        # argparse might call sys.exit, which is fine
-                        assert True
-                    except Exception as e:
-                        # Any other exception is a test failure
-                        pytest.fail(f"main() raised unexpected exception: {e}")
+                with patch("scripts.run_morphogenetic_experiment.ExperimentLogger") as mock_logger:
+                    # Mock the file operations to avoid creating actual files
+                    mock_logger.return_value = Mock()
+                    with patch("builtins.print"):  # Suppress print output
+                        try:
+                            main()
+                            # If we get here without exception, test passed
+                            assert True
+                        except SystemExit:
+                            # argparse might call sys.exit, which is fine
+                            assert True
+                        except Exception as e:
+                            # Any other exception is a test failure
+                            pytest.fail(f"main() raised unexpected exception: {e}")
 
     def test_main_argument_parsing(self):
         """Test argument parsing in main function."""
@@ -456,21 +458,23 @@ class TestMainFunction:
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch("scripts.run_morphogenetic_experiment.Path.open", create=True):
-                with patch("builtins.print"):
-                    with patch("torch.utils.data.random_split") as mock_split:
-                        # Mock the data splitting to avoid actual computation
-                        mock_split.return_value = (Mock(), Mock())
-                        with patch(
-                            "scripts.run_morphogenetic_experiment.train_epoch"
-                        ) as mock_train:
+                with patch("scripts.run_morphogenetic_experiment.ExperimentLogger") as mock_logger:
+                    mock_logger.return_value = Mock()
+                    with patch("builtins.print"):
+                        with patch("torch.utils.data.random_split") as mock_split:
+                            # Mock the data splitting to avoid actual computation
+                            mock_split.return_value = (Mock(), Mock())
                             with patch(
-                                "scripts.run_morphogenetic_experiment.evaluate"
-                            ) as mock_eval:
-                                mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
-                                try:
-                                    main()
-                                except (SystemExit, Exception):
-                                    pass  # We just want to test argument parsing
+                                "scripts.run_morphogenetic_experiment.train_epoch"
+                            ) as mock_train:
+                                with patch(
+                                    "scripts.run_morphogenetic_experiment.evaluate"
+                                ) as mock_eval:
+                                    mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
+                                    try:
+                                        main()
+                                    except (SystemExit, Exception):
+                                        pass  # We just want to test argument parsing
 
     def test_main_new_arguments(self):
         """Test that main function accepts new CLI arguments."""

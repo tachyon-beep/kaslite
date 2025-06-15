@@ -8,25 +8,25 @@ Run the training script with various configuration options for different dataset
 
 ```bash
 # Basic spirals dataset (2D, default)
-python scripts/run_spirals.py
+python scripts/run_morphogenetic_experiment.py
 
 # Two moons dataset with custom parameters
-python scripts/run_spirals.py --problem_type moons --n_samples 800 --noise 0.15
+python scripts/run_morphogenetic_experiment.py --problem_type moons --n_samples 800 --noise 0.15
 
 # Gaussian clusters dataset
-python scripts/run_spirals.py --problem_type clusters --n_samples 600 --n_centers 3 --cluster_std 1.2
+python scripts/run_morphogenetic_experiment.py --problem_type clusters --n_samples 600 --n_centers 3 --cluster_std 1.2
 
 # Spherical shell dataset in higher dimensions
-python scripts/run_spirals.py --problem_type spheres --input_dim 4 --n_samples 1000 --noise 0.1
+python scripts/run_morphogenetic_experiment.py --problem_type spheres --input_dim 4 --n_samples 1000 --noise 0.1
 
 # Legacy complex_moons dataset with higher dimensions
-python scripts/run_spirals.py --problem_type complex_moons --input_dim 5
+python scripts/run_morphogenetic_experiment.py --problem_type complex_moons --input_dim 5
 
 # Use CUDA if available
-python scripts/run_spirals.py --device cuda --problem_type clusters
+python scripts/run_morphogenetic_experiment.py --device cuda --problem_type clusters
 
 # Full configuration example with custom training parameters
-python scripts/run_spirals.py --problem_type moons --input_dim 3 --device cuda --blend_steps 200 --shadow_lr 0.002 --batch_size 64 --train_frac 0.8
+python scripts/run_morphogenetic_experiment.py --problem_type moons --input_dim 3 --device cuda --blend_steps 200 --shadow_lr 0.002 --batch_size 64 --train_frac 0.8
 ```
 
 ### CLI Arguments

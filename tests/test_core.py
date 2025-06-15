@@ -1,4 +1,5 @@
 """Comprehensive tests for the core module."""
+
 # pylint: disable=protected-access
 
 import threading
@@ -265,13 +266,9 @@ class TestKasminaMicro:
         assert result2 is False  # Should not trigger yet
         assert km.plateau == 1  # Plateau count = 1
 
-        with patch.object(
-            manager, "request_germination", return_value=True
-        ) as mock_germ:
+        with patch.object(manager, "request_germination", return_value=True) as mock_germ:
             result3 = km.step(1.0 + 2e-4, 0.5)  # Plateau continues (diff = 1e-4 < 1e-3)
-            assert (
-                result3 is True
-            )  # Should trigger germination (plateau = 2 >= patience = 2)
+            assert result3 is True  # Should trigger germination (plateau = 2 >= patience = 2)
             mock_germ.assert_called_once_with("test_seed")
             mock_germ.assert_called_once_with("test_seed")
 

@@ -45,9 +45,7 @@ class SentinelSeed(nn.Module):
         )
         self._initialize_as_identity()
 
-        self.child_optim = torch.optim.Adam(
-            self.child.parameters(), lr=shadow_lr, weight_decay=0.0
-        )
+        self.child_optim = torch.optim.Adam(self.child.parameters(), lr=shadow_lr, weight_decay=0.0)
         self.child_loss = nn.MSELoss()
 
         # Register with seed manager
@@ -174,7 +172,7 @@ class BaseNet(nn.Module):
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
         progress_thresh: float = 0.6,
-        drift_warn: float = 0.1
+        drift_warn: float = 0.1,
     ):
         super().__init__()
 
