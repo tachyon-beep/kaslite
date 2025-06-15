@@ -55,13 +55,14 @@ class ExperimentLogger:
     """
 
     def __init__(self, log_file_path: str | Path, config: Dict[str, Any]) -> None:
-        self.log_file_path = Path(log_file_path)
+        """Initialize the logger and ensure the logs directory exists."""
+        # Always place logs inside the project ``logs`` directory
+        logs_dir = Path(__file__).resolve().parents[1] / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        self.log_file_path = logs_dir / Path(log_file_path).name
         self.config = config
         self.events: List[LogEvent] = []
-
-        # Ensure log directory exists
-        self.log_file_path.parent.mkdir(parents=True, exist_ok=True)
-        # Truncate existing file
+        # Truncate any existing log file
         self.log_file_path.write_text("")
 
     # ------------------------------------------------------------------
@@ -95,15 +96,42 @@ class ExperimentLogger:
         )
         self._record_event(event)
 
-    def log_seed_event(self, epoch: int, seed_id: str, description: str) -> None:
-        """Record an event related to a sentinel seed."""
+    def log_seed_event(
+        self, epoch: int, seed_id: str, from_state: str, to_state: str, description: str | None = None
+    ) -> None:
+        """Record a seed state transition."""
 
+        msg = description or f"Seed {seed_id}: {from_state} -> {to_state}"
         event = LogEvent(
             timestamp=time.time(),
             epoch=epoch,
             event_type=EventType.SEED_STATE_CHANGE,
-            message=description,
+            message=msg,
+            data={"seed_id": seed_id, "from": from_state, "to": to_state},
+        )
+        self._record_event(event)
+
+    def log_germination(self, epoch: int, seed_id: str) -> None:
+        """Record successful germination of a seed."""
+
+        event = LogEvent(
+            timestamp=time.time(),
+            epoch=epoch,
+            event_type=EventType.GERMINATION,
+            message=f"Seed {seed_id} germinated",
             data={"seed_id": seed_id},
+        )
+        self._record_event(event)
+
+    def log_blending_progress(self, epoch: int, seed_id: str, alpha: float) -> None:
+        """Log soft-landing blending progress for a seed."""
+
+        event = LogEvent(
+            timestamp=time.time(),
+            epoch=epoch,
+            event_type=EventType.BLENDING_PROGRESS,
+            message=f"Blending {seed_id} alpha={alpha:.3f}",
+            data={"seed_id": seed_id, "alpha": alpha},
         )
         self._record_event(event)
 
@@ -134,18 +162,32 @@ class ExperimentLogger:
         )
         self._record_event(event)
 
+    def log_experiment_end(self, epoch: int) -> None:
+        """Record the end of an experiment and report a summary."""
+
+        summary = self.generate_final_report()
+        event = LogEvent(
+            timestamp=time.time(),
+            epoch=epoch,
+            event_type=EventType.EXPERIMENT_END,
+            message="Experiment finished",
+            data={"summary": summary},
+        )
+        self._record_event(event)
+
     # ------------------------------------------------------------------
     def write_to_file(self, event: LogEvent) -> None:
         """Append the event to the log file in JSON format."""
 
         with open(self.log_file_path, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(event.to_dict()) + "\n")
+            fh.write(json.dumps(event.to_dict(), sort_keys=True) + "\n")
 
     def print_real_time_update(self, event: LogEvent) -> None:
         """Print a human readable version of the event."""
 
         ts = datetime.fromtimestamp(event.timestamp).strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{ts}] {event.message} | {event.data}")
+        event_name = event.event_type.value.upper()
+        print(f"[{ts}] {event_name}: {event.message} - {event.data}")
 
     # ------------------------------------------------------------------
     def generate_final_report(self) -> Dict[str, int]:
@@ -155,5 +197,5 @@ class ExperimentLogger:
         for event in self.events:
             event_name = event.event_type.value
             summary[event_name] = summary.get(event_name, 0) + 1
-        return summary
+        return dict(sorted(summary.items()))
 
