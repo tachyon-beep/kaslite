@@ -7,6 +7,8 @@ Run a morphogenetic-architecture experiment on the two-spirals dataset.
 
 from __future__ import annotations
 
+import argparse
+import logging
 import random
 import time
 from pathlib import Path
@@ -23,6 +25,7 @@ from morphogenetic_engine.components import BaseNet
 
 # ---------- DATA -------------------------------------------------------------
 
+
 def create_spirals(n_samples: int = 2000, noise: float = 0.25, rotations: int = 4):
     """Generate the classic two-spirals toy dataset."""
     n = np.sqrt(np.random.rand(n_samples // 2)) * rotations * 2 * np.pi
@@ -37,10 +40,14 @@ def create_spirals(n_samples: int = 2000, noise: float = 0.25, rotations: int = 
 
 # ---------- TRAIN / EVAL HELPERS ---------------------------------------------
 
-def train_epoch(model: nn.Module,
-               loader: DataLoader,
-               optimiser: torch.optim.Optimizer,
-               criterion: nn.Module):
+
+def train_epoch(
+    model: nn.Module,
+    loader: DataLoader,
+    optimiser: torch.optim.Optimizer,
+    criterion: nn.Module,
+    seed_manager: SeedManager,
+):
     model.train()
     for X, y in loader:
         optimiser.zero_grad(set_to_none=True)
@@ -48,12 +55,20 @@ def train_epoch(model: nn.Module,
         loss = criterion(preds, y)
         loss.backward()
         optimiser.step()
+        for info in seed_manager.seeds.values():
+            seed = info["module"]
+            if seed.state == "training":
+                buf = info["buffer"]
+                if len(buf) >= 10:
+                    batch = torch.stack(random.sample(list(buf), min(64, len(buf))))
+                    seed.train_child_step(batch)
+            seed.update_blending()
 
 
 @torch.no_grad()
-def evaluate(model: nn.Module,
-             loader: DataLoader,
-             criterion: nn.Module) -> tuple[float, float]:
+def evaluate(
+    model: nn.Module, loader: DataLoader, criterion: nn.Module
+) -> tuple[float, float]:
     model.eval()
     loss_accum, correct, total = 0.0, 0, 0
     for X, y in loader:
@@ -66,13 +81,22 @@ def evaluate(model: nn.Module,
 
 # ---------- MAIN -------------------------------------------------------------
 
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--blend_steps", type=int, default=30)
+    parser.add_argument("--shadow_lr", type=float, default=1e-3)
+    parser.add_argument("--progress_thresh", type=float, default=0.6)
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     # ---------------- hyper-parameters ----------------
-    warm_up_epochs    = 50
+    warm_up_epochs = 50
     adaptation_epochs = 200
-    lr                = 3e-3          # calmer than 0.01
-    hidden_dim        = 128
-    acc_threshold     = 0.95
+    lr = 3e-3  # calmer than 0.01
+    hidden_dim = 128
+    acc_threshold = 0.95
     # --------------------------------------------------
 
     print("=== Morphogenetic Architecture Experiment ===")
@@ -80,29 +104,36 @@ def main():
     print(f"Seed phase : {adaptation_epochs} epochs")
     print(f"LR        : {lr}")
     print(f"Hidden dim: {hidden_dim}\n")
+    slug = f"h{hidden_dim}_bs{args.blend_steps}_lr{args.shadow_lr}_pt{args.progress_thresh}"
+    result_file = Path(f"results_{slug}.log")
+    log_f = result_file.open("w")
 
     # ---------- data ----------
     X, y = create_spirals()
     scaler = StandardScaler().fit(X)
     X = scaler.transform(X).astype(np.float32)
 
-    dataset   = TensorDataset(torch.from_numpy(X), torch.from_numpy(y))
+    dataset = TensorDataset(torch.from_numpy(X), torch.from_numpy(y))
     train_ds, val_ds = torch.utils.data.random_split(
         dataset, [int(0.8 * len(dataset)), len(dataset) - int(0.8 * len(dataset))]
     )
 
     train_loader = DataLoader(train_ds, batch_size=64, shuffle=True)
-    val_loader   = DataLoader(val_ds,   batch_size=128)
+    val_loader = DataLoader(val_ds, batch_size=128)
     # ---------------------------
 
     # ---------- model & agents ----------
     seed_manager = SeedManager()
-    model   = BaseNet(hidden_dim)              # SentinelSeed is widened in components.py
+    model = BaseNet(
+        hidden_dim,
+        blend_steps=args.blend_steps,
+        shadow_lr=args.shadow_lr,
+        progress_thresh=args.progress_thresh,
+    )
     loss_fn = nn.CrossEntropyLoss()
-    kasmina = KasminaMicro(seed_manager,
-                           patience=15,
-                           delta=5e-4,
-                           acc_threshold=acc_threshold)
+    kasmina = KasminaMicro(
+        seed_manager, patience=15, delta=5e-4, acc_threshold=acc_threshold
+    )
     # -------------------------------------
 
     # ---------- optimiser & scheduler (phase 1) ----------
@@ -111,17 +142,30 @@ def main():
     # -----------------------------------------------------
 
     best_acc = 0.0
+    acc_pre = None
+    acc_post = None
+    t_recover = None
+    germ_epoch = None
 
     print("----- Phase 1 : full-model training -----")
     for epoch in range(1, warm_up_epochs + 1):
-        train_epoch(model, train_loader, optimiser, loss_fn)
+        train_epoch(model, train_loader, optimiser, loss_fn, seed_manager)
         scheduler.step()
 
         val_loss, val_acc = evaluate(model, val_loader, loss_fn)
         best_acc = max(best_acc, val_acc)
 
         if epoch % 5 == 0 or epoch == 1 or epoch == warm_up_epochs:
-            print(f"Ep {epoch:>2}: loss {val_loss:.4f}  acc {val_acc:.4f}  best {best_acc:.4f}")
+            print(
+                f"Ep {epoch:>2}: loss {val_loss:.4f}  acc {val_acc:.4f}  best {best_acc:.4f}"
+            )
+        for sid, info in seed_manager.seeds.items():
+            mod = info["module"]
+            if mod.state in {"blending", "active"}:
+                logging.info(
+                    f"epoch {epoch} {sid} state={mod.state} alpha={mod.alpha:.2f}"
+                )
+                log_f.write(f"{epoch},{sid},{mod.state},{mod.alpha:.3f}\n")
 
     print(f"\nWarm-up complete — trunk frozen at {best_acc:.4f} accuracy\n")
     model.freeze_backbone()
@@ -130,8 +174,8 @@ def main():
     def rebuild_seed_opt():
         params = [p for p in model.parameters() if p.requires_grad]
         if params:
-            opt  = torch.optim.Adam(params, lr=lr * 0.1)  # cooler LR for seeds
-            sch  = torch.optim.lr_scheduler.StepLR(opt, 20, 0.1)
+            opt = torch.optim.Adam(params, lr=lr * 0.1)  # cooler LR for seeds
+            sch = torch.optim.lr_scheduler.StepLR(opt, 20, 0.1)
             return opt, sch
         return None, None
 
@@ -141,11 +185,10 @@ def main():
     seeds_activated = False
 
     print("----- Phase 2 : seed adaptation -----")
-    for epoch in range(warm_up_epochs + 1,
-                       warm_up_epochs + adaptation_epochs + 1):
+    for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
 
         if optimiser:
-            train_epoch(model, train_loader, optimiser, loss_fn)
+            train_epoch(model, train_loader, optimiser, loss_fn, seed_manager)
             scheduler.step()
 
         val_loss, val_acc = evaluate(model, val_loader, loss_fn)
@@ -153,23 +196,45 @@ def main():
         # germination check
         if kasmina.step(val_loss, val_acc):
             seeds_activated = True
+            germ_epoch = epoch
+            acc_pre = val_acc
             print(f"[!] Germination at epoch {epoch}")
             optimiser, scheduler = rebuild_seed_opt()
 
+        if germ_epoch and epoch == germ_epoch + 1:
+            acc_post = val_acc
+        if germ_epoch and t_recover is None and val_acc >= acc_pre:
+            t_recover = epoch - germ_epoch
+
         if epoch % 10 == 0 or val_acc > best_acc:
             best_acc = max(best_acc, val_acc)
-            status = ", ".join(f"{sid}:{info['status'][0]}"
-                               for sid, info in seed_manager.seeds.items())
-            print(f"Ep {epoch:>3}: loss {val_loss:.4f}  acc {val_acc:.4f} "
-                  f"best {best_acc:.4f}  seeds [{status}]")
+            status = ", ".join(
+                f"{sid}:{info['status'][0]}" for sid, info in seed_manager.seeds.items()
+            )
+            print(
+                f"Ep {epoch:>3}: loss {val_loss:.4f}  acc {val_acc:.4f} "
+                f"best {best_acc:.4f}  seeds [{status}]"
+            )
+        for sid, info in seed_manager.seeds.items():
+            mod = info["module"]
+            if mod.state in {"blending", "active"}:
+                logging.info(
+                    f"epoch {epoch} {sid} state={mod.state} alpha={mod.alpha:.2f}"
+                )
+                log_f.write(f"{epoch},{sid},{mod.state},{mod.alpha:.3f}\n")
 
     print("\n===== Final =====")
     print(f"Best accuracy: {best_acc:.4f}")
     if seeds_activated:
         print("Seed events:")
         for ev in seed_manager.germination_log:
-            t = time.strftime('%H:%M:%S', time.localtime(ev['timestamp']))
+            t = time.strftime("%H:%M:%S", time.localtime(ev["timestamp"]))
             print(f"  {ev['seed_id']} – {'OK' if ev['success'] else 'FAIL'} at {t}")
+    if acc_pre is not None and acc_post is not None:
+        logging.info(
+            f"accuracy dip {acc_pre - acc_post:.3f}, recovery {t_recover} epochs"
+        )
+    log_f.close()
 
 
 # ---------- entry-point guard ----------
@@ -179,6 +244,6 @@ if __name__ == "__main__":
     random.seed(42)
     np.random.seed(42)
     torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark     = False
+    torch.backends.cudnn.benchmark = False
 
     main()

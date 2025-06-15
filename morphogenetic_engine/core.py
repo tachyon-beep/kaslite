@@ -5,10 +5,11 @@ from collections import deque
 from typing import Dict, Optional
 import torch
 
+
 class SeedManager:
     _instance = None
     _singleton_lock = threading.Lock()
-    
+
     def __new__(cls):
         with cls._singleton_lock:
             if cls._instance is None:
@@ -23,6 +24,8 @@ class SeedManager:
             self.seeds[seed_id] = {
                 "module": seed_module,
                 "status": "dormant",
+                "state": "dormant",
+                "alpha": 0.0,
                 "buffer": deque(maxlen=500),
                 "telemetry": {"drift": 0.0, "variance": 0.0},
             }
@@ -37,7 +40,7 @@ class SeedManager:
             seed_info = self.seeds.get(seed_id)
             if not seed_info or seed_info["status"] != "dormant":
                 return False
-            
+
             try:
                 seed_info["module"].initialize_child()
                 seed_info["status"] = "active"
@@ -50,11 +53,24 @@ class SeedManager:
                 return False
 
     def _log_event(self, seed_id: str, success: bool):
-        self.germination_log.append({
-            "seed_id": seed_id,
-            "success": success,
-            "timestamp": time.time(),
-        })
+        self.germination_log.append(
+            {
+                "seed_id": seed_id,
+                "success": success,
+                "timestamp": time.time(),
+            }
+        )
+
+    def record_transition(self, seed_id: str, old_state: str, new_state: str):
+        """Record a state change for analytics."""
+        self.germination_log.append(
+            {
+                "seed_id": seed_id,
+                "from": old_state,
+                "to": new_state,
+                "timestamp": time.time(),
+            }
+        )
 
     def record_drift(self, seed_id: str, drift: float):
         with self.lock:
@@ -63,27 +79,32 @@ class SeedManager:
 
 
 class KasminaMicro:
-    def __init__(self, seed_manager: SeedManager, patience: int = 15, 
-                 delta: float = 1e-4, acc_threshold: float = 0.95):
+    def __init__(
+        self,
+        seed_manager: SeedManager,
+        patience: int = 15,
+        delta: float = 1e-4,
+        acc_threshold: float = 0.95,
+    ):
         self.seed_manager = seed_manager
         self.patience = patience
         self.delta = delta
         self.acc_threshold = acc_threshold  # Accuracy threshold for germination
         self.plateau = 0
-        self.prev_loss = float('inf')
+        self.prev_loss = float("inf")
 
     def step(self, val_loss: float, val_acc: float) -> bool:
         # Calculate absolute difference
         loss_diff = abs(val_loss - self.prev_loss)
-        
+
         # Check if loss has plateaued (minimal improvement)
         if loss_diff < self.delta:
             self.plateau += 1
         else:
             self.plateau = 0  # Reset if we see improvement
-            
+
         self.prev_loss = val_loss
-        
+
         # Only trigger germination if:
         # 1. Accuracy is below threshold (problem not solved)
         # 2. Loss plateau persists beyond patience
@@ -96,8 +117,8 @@ class KasminaMicro:
 
     def _select_seed(self) -> Optional[str]:
         candidate_id = None
-        worst_signal = float('inf')  # Start with worst possible value
-        
+        worst_signal = float("inf")  # Start with worst possible value
+
         with self.seed_manager.lock:
             for sid, info in self.seed_manager.seeds.items():
                 if info["status"] == "dormant":
@@ -107,4 +128,3 @@ class KasminaMicro:
                         worst_signal = signal
                         candidate_id = sid
         return candidate_id
-
