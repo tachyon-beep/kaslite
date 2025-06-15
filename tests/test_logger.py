@@ -20,7 +20,7 @@ class TestLogEvent:
             epoch=5,
             event_type=EventType.EPOCH_PROGRESS,
             message="Test message",
-            data={"accuracy": 0.85, "loss": 0.32}
+            data={"accuracy": 0.85, "loss": 0.32},
         )
 
         assert event.timestamp == timestamp
@@ -37,7 +37,7 @@ class TestLogEvent:
             epoch=10,
             event_type=EventType.GERMINATION,
             message="Seed sprouted",
-            data={"seed_id": "seed1", "growth_rate": 1.5}
+            data={"seed_id": "seed1", "growth_rate": 1.5},
         )
 
         result = event.to_dict()
@@ -46,7 +46,7 @@ class TestLogEvent:
             "epoch": 10,
             "event_type": "germination",
             "message": "Seed sprouted",
-            "data": {"seed_id": "seed1", "growth_rate": 1.5}
+            "data": {"seed_id": "seed1", "growth_rate": 1.5},
         }
 
         assert result == expected
@@ -76,7 +76,7 @@ class TestExperimentLogger:
         """Helper to create a logger with mocked directory resolution."""
         results_dir = Path(temp_dir) / "results"
         results_dir.mkdir(exist_ok=True)
-        
+
         # Create logger and override the problematic path resolution
         logger = object.__new__(ExperimentLogger)
         logger.log_file_path = results_dir / Path(log_file_path).name
@@ -101,8 +101,8 @@ class TestExperimentLogger:
         with tempfile.TemporaryDirectory() as temp_dir:
             config = {"dataset": "moons", "lr": 0.001}
             logger = self._create_test_logger("test.log", config, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):  # Suppress console output
+
+            with patch.object(logger, "print_real_time_update"):  # Suppress console output
                 logger.log_experiment_start()
 
             assert len(logger.events) == 1
@@ -117,8 +117,8 @@ class TestExperimentLogger:
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
             metrics = {"accuracy": 0.92, "loss": 0.15, "val_accuracy": 0.89}
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_epoch_progress(15, metrics)
 
             assert len(logger.events) == 1
@@ -132,8 +132,8 @@ class TestExperimentLogger:
         """Test seed state transition logging."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 # Test with custom description
                 logger.log_seed_event(8, "seed_alpha", "dormant", "training", "Custom description")
 
@@ -145,7 +145,7 @@ class TestExperimentLogger:
             assert event.data == {"seed_id": "seed_alpha", "from": "dormant", "to": "training"}
 
             # Test with default description
-            with patch.object(logger, 'print_real_time_update'):
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_seed_event(12, "seed_beta", "training", "active")
 
             assert len(logger.events) == 2
@@ -156,8 +156,8 @@ class TestExperimentLogger:
         """Test germination event logging."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_germination(20, "seed_gamma")
 
             assert len(logger.events) == 1
@@ -171,8 +171,8 @@ class TestExperimentLogger:
         """Test blending progress logging."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_blending_progress(25, "seed_delta", 0.75)
 
             assert len(logger.events) == 1
@@ -186,8 +186,8 @@ class TestExperimentLogger:
         """Test phase transition logging."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_phase_transition(30, "exploration", "exploitation")
 
             assert len(logger.events) == 1
@@ -201,8 +201,8 @@ class TestExperimentLogger:
         """Test accuracy dip logging."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_accuracy_dip(35, 0.72)
 
             assert len(logger.events) == 1
@@ -216,9 +216,9 @@ class TestExperimentLogger:
         """Test experiment end logging and summary generation."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
+
             # Add some events first
-            with patch.object(logger, 'print_real_time_update'):
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_experiment_start()
                 logger.log_epoch_progress(1, {"accuracy": 0.8})
                 logger.log_germination(5, "seed1")
@@ -230,7 +230,7 @@ class TestExperimentLogger:
             assert end_event.epoch == 100
             assert end_event.event_type == EventType.EXPERIMENT_END
             assert end_event.message == "Experiment finished"
-            
+
             # Check summary
             summary = end_event.data["summary"]
             assert summary["experiment_start"] == 1
@@ -242,9 +242,9 @@ class TestExperimentLogger:
         """Test final report generation logic."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
+
             # Add diverse events
-            with patch.object(logger, 'print_real_time_update'):
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_experiment_start()
                 logger.log_epoch_progress(1, {})
                 logger.log_epoch_progress(2, {})
@@ -258,7 +258,7 @@ class TestExperimentLogger:
                 "epoch_progress": 2,
                 "experiment_start": 1,
                 "germination": 1,
-                "phase_transition": 1
+                "phase_transition": 1,
             }
             assert summary == expected
 
@@ -266,15 +266,15 @@ class TestExperimentLogger:
         """Test that events are properly written to file."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test_integration.log", {"test": True}, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 logger.log_experiment_start()
                 logger.log_epoch_progress(1, {"accuracy": 0.95})
 
             # Verify file content
             assert logger.log_file_path.exists()
             content = logger.log_file_path.read_text()
-            lines = content.strip().split('\n')
+            lines = content.strip().split("\n")
             assert len(lines) == 2
 
             # Parse and verify JSON structure
@@ -301,8 +301,8 @@ class TestExperimentLogger:
         """Test that multiple events maintain chronological order."""
         with tempfile.TemporaryDirectory() as temp_dir:
             logger = self._create_test_logger("test.log", {}, temp_dir)
-            
-            with patch.object(logger, 'print_real_time_update'):
+
+            with patch.object(logger, "print_real_time_update"):
                 start_time = time.time()
                 logger.log_experiment_start()
                 time.sleep(0.01)  # Small delay to ensure different timestamps
@@ -315,7 +315,7 @@ class TestExperimentLogger:
             assert logger.events[0].timestamp >= start_time
             assert logger.events[1].timestamp > logger.events[0].timestamp
             assert logger.events[2].timestamp > logger.events[1].timestamp
-            
+
             # Verify event types in correct order
             assert logger.events[0].event_type == EventType.EXPERIMENT_START
             assert logger.events[1].event_type == EventType.EPOCH_PROGRESS

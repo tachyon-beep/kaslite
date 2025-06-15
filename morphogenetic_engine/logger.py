@@ -173,7 +173,7 @@ class ExperimentLogger:
         summary = self.generate_final_report()
         # Include this experiment_end event in the summary
         summary["experiment_end"] = summary.get("experiment_end", 0) + 1
-        
+
         event = LogEvent(
             timestamp=time.time(),
             epoch=epoch,
