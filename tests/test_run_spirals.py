@@ -9,10 +9,7 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from scripts.run_spirals import create_spirals, create_complex_moons, train_epoch, evaluate, main, set_device_for_testing
-
-# Force CPU mode for all tests
-set_device_for_testing("cpu")
+from scripts.run_spirals import create_spirals, create_complex_moons, train_epoch, evaluate, main
 
 
 class TestCreateSpirals:
@@ -472,8 +469,8 @@ class TestMainFunction:
                     # Expected since we're mocking critical components
                     pass
                 
-                # Verify create_complex_moons was called with correct input_dim
-                mock_create.assert_called_once_with(input_dim=4)
+                # Verify create_complex_moons was called with correct parameters
+                mock_create.assert_called_once_with(n_samples=2000, noise=0.1, input_dim=4)
 
 
 class TestIntegration:
@@ -634,3 +631,138 @@ class TestHighDimensionalIntegration:
         x = torch.randn(4, 2)
         output = model(x)
         assert output.shape == (4, 2)  # Binary classification
+
+
+class TestNewDatasets:
+    """Test the new dataset generation functions."""
+    
+    def test_create_moons(self):
+        """Test moons dataset generation."""
+        from scripts.run_spirals import create_moons
+        
+        # Test basic functionality
+        X, y = create_moons(n_samples=100, moon_noise=0.1, moon_sep=0.5, input_dim=2)
+        assert X.shape == (100, 2)
+        assert y.shape == (100,)
+        assert set(y) == {0, 1}  # Binary classification
+        
+        # Test with higher dimensions
+        X, y = create_moons(n_samples=100, input_dim=4)
+        assert X.shape == (100, 4)
+        assert y.shape == (100,)
+        
+    def test_create_clusters(self):
+        """Test clusters dataset generation."""
+        from scripts.run_spirals import create_clusters
+        
+        # Test 2 clusters
+        X, y = create_clusters(cluster_count=2, cluster_size=50, input_dim=3)
+        assert X.shape == (100, 3)
+        assert y.shape == (100,)
+        assert set(y) == {0, 1}  # Binary classification
+        
+        # Test 3 clusters (should still produce binary classification)
+        X, y = create_clusters(cluster_count=3, cluster_size=50, input_dim=2)
+        assert X.shape == (150, 2)
+        assert y.shape == (150,)
+        assert set(y) == {0, 1}  # Binary classification due to modulo
+        
+    def test_create_spheres(self):
+        """Test spheres dataset generation."""
+        from scripts.run_spirals import create_spheres
+        
+        # Test 2 spheres
+        X, y = create_spheres(sphere_count=2, sphere_size=50, sphere_radii="1,2", input_dim=3)
+        assert X.shape == (100, 3)
+        assert y.shape == (100,)
+        assert set(y) == {0, 1}  # Binary classification
+        
+        # Test 3 spheres (should still produce binary classification)
+        X, y = create_spheres(sphere_count=3, sphere_size=30, sphere_radii="1,2,3", input_dim=4)
+        assert X.shape == (90, 4)
+        assert y.shape == (90,)
+        assert set(y) == {0, 1}  # Binary classification due to modulo
+        
+    def test_dataset_validation(self):
+        """Test dataset validation and error handling."""
+        from scripts.run_spirals import create_spheres
+        
+        # Test mismatched radii and sphere_count
+        with pytest.raises(ValueError, match="Number of radii"):
+            create_spheres(sphere_count=2, sphere_size=50, sphere_radii="1,2,3", input_dim=3)
+
+
+class TestCLIDispatch:
+    """Test CLI argument dispatch logic."""
+    
+    def test_problem_type_dispatch(self):
+        """Test that different problem types are dispatched correctly."""
+        from scripts.run_spirals import main
+        from unittest.mock import patch, Mock
+        
+        test_cases = [
+            ("spirals", "create_spirals"),
+            ("moons", "create_moons"), 
+            ("clusters", "create_clusters"),
+            ("spheres", "create_spheres"),
+            ("complex_moons", "create_complex_moons")
+        ]
+        
+        for problem_type, expected_function in test_cases:
+            test_args = [
+                "--problem_type", problem_type,
+                "--n_samples", "100"
+            ]
+            
+            with patch('sys.argv', ['run_spirals.py'] + test_args):
+                with patch(f'scripts.run_spirals.{expected_function}') as mock_func, \
+                     patch('scripts.run_spirals.BaseNet') as mock_net, \
+                     patch('torch.optim.Adam') as mock_optim, \
+                     patch('builtins.open', create=True):
+                    # Mock return values
+                    mock_func.return_value = (np.random.randn(100, 3), np.random.randint(0, 2, 100))
+                    mock_net.return_value = Mock()
+                    mock_optim.return_value = Mock()
+                    
+                    try:
+                        main()
+                    except (SystemExit, Exception):
+                        # Expected since we're mocking critical components
+                        pass
+                    
+                    # Verify the correct function was called
+                    mock_func.assert_called_once()
+    
+    def test_irrelevant_flags_ignored(self):
+        """Test that flags irrelevant to chosen problem_type are silently ignored."""
+        from scripts.run_spirals import main
+        from unittest.mock import patch, Mock
+        
+        # Use spirals with cluster-specific flags (should be ignored)
+        test_args = [
+            "--problem_type", "spirals",
+            "--cluster_count", "5",  # Irrelevant to spirals
+            "--sphere_radii", "1,2,3",  # Irrelevant to spirals
+            "--n_samples", "100",
+            "--noise", "0.3"  # Relevant to spirals
+        ]
+        
+        with patch('sys.argv', ['run_spirals.py'] + test_args):
+            with patch('scripts.run_spirals.create_spirals') as mock_spirals, \
+                 patch('scripts.run_spirals.BaseNet') as mock_net, \
+                 patch('torch.optim.Adam') as mock_optim, \
+                 patch('builtins.open', create=True):
+                mock_spirals.return_value = (np.random.randn(100, 3), np.random.randint(0, 2, 100))
+                mock_net.return_value = Mock()
+                mock_optim.return_value = Mock()
+                
+                try:
+                    main()
+                except (SystemExit, Exception):
+                    pass
+                
+                # Verify spirals was called with only relevant arguments
+                call_args = mock_spirals.call_args
+                assert 'noise' in call_args.kwargs
+                assert call_args.kwargs['noise'] == 0.3
+                # cluster_count and sphere_radii should not affect the call
