@@ -33,6 +33,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
+from morphogenetic_engine.logger import ExperimentLogger
 
 _last_report: Dict[str, Optional[str]] = defaultdict(lambda: None)
 
@@ -428,19 +429,26 @@ def main():
     acc_threshold = 0.95
     # --------------------------------------------------
 
-    print("=== Morphogenetic Architecture Experiment ===")
-    print(f"Problem   : {args.problem_type}")
-    print(f"Samples   : {args.n_samples}")
-    print(f"Input dim : {args.input_dim}")
-    print(f"Device    : {device}")
-    print(f"Batch size: {args.batch_size}")
-    print(f"Train frac: {args.train_frac}")
-    print(f"Warm-up   : {warm_up_epochs} epochs")
-    print(f"Seed phase: {adaptation_epochs} epochs")
-    print(f"LR        : {lr}")
-    print(f"Hidden dim: {hidden_dim}\n")
+    # Construct configuration for the experiment logger
+    config = {
+        "problem_type": args.problem_type,
+        "n_samples": args.n_samples,
+        "input_dim": args.input_dim,
+        "train_frac": args.train_frac,
+        "batch_size": args.batch_size,
+        "device": str(device),
+        "seed": args.seed,
+        "warm_up_epochs": warm_up_epochs,
+        "adaptation_epochs": adaptation_epochs,
+        "lr": lr,
+        "hidden_dim": hidden_dim,
+        "blend_steps": args.blend_steps,
+        "shadow_lr": args.shadow_lr,
+        "progress_thresh": args.progress_thresh,
+        "drift_warn": args.drift_warn,
+        "acc_threshold": acc_threshold,
+    }
 
-    # Create comprehensive slug with all configuration parameters
     slug = (
         f"{args.problem_type}_dim{args.input_dim}_{args.device}"
         f"_h{hidden_dim}_bs{args.blend_steps}"
@@ -448,12 +456,16 @@ def main():
         f"_dw{args.drift_warn}"
     )
 
-    # ---- open log file with context-manager ----
-    # Get the project root directory (parent of scripts)
+    # Determine log location and initialise logger
     project_root = Path(__file__).parent.parent
-    log_dir = project_root / "log"
-    log_dir.mkdir(exist_ok=True)  # Create log directory if it doesn't exist
-    with (log_dir / f"results_{slug}.log").open("w", encoding="utf-8") as log_f:
+    log_dir = project_root / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_path = log_dir / f"results_{slug}.log"
+
+    logger = ExperimentLogger(str(log_path), config)
+
+    # ---- open log file with context-manager ----
+    with log_path.open("w", encoding="utf-8") as log_f:
         _last_report.clear()
 
         # Write comprehensive configuration header
@@ -467,6 +479,8 @@ def main():
         log_f.write(f"# batch_size: {args.batch_size}\n")
         log_f.write(f"# device: {device}\n")
         log_f.write(f"# seed: {args.seed}\n")
+
+        logger.log_experiment_start()
 
         # Dataset-specific parameters
         if args.problem_type == "spirals":
@@ -585,7 +599,7 @@ def main():
         acc_pre = acc_post = t_recover = germ_epoch = None
 
         # ---------------- Phase 1 ----------------
-        print("----- Phase 1 : full-model training -----")
+        logger.log_phase_transition(0, "init", "phase_1")
         for epoch in range(1, warm_up_epochs + 1):
             train_epoch(
                 model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device
@@ -594,10 +608,14 @@ def main():
             val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
             best_acc = max(best_acc, val_acc)
 
-            if epoch % 5 == 0 or epoch in (1, warm_up_epochs):
-                print(
-                    f"Ep {epoch:>2}: loss {val_loss:.4f}  acc {val_acc:.4f}  best {best_acc:.4f}"
-                )
+            logger.log_epoch_progress(
+                epoch,
+                {
+                    "val_loss": val_loss,
+                    "val_acc": val_acc,
+                    "best_acc": best_acc,
+                },
+            )
 
             for sid, info in seed_manager.seeds.items():
                 mod = info["module"]
@@ -618,7 +636,7 @@ def main():
                     logging.info("epoch %d %s %s", epoch, sid, tag)
                     log_f.write(f"{epoch},{sid},{mod.state},{mod.alpha:.3f}\n")
 
-        print(f"\nWarm-up complete — trunk frozen at {best_acc:.4f} accuracy\n")
+        logger.log_phase_transition(warm_up_epochs, "phase_1", "phase_2")
         model.freeze_backbone()
 
         # ---------- phase-2 optimiser builder ----------
@@ -634,7 +652,7 @@ def main():
         seeds_activated = False
 
         # ---------------- Phase 2 ----------------
-        print("----- Phase 2 : seed adaptation -----")
+        logger.log_phase_transition(warm_up_epochs, "phase_1_frozen", "phase_2")
         for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
             if optimiser:
                 train_epoch(
@@ -652,7 +670,6 @@ def main():
             if kasmina.step(val_loss, val_acc):
                 seeds_activated = True
                 germ_epoch, acc_pre = epoch, val_acc
-                print(f"[!] Germination at epoch {epoch}")
                 optimiser, scheduler = rebuild_seed_opt()
 
             if germ_epoch and epoch == germ_epoch + 1:
@@ -667,14 +684,18 @@ def main():
 
             if epoch % 10 == 0 or val_acc > best_acc:
                 best_acc = max(best_acc, val_acc)
-                status = ", ".join(
-                    f"{sid}:{info['status']}"
-                    for sid, info in seed_manager.seeds.items()
-                )
-                print(
-                    f"Ep {epoch:>3}: loss {val_loss:.4f}  acc {val_acc:.4f}  "
-                    f"best {best_acc:.4f}  seeds [{status}]"
-                )
+            status = ", ".join(
+                f"{sid}:{info['status']}" for sid, info in seed_manager.seeds.items()
+            )
+            logger.log_epoch_progress(
+                epoch,
+                {
+                    "val_loss": val_loss,
+                    "val_acc": val_acc,
+                    "best_acc": best_acc,
+                    "seeds": status,
+                },
+            )
 
             for sid, info in seed_manager.seeds.items():
                 mod = info["module"]
@@ -697,18 +718,8 @@ def main():
                     log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")
 
         # ------------- final stats -------------
-        print("\n===== Final =====")
-        print(f"Best accuracy: {best_acc:.4f}")
-        if seeds_activated:
-            print("Seed events:")
-            for ev in seed_manager.germination_log:
-                t = time.strftime("%H:%M:%S", time.localtime(ev["timestamp"]))
-                if "success" in ev:
-                    print(
-                        f"  {ev['seed_id']} germination {'✓' if ev['success'] else '✗'} @ {t}"
-                    )
-                else:
-                    print(f"  {ev['seed_id']} {ev['from']}→{ev['to']} @ {t}")
+        logger.log_experiment_end(warm_up_epochs + adaptation_epochs)
+        print(logger.generate_final_report())
 
         if acc_pre is not None and acc_post is not None:
             logging.info(
