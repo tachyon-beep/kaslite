@@ -331,7 +331,7 @@ class TestBaseNet:
     
     def test_initialization_default_params(self):
         """Test BaseNet initialization with default parameters."""
-        net = BaseNet()
+        net = BaseNet(input_dim=2)
         
         # Check default hidden dimension
         assert net.fc1.out_features == 64
@@ -368,7 +368,7 @@ class TestBaseNet:
         
     def test_freeze_backbone(self):
         """Test backbone freezing functionality."""
-        net = BaseNet(hidden_dim=32)
+        net = BaseNet(hidden_dim=32, input_dim=2)
         
         # Initialize all seeds to make their parameters trainable  
         for i in range(1, 9):  # seed1 through seed8
@@ -392,7 +392,7 @@ class TestBaseNet:
                 
     def test_forward_pass_shapes(self):
         """Test forward pass produces correct output shapes."""
-        net = BaseNet(hidden_dim=64)
+        net = BaseNet(hidden_dim=64, input_dim=2)
         
         # Test different batch sizes
         for batch_size in [1, 4, 16]:
@@ -403,7 +403,7 @@ class TestBaseNet:
             
     def test_forward_pass_deterministic(self):
         """Test that forward pass is deterministic given same input."""
-        net = BaseNet(hidden_dim=32)
+        net = BaseNet(hidden_dim=32, input_dim=2)
         
         # Set eval mode for deterministic behavior
         net.eval()
@@ -418,7 +418,7 @@ class TestBaseNet:
         
     def test_gradient_flow(self):
         """Test that gradients flow properly through the network."""
-        net = BaseNet(hidden_dim=32)
+        net = BaseNet(hidden_dim=32, input_dim=2)
         x = torch.randn(4, 2, requires_grad=True)
         
         output = net.forward(x)
@@ -436,7 +436,7 @@ class TestBaseNet:
                 
     def test_seed_integration(self):
         """Test that seeds are properly integrated into forward pass."""
-        net = BaseNet(hidden_dim=32)
+        net = BaseNet(hidden_dim=32, input_dim=2)
         
         # Initialize one seed
         net.seed1.initialize_child()
@@ -455,7 +455,7 @@ class TestBaseNet:
         
     def test_all_seeds_different_instances(self):
         """Test that all seeds are separate instances."""
-        net = BaseNet(hidden_dim=32)
+        net = BaseNet(hidden_dim=32, input_dim=2)
         
         seeds = [getattr(net, f'seed{i}') for i in range(1, 9)]
         
@@ -468,7 +468,7 @@ class TestBaseNet:
                     
     def test_network_architecture_consistency(self):
         """Test that network architecture is consistent."""
-        net = BaseNet(hidden_dim=64)
+        net = BaseNet(hidden_dim=64, input_dim=2)
         
         # Check layer dimensions match
         assert net.fc1.out_features == net.fc2.in_features == 64

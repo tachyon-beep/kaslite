@@ -50,7 +50,7 @@ def test_forward_shapes():
 
 
 def test_grad_leak_blocked():
-    model = BaseNet(hidden_dim=4)
+    model = BaseNet(hidden_dim=4, input_dim=2)
     seed = model.seed1
     
     # Ensure the seed is registered and initialize it

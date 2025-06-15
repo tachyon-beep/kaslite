@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from scripts.run_spirals import create_spirals, train_epoch, evaluate, main, set_device_for_testing
+from scripts.run_spirals import create_spirals, create_complex_moons, train_epoch, evaluate, main, set_device_for_testing
 
 # Force CPU mode for all tests
 set_device_for_testing("cpu")
@@ -83,7 +83,78 @@ class TestCreateSpirals:
             correlation = np.corrcoef(np.arange(len(sorted_r)), sorted_r)[0, 1]
             # Allow for more flexible spiral structure
             assert abs(correlation) > 0.05, f"Class {class_label} correlation: {correlation}"
+    
+    def test_input_dim_padding(self):
+        """Test that spirals are properly padded to higher dimensions."""
+        X, y = create_spirals(n_samples=100, input_dim=5)
+        
+        # Should be padded to 5 dimensions
+        assert X.shape == (100, 5)
+        assert y.shape == (100,)
+        
+        # First 2 dimensions should be the spiral data (not all zeros)
+        # Last 3 should be independent padding
+        assert not np.allclose(X[:, 2], 0)  # Padding should not be all zeros
+        
+        # Test input_dim=2 gives same result as default
+        X_2d, y_2d = create_spirals(n_samples=100, input_dim=2)
+        X_default, y_default = create_spirals(n_samples=100)
+        
+        np.testing.assert_array_equal(X_2d, X_default)
+        np.testing.assert_array_equal(y_2d, y_default)
 
+class TestCreateComplexMoons:
+    """Test suite for complex moons dataset generation."""
+
+    def test_default_parameters(self):
+        """Test complex moons generation with default parameters."""
+        X, y = create_complex_moons()
+        
+        # Check output shapes
+        assert X.shape == (2000, 2)
+        assert y.shape == (2000,)
+        
+        # Check data types
+        assert X.dtype == np.float32
+        assert y.dtype == np.int64
+        
+        # Check binary labels
+        assert set(y) == {0, 1}
+
+    def test_custom_parameters(self):
+        """Test complex moons generation with custom parameters."""
+        X, y = create_complex_moons(n_samples=200, noise=0.05)
+        
+        assert X.shape == (200, 2)
+        assert y.shape == (200,)
+
+    def test_input_dim_padding(self):
+        """Test that complex moons are properly padded to higher dimensions."""
+        X, y = create_complex_moons(n_samples=100, input_dim=4)
+        
+        # Should be padded to 4 dimensions
+        assert X.shape == (100, 4)
+        assert y.shape == (100,)
+        
+        # Padding dimensions should not be all zeros
+        assert not np.allclose(X[:, 2], 0)
+        assert not np.allclose(X[:, 3], 0)
+
+    def test_reproducibility(self):
+        """Test that complex moons generation is reproducible."""
+        X1, y1 = create_complex_moons(n_samples=100)
+        X2, y2 = create_complex_moons(n_samples=100)
+        
+        np.testing.assert_array_equal(X1, X2)
+        np.testing.assert_array_equal(y1, y2)
+
+    def test_data_structure(self):
+        """Test that complex moons has expected structure (moons + clusters)."""
+        X, y = create_complex_moons(n_samples=400, noise=0.1)
+        
+        # Should have reasonable spread (combination of moons and clusters)
+        assert X.std() > 0.5  # Should have some variance
+        assert np.abs(X.mean()) < 2.0  # But not too far from origin
 
 class TestTrainEpoch:
     """Test suite for training epoch function."""
@@ -101,7 +172,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -125,7 +196,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -153,7 +224,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         seed_manager = SeedManager()
         criterion = torch.nn.CrossEntropyLoss()
         
@@ -176,7 +247,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -184,7 +255,7 @@ class TestTrainEpoch:
         # Test with empty loader
         avg_loss = train_epoch(model, loader, optimizer, criterion, seed_manager)
         
-        assert avg_loss == 0.0  # Should return 0 for empty loader
+        assert avg_loss == 0.0  # Should return 0.0 for empty loader
         
     def test_train_epoch_seed_training(self):
         """Test that seeds are trained during training epoch."""
@@ -199,7 +270,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -230,7 +301,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -266,7 +337,7 @@ class TestEvaluate:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and criterion
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         criterion = torch.nn.CrossEntropyLoss()
         
         # Evaluate
@@ -317,7 +388,7 @@ class TestEvaluate:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and criterion
-        model = BaseNet(hidden_dim=32)
+        model = BaseNet(hidden_dim=32, input_dim=2)
         criterion = torch.nn.CrossEntropyLoss()
         
         # This should handle empty loader gracefully
@@ -376,6 +447,34 @@ class TestMainFunction:
                                 except (SystemExit, Exception):
                                     pass  # We just want to test argument parsing
 
+    def test_main_new_arguments(self):
+        """Test that main function accepts new CLI arguments."""
+        test_args = [
+            "--problem_type", "complex_moons",
+            "--input_dim", "4", 
+            "--device", "cpu",
+            "--blend_steps", "20"
+        ]
+        
+        with patch('sys.argv', ['run_spirals.py'] + test_args):
+            with patch('scripts.run_spirals.create_complex_moons') as mock_create, \
+                 patch('scripts.run_spirals.BaseNet') as mock_net, \
+                 patch('torch.optim.Adam') as mock_optim, \
+                 patch('builtins.open', create=True):
+                # Mock expensive operations
+                mock_create.return_value = (np.random.randn(100, 4), np.random.randint(0, 2, 100))
+                mock_net.return_value = Mock()
+                mock_optim.return_value = Mock()
+                
+                try:
+                    main()
+                except (SystemExit, Exception):
+                    # Expected since we're mocking critical components
+                    pass
+                
+                # Verify create_complex_moons was called with correct input_dim
+                mock_create.assert_called_once_with(input_dim=4)
+
 
 class TestIntegration:
     """Integration tests for the complete system."""
@@ -395,7 +494,7 @@ class TestIntegration:
         val_loader = DataLoader(dataset, batch_size=8, num_workers=0)
         
         # Create components
-        model = BaseNet(hidden_dim=16)
+        model = BaseNet(hidden_dim=16, input_dim=2)
         seed_manager = SeedManager()
         seed_manager.seeds.clear()  # Clear any existing seeds
         kasmina = KasminaMicro(seed_manager, patience=2, acc_threshold=0.9)
@@ -453,3 +552,85 @@ class TestIntegration:
         x = torch.randn(2, 16)
         output = seed.forward(x)
         assert output.shape == x.shape
+
+
+class TestHighDimensionalIntegration:
+    """Test suite for high-dimensional input integration."""
+
+    def test_spirals_4d_integration(self):
+        """Test spirals dataset with 4D input through complete pipeline."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create 4D spirals data
+        X, y = create_spirals(n_samples=64, input_dim=4)
+        assert X.shape == (64, 4)
+        
+        # Create tensor dataset
+        X_tensor = torch.from_numpy(X)
+        y_tensor = torch.from_numpy(y)
+        dataset = TensorDataset(X_tensor, y_tensor)
+        loader = DataLoader(dataset, batch_size=16, num_workers=0)
+        
+        # Create 4D model
+        model = BaseNet(hidden_dim=32, input_dim=4)
+        seed_manager = SeedManager()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Test forward pass works
+        avg_loss = train_epoch(model, loader, optimizer, criterion, seed_manager)
+        assert avg_loss >= 0.0
+        
+        # Test evaluation works
+        loss, accuracy = evaluate(model, loader, criterion)
+        assert loss >= 0.0
+        assert 0.0 <= accuracy <= 1.0
+
+    def test_complex_moons_4d_integration(self):
+        """Test complex moons dataset with 4D input through complete pipeline."""
+        from morphogenetic_engine.components import BaseNet
+        from morphogenetic_engine.core import SeedManager
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create 4D complex moons data
+        X, y = create_complex_moons(n_samples=64, input_dim=4)
+        assert X.shape == (64, 4)
+        
+        # Create tensor dataset
+        X_tensor = torch.from_numpy(X)
+        y_tensor = torch.from_numpy(y)
+        dataset = TensorDataset(X_tensor, y_tensor)
+        loader = DataLoader(dataset, batch_size=16, num_workers=0)
+        
+        # Create 4D model
+        model = BaseNet(hidden_dim=32, input_dim=4)
+        seed_manager = SeedManager()
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
+        criterion = torch.nn.CrossEntropyLoss()
+        
+        # Test forward pass works
+        avg_loss = train_epoch(model, loader, optimizer, criterion, seed_manager)
+        assert avg_loss >= 0.0
+        
+        # Test evaluation works
+        loss, accuracy = evaluate(model, loader, criterion)
+        assert loss >= 0.0
+        assert 0.0 <= accuracy <= 1.0
+
+    def test_backward_compatibility(self):
+        """Test that default args preserve legacy behavior."""
+        # Default spirals should be same as explicit 2D
+        X_default, y_default = create_spirals(n_samples=100)
+        X_explicit, y_explicit = create_spirals(n_samples=100, input_dim=2)
+        
+        np.testing.assert_array_equal(X_default, X_explicit)
+        np.testing.assert_array_equal(y_default, y_explicit)
+        
+        # Default BaseNet should work with 2D input
+        from morphogenetic_engine.components import BaseNet
+        model = BaseNet(hidden_dim=32)  # Should default to input_dim=2
+        x = torch.randn(4, 2)
+        output = model(x)
+        assert output.shape == (4, 2)  # Binary classification

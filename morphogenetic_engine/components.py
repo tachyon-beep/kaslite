@@ -166,6 +166,7 @@ class BaseNet(nn.Module):
         self,
         hidden_dim: int = 64,
         *,
+        input_dim: int = 2,
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
         progress_thresh: float = 0.6,
@@ -173,7 +174,7 @@ class BaseNet(nn.Module):
     ):
         super().__init__()
 
-        self.fc1 = nn.Linear(2, hidden_dim)
+        self.fc1 = nn.Linear(input_dim, hidden_dim)
         self.act1 = nn.ReLU()
         self.seed1 = SentinelSeed(
             "seed1",

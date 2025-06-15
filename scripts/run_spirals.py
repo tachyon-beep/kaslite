@@ -18,6 +18,7 @@ from typing import Optional, Dict
 import numpy as np
 import torch
 from sklearn.preprocessing import StandardScaler
+from sklearn.datasets import make_moons
 
 # Default device - can be overridden for testing
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -41,8 +42,8 @@ _last_report: Dict[str, Optional[str]] = defaultdict(lambda: None)
 
 # ---------- DATA -------------------------------------------------------------
 
-def create_spirals(n_samples: int = 2000, noise: float = 0.25, rotations: int = 4):
-    """Generate the classic two-spirals toy dataset."""
+def create_spirals(n_samples: int = 2000, noise: float = 0.25, rotations: int = 4, input_dim: int = 2):
+    """Generate the classic two-spirals toy dataset, optionally padded to input_dim."""
     rng = np.random.default_rng(42)  # Fixed seed for reproducibility
     n = np.sqrt(rng.random(n_samples // 2)) * rotations * 2 * np.pi
     d1x = np.cos(n) * n + rng.random(n_samples // 2) * noise
@@ -51,6 +52,48 @@ def create_spirals(n_samples: int = 2000, noise: float = 0.25, rotations: int = 
     X = np.vstack((np.hstack((d1x, -d1x)), np.hstack((d1y, -d1y)))).T
     y = np.hstack((np.zeros(n_samples // 2), np.ones(n_samples // 2)))
 
+    # Pad with independent N(0,1) features if input_dim > 2
+    if input_dim > 2:
+        padding = rng.standard_normal((n_samples, input_dim - 2))
+        X = np.hstack((X, padding))
+    
+    return X.astype(np.float32), y.astype(np.int64)
+
+
+def create_complex_moons(n_samples: int = 2000, noise: float = 0.1, input_dim: int = 2):
+    """Generate complex moons dataset: two half-moons + two Gaussian clusters."""
+    rng = np.random.default_rng(42)  # Fixed seed for reproducibility
+    
+    # Generate two interleaved half-moons
+    n_moons = n_samples // 2
+    X_moons, y_moons = make_moons(n_samples=n_moons, noise=noise, random_state=42)
+    
+    # Generate two Gaussian clusters
+    n_clusters = n_samples - n_moons
+    n_cluster1 = n_clusters // 2
+    n_cluster2 = n_clusters - n_cluster1
+    
+    # Cluster 1: centered at (2, 2)
+    cluster1 = rng.multivariate_normal([2.0, 2.0], [[0.5, 0.1], [0.1, 0.5]], n_cluster1)
+    y_cluster1 = np.zeros(n_cluster1)
+    
+    # Cluster 2: centered at (-2, -2)  
+    cluster2 = rng.multivariate_normal([-2.0, -2.0], [[0.5, -0.1], [-0.1, 0.5]], n_cluster2)
+    y_cluster2 = np.ones(n_cluster2)
+    
+    # Concatenate all data
+    X = np.vstack((X_moons, cluster1, cluster2))
+    y = np.hstack((y_moons, y_cluster1, y_cluster2))
+    
+    # Shuffle the data
+    indices = rng.permutation(len(X))
+    X, y = X[indices], y[indices]
+    
+    # Pad with independent N(0,1) features if input_dim > 2
+    if input_dim > 2:
+        padding = rng.standard_normal((len(X), input_dim - 2))
+        X = np.hstack((X, padding))
+    
     return X.astype(np.float32), y.astype(np.int64)
 
 
@@ -139,9 +182,26 @@ def main():
         "--drift_warn", type=float, default=0.12,
         help="Drift warning threshold (0=disable)",
     )
+    # New CLI arguments
+    parser.add_argument(
+        "--problem_type", choices=["spirals", "complex_moons"], default="spirals",
+        help="Type of problem to solve"
+    )
+    parser.add_argument(
+        "--input_dim", type=int, default=2,
+        help="Input dimensionality (will pad 2D datasets)"
+    )
+    parser.add_argument(
+        "--device", choices=["cpu", "cuda"], default="cpu",
+        help="Device to use for training"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    # Set device based on args and availability
+    global device
+    device = torch.device(args.device if args.device == "cpu" or torch.cuda.is_available() else "cpu")
 
     # ---------------- hyper-parameters ----------------
     warm_up_epochs    = 50
@@ -152,6 +212,9 @@ def main():
     # --------------------------------------------------
 
     print("=== Morphogenetic Architecture Experiment ===")
+    print(f"Problem   : {args.problem_type}")
+    print(f"Input dim : {args.input_dim}")
+    print(f"Device    : {device}")
     print(f"Warm-up   : {warm_up_epochs} epochs")
     print(f"Seed phase: {adaptation_epochs} epochs")
     print(f"LR        : {lr}")
@@ -168,7 +231,14 @@ def main():
         log_f.write("epoch,seed,state,alpha\n")
 
         # ---------- data ----------
-        X, y = create_spirals()
+        # Dispatch on problem type to call appropriate generator
+        if args.problem_type == "spirals":
+            X, y = create_spirals(input_dim=args.input_dim)
+        elif args.problem_type == "complex_moons":
+            X, y = create_complex_moons(input_dim=args.input_dim)
+        else:
+            raise ValueError(f"Unknown problem type: {args.problem_type}")
+            
         scaler = StandardScaler().fit(X)
         X = scaler.transform(X).astype(np.float32)
 
@@ -183,6 +253,7 @@ def main():
         seed_manager = SeedManager()
         model = BaseNet(
             hidden_dim,
+            input_dim=args.input_dim,
             blend_steps=args.blend_steps,
             shadow_lr=args.shadow_lr,
             progress_thresh=args.progress_thresh,
