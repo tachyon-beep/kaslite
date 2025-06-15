@@ -15,25 +15,34 @@ class SeedManager:
     """
     _instance: Optional['SeedManager'] = None
     _singleton_lock = threading.Lock()
-
-    def __init__(self, logger: Optional[ExperimentLogger] = None) -> None:
-        """Initialize SeedManager with optional logger and empty state."""
-        # Only initialize once for core state
-        if not hasattr(self, '_initialized'):
-            self.seeds: Dict[str, Dict] = {}
-            self.germination_log: List[Dict[str, Any]] = []
-            self.lock = threading.RLock()
-            self.logger: Optional[ExperimentLogger] = logger
-            self._initialized = True
-        elif logger is not None:
-            # Allow logger injection after first construction
-            self.logger = logger
+    
+    # Declare instance attributes for type checking
+    seeds: Dict[str, Dict]
+    germination_log: List[Dict[str, Any]]
+    lock: threading.RLock
+    logger: Optional[ExperimentLogger]
+    _initialized: bool
 
     def __new__(cls, *args, **kwargs) -> 'SeedManager':
         with cls._singleton_lock:
             if cls._instance is None:
-                cls._instance = super().__new__(cls)
-            return cls._instance
+                # Create the instance
+                instance = super().__new__(cls)
+                # Initialize its state directly
+                instance.seeds = {}
+                instance.germination_log = []
+                instance.lock = threading.RLock()
+                instance.logger = kwargs.get('logger')
+                instance._initialized = True  # Optional: for clarity
+                cls._instance = instance
+        return cls._instance
+
+    def __init__(self, logger: Optional[ExperimentLogger] = None) -> None:
+        """Initialize SeedManager with optional logger and empty state."""
+        # The __init__ can now be used for lighter-weight tasks,
+        # like injecting dependencies on an existing instance.
+        if logger is not None:
+            self.logger = logger
 
     def register_seed(self, seed_module, seed_id: str) -> None:
         """Register a new seed module with the manager."""
@@ -64,7 +73,7 @@ class SeedManager:
                 seed_info["module"].initialize_child()
                 seed_info["status"] = "active"
                 self._log_event(seed_id, True)
-                if getattr(self, "logger", None) is not None:
+                if self.logger is not None:
                     self.logger.log_germination(epoch, seed_id)
                 return True
             except (RuntimeError, ValueError) as e:
@@ -77,6 +86,7 @@ class SeedManager:
         """Log a germination event with timestamp."""
         self.germination_log.append(
             {
+                "event_type": "germination_attempt",
                 "seed_id": seed_id,
                 "success": success,
                 "timestamp": time.time(),
@@ -89,13 +99,14 @@ class SeedManager:
         """Record a state change for analytics and log the event."""
         self.germination_log.append(
             {
+                "event_type": "state_transition",
                 "seed_id": seed_id,
                 "from": old_state,
                 "to": new_state,
                 "timestamp": time.time(),
             }
         )
-        if getattr(self, "logger", None) is not None:
+        if self.logger is not None:
             self.logger.log_seed_event(epoch, seed_id, old_state, new_state)
 
     def record_drift(self, seed_id: str, drift: float) -> None:
@@ -137,11 +148,8 @@ class KasminaMicro:
         Returns:
             True if germination occurred, False otherwise
         """
-        # Calculate absolute difference
-        loss_diff = abs(val_loss - self.prev_loss)
-
-        # Check if loss has plateaued (minimal improvement)
-        if loss_diff < self.delta:
+        # Check if loss has not improved by at least delta
+        if self.prev_loss - val_loss < self.delta:
             self.plateau += 1
         else:
             self.plateau = 0  # Reset if we see improvement

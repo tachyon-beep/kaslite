@@ -14,11 +14,17 @@ from morphogenetic_engine.core import SeedManager
 class TestSentinelSeed:
     """Test suite for SentinelSeed class."""
     
+    def _create_seed_manager(self):
+        """Helper to create a seed manager for tests."""
+        return SeedManager()
+    
     def test_initialization(self):
         """Test SentinelSeed initialization."""
+        seed_manager = SeedManager()
         seed = SentinelSeed(
             seed_id="test_seed",
             dim=64,
+            seed_manager=seed_manager,
             blend_steps=25,
             shadow_lr=2e-3,
             progress_thresh=0.7,
@@ -44,7 +50,8 @@ class TestSentinelSeed:
         
     def test_set_state_transitions(self):
         """Test state transition handling."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed_manager = self._create_seed_manager()
+        seed = SentinelSeed("test_seed", 32, seed_manager)
         manager = seed.seed_manager
         manager.germination_log.clear()
         
@@ -65,7 +72,7 @@ class TestSentinelSeed:
         
     def test_redundant_state_transition(self):
         """Test that redundant state transitions are ignored."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         manager = seed.seed_manager
         manager.germination_log.clear()
         
@@ -80,7 +87,7 @@ class TestSentinelSeed:
         
     def test_initialize_as_identity(self):
         """Test that child network is initialized as near-identity."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         
         # Check that parameters are initially zero
         for param in seed.child.parameters():
@@ -89,7 +96,7 @@ class TestSentinelSeed:
             
     def test_initialize_child(self):
         """Test proper child network initialization."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         
         seed.initialize_child()
         
@@ -103,7 +110,7 @@ class TestSentinelSeed:
             
     def test_train_child_step_dormant_state(self):
         """Test that training step is ignored in dormant state."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         initial_progress = seed.training_progress
         
         inputs = torch.randn(4, 32)
@@ -115,7 +122,7 @@ class TestSentinelSeed:
         
     def test_train_child_step_empty_input(self):
         """Test training step with empty input."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         seed.initialize_child()
         
         empty_input = torch.empty(0, 32)
@@ -128,7 +135,7 @@ class TestSentinelSeed:
         
     def test_train_child_step_training_state(self):
         """Test training step in training state."""
-        seed = SentinelSeed("test_seed", dim=32, progress_thresh=0.5)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager(), progress_thresh=0.5)
         seed.initialize_child()
         
         inputs = torch.randn(4, 32)
@@ -144,7 +151,7 @@ class TestSentinelSeed:
         
     def test_update_blending(self):
         """Test blending update process."""
-        seed = SentinelSeed("test_seed", dim=32, blend_steps=10)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager(), blend_steps=10)
         seed._set_state("blending")
         seed.alpha = 0.0
         
@@ -164,7 +171,7 @@ class TestSentinelSeed:
         
     def test_update_blending_non_blending_state(self):
         """Test that blending update is ignored in non-blending states."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         initial_alpha = seed.alpha
         
         seed.update_blending()  # Should do nothing in dormant state
@@ -174,7 +181,7 @@ class TestSentinelSeed:
         
     def test_forward_dormant_state(self):
         """Test forward pass in dormant state."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         x = torch.randn(4, 32)
         
         output = seed.forward(x)
@@ -189,7 +196,7 @@ class TestSentinelSeed:
         
     def test_forward_training_state(self):
         """Test forward pass in training state."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         seed.initialize_child()
         x = torch.randn(4, 32)
         
@@ -200,7 +207,7 @@ class TestSentinelSeed:
         
     def test_forward_blending_state(self):
         """Test forward pass in blending state."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         seed.initialize_child()
         seed._set_state("blending")
         seed.alpha = 0.5
@@ -217,7 +224,7 @@ class TestSentinelSeed:
         
     def test_forward_active_state(self):
         """Test forward pass in active state."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         seed.initialize_child()
         seed._set_state("active")
         
@@ -232,7 +239,7 @@ class TestSentinelSeed:
         
     def test_drift_warning_only_in_blending(self):
         """Test that drift warnings only occur during blending state."""
-        seed = SentinelSeed("test_seed", dim=32, drift_warn=0.01)  # Low threshold
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager(), drift_warn=0.01)  # Low threshold
         seed.initialize_child()
         
         x = torch.randn(4, 32)
@@ -273,7 +280,7 @@ class TestSentinelSeed:
                 
     def test_get_health_signal_insufficient_data(self):
         """Test health signal with insufficient buffer data."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         
         # With empty or small buffer, should return infinity
         health = seed.get_health_signal()
@@ -289,7 +296,7 @@ class TestSentinelSeed:
         
     def test_get_health_signal_sufficient_data(self):
         """Test health signal with sufficient buffer data."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         
         # Add sufficient data
         buffer = seed.seed_manager.seeds["test_seed"]["buffer"]
@@ -303,7 +310,7 @@ class TestSentinelSeed:
 
     def test_state_transitions_complete(self):
         """Test all state transitions including dormant."""
-        seed = SentinelSeed("test_seed", dim=32)
+        seed = SentinelSeed("test_seed", dim=32, seed_manager=self._create_seed_manager())
         
         # Test transition to training
         seed._set_state("training")
@@ -331,7 +338,7 @@ class TestBaseNet:
     
     def test_initialization_default_params(self):
         """Test BaseNet initialization with default parameters."""
-        net = BaseNet(input_dim=2)
+        net = BaseNet(seed_manager=SeedManager(), input_dim=2)
         
         # Check default hidden dimension
         assert net.fc1.out_features == 64
@@ -349,6 +356,7 @@ class TestBaseNet:
         """Test BaseNet initialization with custom parameters."""
         net = BaseNet(
             hidden_dim=128,
+            seed_manager=SeedManager(),
             blend_steps=20,
             shadow_lr=5e-4,
             progress_thresh=0.8,
@@ -368,7 +376,7 @@ class TestBaseNet:
         
     def test_freeze_backbone(self):
         """Test backbone freezing functionality."""
-        net = BaseNet(hidden_dim=32, input_dim=2)
+        net = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         
         # Initialize all seeds to make their parameters trainable  
         for i in range(1, 9):  # seed1 through seed8
@@ -392,7 +400,7 @@ class TestBaseNet:
                 
     def test_forward_pass_shapes(self):
         """Test forward pass produces correct output shapes."""
-        net = BaseNet(hidden_dim=64, input_dim=2)
+        net = BaseNet(hidden_dim=64, seed_manager=SeedManager(), input_dim=2)
         
         # Test different batch sizes
         for batch_size in [1, 4, 16]:
@@ -403,7 +411,7 @@ class TestBaseNet:
             
     def test_forward_pass_deterministic(self):
         """Test that forward pass is deterministic given same input."""
-        net = BaseNet(hidden_dim=32, input_dim=2)
+        net = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         
         # Set eval mode for deterministic behavior
         net.eval()
@@ -418,7 +426,7 @@ class TestBaseNet:
         
     def test_gradient_flow(self):
         """Test that gradients flow properly through the network."""
-        net = BaseNet(hidden_dim=32, input_dim=2)
+        net = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         x = torch.randn(4, 2, requires_grad=True)
         
         output = net.forward(x)
@@ -436,7 +444,7 @@ class TestBaseNet:
                 
     def test_seed_integration(self):
         """Test that seeds are properly integrated into forward pass."""
-        net = BaseNet(hidden_dim=32, input_dim=2)
+        net = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         
         # Initialize one seed
         net.seed1.initialize_child()
@@ -455,7 +463,7 @@ class TestBaseNet:
         
     def test_all_seeds_different_instances(self):
         """Test that all seeds are separate instances."""
-        net = BaseNet(hidden_dim=32, input_dim=2)
+        net = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         
         seeds = [getattr(net, f'seed{i}') for i in range(1, 9)]
         
@@ -468,7 +476,7 @@ class TestBaseNet:
                     
     def test_network_architecture_consistency(self):
         """Test that network architecture is consistent."""
-        net = BaseNet(hidden_dim=64, input_dim=2)
+        net = BaseNet(hidden_dim=64, seed_manager=SeedManager(), input_dim=2)
         
         # Check layer dimensions match
         assert net.fc1.out_features == net.fc2.in_features == 64

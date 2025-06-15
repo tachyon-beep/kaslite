@@ -3,8 +3,6 @@ env/
 __pycache__/
 .env
 *.egg-info*
-# Keep experiment logs tracked
-!results_*.log
-# Log directory (but track the log files inside)
-log/
-!log/*.log
+# Keep experiment logs tracked in results directory
+results/
+!results/*.log

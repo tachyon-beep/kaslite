@@ -4,7 +4,7 @@ import logging
 import torch
 from torch import nn
 
-from .core import SeedManager
+from morphogenetic_engine.core import SeedManager
 
 
 class SentinelSeed(nn.Module):
@@ -18,6 +18,7 @@ class SentinelSeed(nn.Module):
         self,
         seed_id: str,
         dim: int,
+        seed_manager: SeedManager,
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
         progress_thresh: float = 0.6,
@@ -48,7 +49,7 @@ class SentinelSeed(nn.Module):
         self.child_loss = nn.MSELoss()
 
         # Register with seed manager
-        self.seed_manager = SeedManager()  # type: SeedManager
+        self.seed_manager = seed_manager
         self.seed_manager.register_seed(self, seed_id)
 
     # ------------------------------------------------------------------
@@ -166,6 +167,7 @@ class BaseNet(nn.Module):
         self,
         hidden_dim: int = 64,
         *,
+        seed_manager: SeedManager,
         input_dim: int = 2,
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
@@ -179,6 +181,7 @@ class BaseNet(nn.Module):
         self.seed1 = SentinelSeed(
             "seed1",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
@@ -190,6 +193,7 @@ class BaseNet(nn.Module):
         self.seed2 = SentinelSeed(
             "seed2",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
@@ -201,6 +205,7 @@ class BaseNet(nn.Module):
         self.seed3 = SentinelSeed(
             "seed3",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
@@ -213,6 +218,7 @@ class BaseNet(nn.Module):
         self.seed4 = SentinelSeed(
             "seed4",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
@@ -224,6 +230,7 @@ class BaseNet(nn.Module):
         self.seed5 = SentinelSeed(
             "seed5",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
@@ -235,6 +242,7 @@ class BaseNet(nn.Module):
         self.seed6 = SentinelSeed(
             "seed6",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
@@ -246,6 +254,7 @@ class BaseNet(nn.Module):
         self.seed7 = SentinelSeed(
             "seed7",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,
@@ -257,6 +266,7 @@ class BaseNet(nn.Module):
         self.seed8 = SentinelSeed(
             "seed8",
             hidden_dim,
+            seed_manager,
             blend_steps=blend_steps,
             shadow_lr=shadow_lr,
             progress_thresh=progress_thresh,

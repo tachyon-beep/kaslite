@@ -10,6 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from scripts.run_spirals import create_spirals, create_complex_moons, train_epoch, evaluate, main
+from morphogenetic_engine.core import SeedManager
 
 
 class TestCreateSpirals:
@@ -169,7 +170,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -193,7 +194,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -221,7 +222,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         seed_manager = SeedManager()
         criterion = torch.nn.CrossEntropyLoss()
         
@@ -244,7 +245,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -267,7 +268,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -298,7 +299,7 @@ class TestTrainEpoch:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and components
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -334,7 +335,7 @@ class TestEvaluate:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and criterion
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         criterion = torch.nn.CrossEntropyLoss()
         
         # Evaluate
@@ -385,7 +386,7 @@ class TestEvaluate:
         loader = DataLoader(dataset, batch_size=4)
         
         # Create model and criterion
-        model = BaseNet(hidden_dim=32, input_dim=2)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=2)
         criterion = torch.nn.CrossEntropyLoss()
         
         # This should handle empty loader gracefully
@@ -491,7 +492,7 @@ class TestIntegration:
         val_loader = DataLoader(dataset, batch_size=8, num_workers=0)
         
         # Create components
-        model = BaseNet(hidden_dim=16, input_dim=2)
+        model = BaseNet(hidden_dim=16, seed_manager=SeedManager(), input_dim=2)
         seed_manager = SeedManager()
         seed_manager.seeds.clear()  # Clear any existing seeds
         kasmina = KasminaMicro(seed_manager, patience=2, acc_threshold=0.9)
@@ -521,7 +522,8 @@ class TestIntegration:
         from morphogenetic_engine.components import SentinelSeed
         
         # Create seed
-        seed = SentinelSeed("test_lifecycle", dim=16, 
+        seed_manager = SeedManager()
+        seed = SentinelSeed("test_lifecycle", 16, seed_manager, 
                           blend_steps=5, progress_thresh=0.3)
         
         # Start dormant
@@ -571,7 +573,7 @@ class TestHighDimensionalIntegration:
         loader = DataLoader(dataset, batch_size=16, num_workers=0)
         
         # Create 4D model
-        model = BaseNet(hidden_dim=32, input_dim=4)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=4)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -602,7 +604,7 @@ class TestHighDimensionalIntegration:
         loader = DataLoader(dataset, batch_size=16, num_workers=0)
         
         # Create 4D model
-        model = BaseNet(hidden_dim=32, input_dim=4)
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager(), input_dim=4)
         seed_manager = SeedManager()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
@@ -627,7 +629,7 @@ class TestHighDimensionalIntegration:
         
         # Default BaseNet should work with 2D input
         from morphogenetic_engine.components import BaseNet
-        model = BaseNet(hidden_dim=32)  # Should default to input_dim=2
+        model = BaseNet(hidden_dim=32, seed_manager=SeedManager())  # Should default to input_dim=2
         x = torch.randn(4, 2)
         output = model(x)
         assert output.shape == (4, 2)  # Binary classification

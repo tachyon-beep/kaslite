@@ -485,7 +485,7 @@ def main():
 
     # Determine log location and initialise logger
     project_root = Path(__file__).parent.parent
-    log_dir = project_root / "logs"
+    log_dir = project_root / "results"
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / f"results_{slug}.log"
 
@@ -607,6 +607,7 @@ def main():
         seed_manager = SeedManager()
         model = BaseNet(
             hidden_dim,
+            seed_manager=seed_manager,
             input_dim=args.input_dim,
             blend_steps=args.blend_steps,
             shadow_lr=args.shadow_lr,

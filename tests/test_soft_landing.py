@@ -10,7 +10,8 @@ from morphogenetic_engine.core import SeedManager
 
 
 def test_training_to_blending():
-    seed = SentinelSeed("s1", dim=4)
+    seed_manager = SeedManager()
+    seed = SentinelSeed("s1", 4, seed_manager)
     seed.initialize_child()
     dummy = torch.zeros(2, 4)
     seed.seed_manager.seeds[seed.seed_id]["buffer"].append(dummy)
@@ -20,7 +21,8 @@ def test_training_to_blending():
 
 
 def test_blending_to_active():
-    seed = SentinelSeed("s2", dim=4)
+    seed_manager = SeedManager()
+    seed = SentinelSeed("s2", 4, seed_manager)
     seed.initialize_child()
     dummy = torch.zeros(2, 4)
     seed.seed_manager.seeds[seed.seed_id]["buffer"].append(dummy)
@@ -33,7 +35,8 @@ def test_blending_to_active():
 
 
 def test_forward_shapes():
-    seed = SentinelSeed("s3", dim=4)
+    seed_manager = SeedManager()
+    seed = SentinelSeed("s3", 4, seed_manager)
     x = torch.randn(5, 4)
     out = seed(x)
     assert out.shape == x.shape
@@ -50,7 +53,7 @@ def test_forward_shapes():
 
 
 def test_grad_leak_blocked():
-    model = BaseNet(hidden_dim=4, input_dim=2)
+    model = BaseNet(hidden_dim=4, seed_manager=SeedManager(), input_dim=2)
     seed = model.seed1
     
     # Ensure the seed is registered and initialize it
@@ -68,7 +71,7 @@ def test_redundant_transition_logged_once():
     manager = SeedManager()
     manager.seeds.clear()
     manager.germination_log.clear()
-    seed = SentinelSeed("r1", dim=4)
+    seed = SentinelSeed("r1", 4, manager)
     before = len(manager.germination_log)
     seed._set_state("training")
     mid = len(manager.germination_log)

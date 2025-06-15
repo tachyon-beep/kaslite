@@ -55,11 +55,11 @@ class ExperimentLogger:
     """
 
     def __init__(self, log_file_path: str | Path, config: Dict[str, Any]) -> None:
-        """Initialize the logger and ensure the logs directory exists."""
-        # Always place logs inside the project ``logs`` directory
-        logs_dir = Path(__file__).resolve().parents[1] / "logs"
-        logs_dir.mkdir(parents=True, exist_ok=True)
-        self.log_file_path = logs_dir / Path(log_file_path).name
+        """Initialize the logger and ensure the results directory exists."""
+        # Always place logs inside the project ``results`` directory
+        results_dir = Path(__file__).resolve().parents[1] / "results"
+        results_dir.mkdir(parents=True, exist_ok=True)
+        self.log_file_path = results_dir / Path(log_file_path).name
         self.config = config
         self.events: List[LogEvent] = []
         # Truncate any existing log file
