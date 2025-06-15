@@ -30,9 +30,6 @@ from morphogenetic_engine.logger import ExperimentLogger
 
 _last_report: Dict[str, Optional[str]] = defaultdict(lambda: None)
 
-# Constants
-EPOCH_LOG_FORMAT = "epoch %d %s %s"
-
 
 # ---------- DATA -------------------------------------------------------------
 
@@ -623,30 +620,52 @@ def build_model_and_agents(args, device):
     return model, seed_manager, loss_fn, kasmina
 
 
-def log_seed_updates(epoch, seed_manager, log_f):
+def should_log_seed_update(mod, prev):
+    """Determine if a seed update should be logged."""
+    tag = (
+        f"{mod.state}:{mod.alpha:.2f}"
+        if mod.state == "blending"
+        else mod.state
+    )
+    
+    if prev != tag:
+        return True, tag
+    
+    if (mod.state == "blending" and prev and ":" in prev 
+        and float(prev.split(":")[1]) + 0.1 <= mod.alpha):
+        return True, tag
+    
+    return False, tag
+
+
+def format_alpha_value(alpha_val):
+    """Format alpha value for logging."""
+    try:
+        return f"{float(alpha_val):.3f}"
+    except (TypeError, ValueError):
+        return str(alpha_val)
+
+
+def log_seed_updates(epoch, seed_manager, logger, log_f):
     """Handle the repetitive logic of checking and logging seed state transitions."""
     for sid, info in seed_manager.seeds.items():
         mod = info["module"]
-        tag = (
-            f"{mod.state}:{mod.alpha:.2f}"
-            if mod.state == "blending"
-            else mod.state
-        )
         prev = _last_report[sid]
-        should = (prev != tag) or (
-            mod.state == "blending"
-            and prev
-            and ":" in prev
-            and float(prev.split(":")[1]) + 0.1 <= mod.alpha
-        )
-        if should:
+        
+        should_log, tag = should_log_seed_update(mod, prev)
+        
+        if should_log:
             _last_report[sid] = tag
-            logging.info(EPOCH_LOG_FORMAT, epoch, sid, tag)
-            alpha_val = getattr(mod, "alpha", 0.0)
-            try:
-                alpha_str = f"{float(alpha_val):.3f}"
-            except (TypeError, ValueError):
-                alpha_str = str(alpha_val)
+            
+            # Use the experiment logger instead of direct logging
+            if mod.state == "blending":
+                logger.log_blending_progress(epoch, sid, mod.alpha)
+            else:
+                # For other states, use seed_event logging
+                prev_state = prev.split(":")[0] if prev and ":" in prev else (prev or "unknown")
+                logger.log_seed_event(epoch, sid, prev_state, mod.state)
+            
+            alpha_str = format_alpha_value(getattr(mod, "alpha", 0.0))
             log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")
 
 
@@ -679,7 +698,7 @@ def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, log_f
             },
         )
 
-        log_seed_updates(epoch, seed_manager, log_f)
+        log_seed_updates(epoch, seed_manager, logger, log_f)
 
     return best_acc
 
@@ -759,7 +778,7 @@ def execute_phase_2(config, model, loaders, loss_fn, seed_manager, kasmina, logg
             },
         )
 
-        log_seed_updates(epoch, seed_manager, log_f)
+        log_seed_updates(epoch, seed_manager, logger, log_f)
 
     return {
         "best_acc": best_acc,
@@ -773,14 +792,11 @@ def execute_phase_2(config, model, loaders, loss_fn, seed_manager, kasmina, logg
 
 def log_final_summary(logger, final_stats, seed_manager, log_f):
     """Print the final report to the console and write the summary footer to the log file."""
-    print(logger.generate_final_report())
+    # The logger's generate_final_report() is automatically printed by the experiment_end event
 
     if final_stats["acc_pre"] is not None and final_stats["acc_post"] is not None:
-        logging.info(
-            "accuracy dip %.3f, recovery %s epochs", 
-            final_stats["accuracy_dip"], 
-            final_stats["recovery_time"]
-        )
+        # Use the logger's accuracy dip method instead of direct logging
+        logger.log_accuracy_dip(0, final_stats["accuracy_dip"])
 
     # Write log footer
     log_f.write("#\n")
