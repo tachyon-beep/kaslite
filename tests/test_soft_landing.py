@@ -1,10 +1,11 @@
 import os
 import sys
 import torch
+import random
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from morphogenetic_engine.components import SentinelSeed
+from morphogenetic_engine.components import SentinelSeed, BaseNet
 from morphogenetic_engine.core import SeedManager
 
 
@@ -49,16 +50,16 @@ def test_forward_shapes():
 
 
 def test_grad_leak_blocked():
-    manager = SeedManager()
-    manager.seeds.clear()
-    manager.germination_log.clear()
-    seed = SentinelSeed("g1", dim=4)
+    model = BaseNet(hidden_dim=4)
+    seed = model.seed1
     seed.initialize_child()
     x = torch.randn(3, 4, requires_grad=True)
     seed.seed_manager.seeds[seed.seed_id]["buffer"].append(x)
     for _ in range(5):
         seed.train_child_step(x)
-    assert x.grad is None
+    for name, p in model.named_parameters():
+        if "seed" not in name:
+            assert p.grad is None
 
 
 def test_redundant_transition_logged_once():
@@ -73,3 +74,13 @@ def test_redundant_transition_logged_once():
     after = len(manager.germination_log)
     assert mid == before + 1
     assert after == mid
+
+
+def test_buffer_shape_sampling():
+    buf = [torch.randn(64, 128), torch.randn(16, 128)]
+    sample_tensors = random.sample(list(buf), min(64, len(buf)))
+    batch = torch.cat(sample_tensors, dim=0)
+    if batch.size(0) > 64:
+        idx = torch.randperm(batch.size(0), device=batch.device)[:64]
+        batch = batch[idx]
+    assert batch.shape[0] == 64

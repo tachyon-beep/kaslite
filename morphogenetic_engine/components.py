@@ -42,14 +42,18 @@ class SentinelSeed(nn.Module):
 
     # ------------------------------------------------------------------
     def _set_state(self, new_state: str):
-        if self.state == new_state:  # DeepSeek redundant-transition check
-            return
+        if self.state == new_state:
+            return  # redundant transition guard
         old_state = self.state
         self.state = new_state
         info = self.seed_manager.seeds[self.seed_id]
         info["state"] = new_state
         if new_state == "active":
-            info["status"] = "active"  # keep Kasmina filter
+            info["status"] = "active"
+        elif new_state == "dormant":
+            info["status"] = "dormant"
+        else:  # training or blending
+            info["status"] = "pending"
         self.seed_manager.record_transition(self.seed_id, old_state, new_state)
 
     def _initialize_as_identity(self):
@@ -77,14 +81,9 @@ class SentinelSeed(nn.Module):
 
     # ------------------------------------------------------------------
     def train_child_step(self, inputs: torch.Tensor):
-        if self.state != "training":
+        if self.state != "training" or inputs.numel() == 0:
             return
-
-        buf = self.seed_manager.seeds[self.seed_id]["buffer"]
-        if len(buf) == 0:
-            return        # DeepSeek resource guard
-
-        inputs = inputs.detach()  # stop grad leak
+        inputs = inputs.detach()       # block trunk grads
 
         self.child_optim.zero_grad(set_to_none=True)
         outputs = self.child(inputs)
@@ -126,7 +125,7 @@ class SentinelSeed(nn.Module):
         with torch.no_grad():
             cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
             drift = 1.0 - cos_sim.item()
-            if drift > self.drift_warn:  # thresh via CLI later if desired
+            if drift > self.drift_warn > 0:
                 logging.warning(f"High drift {drift:.4f} at {self.seed_id}")
         self.seed_manager.record_drift(self.seed_id, drift)
         return output
