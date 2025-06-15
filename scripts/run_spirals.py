@@ -22,6 +22,8 @@ from torch.utils.data import DataLoader, TensorDataset
 from morphogenetic_engine.core import SeedManager, KasminaMicro
 from morphogenetic_engine.components import BaseNet
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 # ---------- DATA -------------------------------------------------------------
 
@@ -53,14 +55,20 @@ def train_epoch(
         optimiser.zero_grad(set_to_none=True)
         preds = model(X)
         loss = criterion(preds, y)
-        loss.backward()
-        optimiser.step()
+        if loss.requires_grad:
+            loss.backward()
+            optimiser.step()
         for info in seed_manager.seeds.values():
             seed = info["module"]
             if seed.state == "training":
                 buf = info["buffer"]
                 if len(buf) >= 10:
-                    batch = torch.stack(random.sample(list(buf), min(64, len(buf))))
+                    sample_tensors = random.sample(list(buf), min(64, len(buf)))
+                    batch = torch.cat(sample_tensors, dim=0)   # shapes may differ
+                    if batch.size(0) > 64:
+                        idx = torch.randperm(batch.size(0), device=batch.device)[:64]
+                        batch = batch[idx]
+                    batch = batch.to(device)
                     seed.train_child_step(batch)
             seed.update_blending()
 
@@ -87,6 +95,12 @@ def main():
     parser.add_argument("--blend_steps", type=int, default=30)
     parser.add_argument("--shadow_lr", type=float, default=1e-3)
     parser.add_argument("--progress_thresh", type=float, default=0.6)
+    parser.add_argument(
+        "--drift_warn",
+        type=float,
+        default=0.1,
+        help="Drift warning threshold (0=disable)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -129,6 +143,7 @@ def main():
         blend_steps=args.blend_steps,
         shadow_lr=args.shadow_lr,
         progress_thresh=args.progress_thresh,
+        drift_warn=args.drift_warn,
     )
     loss_fn = nn.CrossEntropyLoss()
     kasmina = KasminaMicro(
