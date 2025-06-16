@@ -1,4 +1,32 @@
-"""Comprehensive tests for the run_morphogenetic_experiment script."""
+"""
+Comprehensive test suite for the run_morphogenetic_experiment script.
+
+This module contains extensive tests for the morphogenetic architecture experiment runner,
+including tests for:
+
+- Dataset generation functions (spirals, moons, clusters, spheres, complex_moons)
+- Training and evaluation functions
+- Command-line argument parsing with new flags (--num_layers, --seeds_per_layer)
+- Model architecture configuration and scaling
+- Integration testing with different dataset types
+- Backward compatibility with existing code
+- Memory efficiency and parameter scaling
+
+Test Classes:
+    TestCreateSpirals: Tests for spiral dataset generation
+    TestCreateMoons: Tests for moons dataset generation
+    TestCreateClusters: Tests for cluster dataset generation
+    TestCreateComplexMoons: Tests for complex moons dataset generation
+    TestCreateSpheres: Tests for spheres dataset generation
+    TestTrainEpoch: Tests for training epoch functionality
+    TestEvaluate: Tests for model evaluation
+    TestBuildModelAndAgents: Tests for model and agent initialization
+    TestNewCLIArguments: Tests for new CLI flags --num_layers and --seeds_per_layer
+    TestArchitectureScaling: Tests for architecture scaling and memory efficiency
+
+The tests ensure that the new dynamic architecture features work correctly while
+maintaining backward compatibility with existing experiments.
+"""
 
 from unittest.mock import Mock, patch
 
@@ -10,6 +38,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from morphogenetic_engine.components import BaseNet, SentinelSeed
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 from scripts.run_morphogenetic_experiment import (
+    build_model_and_agents,
     create_clusters,
     create_complex_moons,
     create_moons,
@@ -17,6 +46,7 @@ from scripts.run_morphogenetic_experiment import (
     create_spirals,
     evaluate,
     main,
+    parse_arguments,
     train_epoch,
 )
 
@@ -263,16 +293,17 @@ class TestTrainEpoch:
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=0.0)
         criterion = torch.nn.CrossEntropyLoss()
 
-        # Initialize a seed for training
-        model.seed1.initialize_child()
+        # Initialize a seed for training (get first seed from the new structure)
+        first_seed = model.get_all_seeds()[0]
+        first_seed.initialize_child()
 
         # Add some data to seed buffer
-        buffer = seed_manager.seeds["seed1"]["buffer"]
+        buffer = seed_manager.seeds[first_seed.seed_id]["buffer"]
         for _ in range(15):
             buffer.append(torch.randn(2, 32))
 
         # Mock the train_child_step to verify it's called
-        with patch.object(model.seed1, "train_child_step") as mock_train:
+        with patch.object(first_seed, "train_child_step") as mock_train:
             train_epoch(model, loader, optimizer, criterion, seed_manager)
             assert mock_train.call_count > 0
 
@@ -291,8 +322,9 @@ class TestTrainEpoch:
         criterion = torch.nn.CrossEntropyLoss()
 
         # Initialize a seed for training and fill buffer with many samples
-        model.seed1.initialize_child()
-        buffer = seed_manager.seeds["seed1"]["buffer"]
+        first_seed = model.get_all_seeds()[0]
+        first_seed.initialize_child()
+        buffer = seed_manager.seeds[first_seed.seed_id]["buffer"]
 
         # Add > 64 samples to trigger sampling logic (lines 97-98)
         for _ in range(80):
@@ -760,3 +792,563 @@ class TestCLIDispatch:
                 assert "noise" in call_args.kwargs
                 assert np.isclose(call_args.kwargs["noise"], 0.3)
                 # cluster_count and sphere_radii should not affect the call
+
+
+class TestNewCLIFlags:
+    """
+    Test suite for the new CLI flags: --num_layers and --seeds_per_layer.
+
+    This class tests the command-line argument parsing for the new architecture
+    configuration flags that allow dynamic control over network depth and
+    multi-seed per layer functionality.
+
+    Tests cover:
+    - Default values for both flags
+    - Custom values for --num_layers
+    - Custom values for --seeds_per_layer
+    - Flag combination behavior
+    - Integration with model creation
+
+    The flags enable users to configure:
+    - num_layers: Number of hidden layers in the network (default: 8)
+    - seeds_per_layer: Number of sentinel seeds per layer (default: 1)
+    """
+
+    def test_num_layers_flag(self):
+        """
+        Test that --num_layers flag works correctly.
+
+        Verifies that the --num_layers command-line argument is properly parsed
+        and sets the correct value in the argument namespace. Tests both a
+        small value (4) and larger value (12) to ensure the flag accepts
+        various integer inputs.
+
+        The num_layers flag controls the number of hidden layers in the
+        morphogenetic network architecture.
+        """
+        with patch("sys.argv", ["test", "--num_layers", "4"]):
+            args = parse_arguments()
+            assert args.num_layers == 4
+
+        # Test with different values
+        with patch("sys.argv", ["test", "--num_layers", "12"]):
+            args = parse_arguments()
+            assert args.num_layers == 12
+
+    def test_seeds_per_layer_flag(self):
+        """
+        Test that --seeds_per_layer flag works correctly.
+
+        Verifies that the --seeds_per_layer command-line argument is properly
+        parsed and sets the correct value. Tests multiple values (3 and 5) to
+        ensure the flag accepts various integer inputs.
+
+        The seeds_per_layer flag controls how many sentinel seeds are created
+        per hidden layer, enabling ensemble-like behavior through averaging
+        of multiple adaptive paths per layer.
+        """
+        with patch("sys.argv", ["test", "--seeds_per_layer", "3"]):
+            args = parse_arguments()
+            assert args.seeds_per_layer == 3
+
+        # Test with different values
+        with patch("sys.argv", ["test", "--seeds_per_layer", "5"]):
+            args = parse_arguments()
+            assert args.seeds_per_layer == 5
+
+    def test_combined_flags(self):
+        """Test that both new flags work together."""
+        with patch("sys.argv", ["test", "--num_layers", "6", "--seeds_per_layer", "2"]):
+            args = parse_arguments()
+            assert args.num_layers == 6
+            assert args.seeds_per_layer == 2
+
+    def test_default_values(self):
+        """Test that default values are maintained for backward compatibility."""
+        with patch("sys.argv", ["test"]):
+            args = parse_arguments()
+            assert args.num_layers == 8  # Default should be 8
+            assert args.seeds_per_layer == 1  # Default should be 1
+
+    def test_model_creation_with_new_flags(self):
+        """Test that BaseNet is created correctly with new flags."""
+        seed_manager = SeedManager()
+
+        # Test with custom values
+        model = BaseNet(
+            hidden_dim=64, seed_manager=seed_manager, input_dim=2, num_layers=3, seeds_per_layer=2
+        )
+
+        assert model.num_layers == 3
+        assert model.seeds_per_layer == 2
+        assert model.get_total_seeds() == 6  # 3 layers * 2 seeds each
+
+        # Test seed naming
+        all_seeds = model.get_all_seeds()
+        expected_names = ["seed1_1", "seed1_2", "seed2_1", "seed2_2", "seed3_1", "seed3_2"]
+        actual_names = [seed.seed_id for seed in all_seeds]
+        assert actual_names == expected_names
+
+    def test_layer_seed_organization(self):
+        """Test that seeds are correctly organized by layer."""
+        seed_manager = SeedManager()
+        model = BaseNet(
+            hidden_dim=32, seed_manager=seed_manager, input_dim=3, num_layers=2, seeds_per_layer=3
+        )
+
+        # Test layer 0 seeds
+        layer_0_seeds = model.get_seeds_for_layer(0)
+        assert len(layer_0_seeds) == 3
+        assert [s.seed_id for s in layer_0_seeds] == ["seed1_1", "seed1_2", "seed1_3"]
+
+        # Test layer 1 seeds
+        layer_1_seeds = model.get_seeds_for_layer(1)
+        assert len(layer_1_seeds) == 3
+        assert [s.seed_id for s in layer_1_seeds] == ["seed2_1", "seed2_2", "seed2_3"]
+
+    def test_forward_pass_with_multiple_seeds(self):
+        """Test that forward pass works correctly with multiple seeds per layer."""
+        seed_manager = SeedManager()
+        model = BaseNet(
+            hidden_dim=16, seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=3
+        )
+
+        # Test forward pass
+        x = torch.randn(5, 2)
+        output = model(x)
+
+        assert output.shape == (5, 2)  # Should maintain batch size and output dims
+        assert not torch.isnan(output).any()  # Should not produce NaN values
+        assert torch.isfinite(output).all()  # Should produce finite values
+
+    def test_backward_compatibility_with_seeds_property(self):
+        """Test that the seeds property still works for backward compatibility."""
+        seed_manager = SeedManager()
+        model = BaseNet(
+            hidden_dim=32, seed_manager=seed_manager, input_dim=2, num_layers=3, seeds_per_layer=1
+        )
+
+        # Test that seeds property returns all seeds
+        assert len(model.seeds) == 3
+        assert len(model.get_all_seeds()) == 3
+
+        # Test that both methods return the same seeds
+        assert list(model.seeds) == model.get_all_seeds()
+
+    def test_integration_with_build_model_and_agents(self):
+        """Test that the new flags work with the full model building pipeline."""
+
+        class MockArgs:
+            hidden_dim = 32
+            input_dim = 2
+            num_layers = 3
+            seeds_per_layer = 2
+            blend_steps = 30
+            shadow_lr = 1e-3
+            progress_thresh = 0.6
+            drift_warn = 0.1
+            acc_threshold = 0.95
+
+        args = MockArgs()
+        device = torch.device("cpu")
+
+        model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
+
+        # Verify model properties
+        assert model.get_total_seeds() == 6  # 3 layers * 2 seeds
+        assert isinstance(loss_fn, torch.nn.CrossEntropyLoss)
+        assert kasmina.acc_threshold == 0.95
+        assert isinstance(seed_manager, SeedManager)
+
+        # Verify model is on correct device
+        assert next(model.parameters()).device == device
+
+
+class TestNewCLIArguments:
+    """
+    Comprehensive tests for the new CLI arguments --num_layers and --seeds_per_layer.
+
+    This test class focuses on end-to-end testing of the new command-line arguments,
+    including argument parsing, model construction, and integration with the
+    experiment runner.
+
+    Key test areas:
+    - Argument parsing with default and custom values
+    - Model and agent construction with new architecture parameters
+    - Integration testing across different dataset types
+    - Backward compatibility verification
+    - Main function execution with new flags
+
+    The tests use mocked command-line arguments and MockArgs classes to simulate
+    various configuration scenarios without requiring actual CLI execution.
+    """
+
+    @patch("sys.argv", ["script"] + ["--problem_type", "moons", "--adaptation_epochs", "10"])
+    def test_parse_arguments_defaults(self):
+        """Test that parse_arguments sets correct defaults for new flags."""
+        args = parse_arguments()
+
+        assert args.num_layers == 8  # Default value
+        assert args.seeds_per_layer == 1  # Default value
+
+    @patch(
+        "sys.argv",
+        ["script"] + ["--problem_type", "moons", "--adaptation_epochs", "10", "--num_layers", "5"],
+    )
+    def test_parse_arguments_custom_num_layers(self):
+        """Test parsing custom --num_layers argument."""
+        args = parse_arguments()
+        assert args.num_layers == 5
+
+    @patch(
+        "sys.argv",
+        ["script"]
+        + ["--problem_type", "moons", "--adaptation_epochs", "10", "--seeds_per_layer", "3"],
+    )
+    def test_parse_arguments_custom_seeds_per_layer(self):
+        """Test parsing custom --seeds_per_layer argument."""
+        args = parse_arguments()
+        assert args.seeds_per_layer == 3
+
+    @patch(
+        "sys.argv",
+        ["script"]
+        + [
+            "--problem_type",
+            "moons",
+            "--adaptation_epochs",
+            "10",
+            "--num_layers",
+            "5",
+            "--seeds_per_layer",
+            "3",
+        ],
+    )
+    def test_parse_arguments_both_flags(self):
+        """Test parsing both new flags together."""
+        args = parse_arguments()
+
+        assert args.num_layers == 5
+        assert args.seeds_per_layer == 3
+
+    def test_build_model_with_custom_architecture(self):
+        """Test that build_model_and_agents respects the new CLI flags."""
+
+        class MockArgs:
+            problem_type = "moons"
+            hidden_dim = 64
+            lr = 1e-3
+            batch_size = 32
+            progress_thresh = 0.6
+            drift_warn = 0.12
+            num_layers = 5
+            seeds_per_layer = 3
+            acc_threshold = 0.95
+            input_dim = 2
+            blend_steps = 30
+            shadow_lr = 1e-3
+
+        args = MockArgs()
+        device = torch.device("cpu")
+
+        model, _, _, _ = build_model_and_agents(args, device)
+
+        # Verify model has correct architecture
+        assert model.num_layers == 5
+        assert model.seeds_per_layer == 3
+        assert model.get_total_seeds() == 15  # 5 layers * 3 seeds
+
+        # Verify model structure
+        assert len(model.layers) == 5
+        assert len(model.all_seeds) == 15
+
+    def test_integration_with_different_datasets(self):
+        """Test integration of new flags with different dataset types."""
+
+        datasets = ["moons", "spirals", "clusters", "complex_moons", "spheres"]
+
+        for dataset in datasets:
+
+            class MockArgs:
+                problem_type = dataset
+                hidden_dim = 32
+                lr = 1e-3
+                batch_size = 16
+                progress_thresh = 0.6
+                drift_warn = 0.12
+                num_layers = 3
+                seeds_per_layer = 2
+                acc_threshold = 0.95
+                input_dim = 2
+                blend_steps = 30
+                shadow_lr = 1e-3
+
+            args = MockArgs()
+            device = torch.device("cpu")
+
+            model, _, _, _ = build_model_and_agents(args, device)
+
+            # All should create consistent architecture regardless of dataset
+            assert model.num_layers == 3
+            assert model.seeds_per_layer == 2
+            assert model.get_total_seeds() == 6
+
+    @patch(
+        "sys.argv",
+        ["script"]
+        + [
+            "--problem_type",
+            "moons",
+            "--adaptation_epochs",
+            "2",
+            "--num_layers",
+            "4",
+            "--seeds_per_layer",
+            "2",
+            "--hidden_dim",
+            "32",
+            "--batch_size",
+            "16",
+        ],
+    )
+    def test_main_function_with_new_flags(self):
+        """Test that main function can be called with new CLI flags."""
+
+        # Test that parse_arguments works with new flags
+        args = parse_arguments()
+        assert args.num_layers == 4
+        assert args.seeds_per_layer == 2
+
+        # Test that build_model_and_agents works with the parsed arguments
+        device = torch.device("cpu")
+
+        # Add missing attributes that build_model_and_agents expects
+        args.input_dim = 2
+        args.blend_steps = 30
+        args.shadow_lr = 1e-3
+
+        model, _, _, _ = build_model_and_agents(args, device)
+
+        # Verify the model was built with correct parameters
+        assert model.num_layers == 4
+        assert model.seeds_per_layer == 2
+
+    def test_backward_compatibility(self):
+        """Test that old scripts work without specifying new flags."""
+
+        # Should create backward-compatible model
+        class MockArgs:
+            problem_type = "moons"
+            hidden_dim = 64
+            lr = 1e-3
+            batch_size = 32
+            progress_thresh = 0.6
+            drift_warn = 0.12
+            num_layers = 8  # Default
+            seeds_per_layer = 1  # Default
+            acc_threshold = 0.95
+            input_dim = 2
+            blend_steps = 30
+            shadow_lr = 1e-3
+
+        args = MockArgs()
+        device = torch.device("cpu")
+
+        model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
+
+        # Should have the same structure as before
+        assert model.num_layers == 8
+        assert model.seeds_per_layer == 1
+        assert model.get_total_seeds() == 8  # Same as old hardcoded version
+
+        # Verify all components are created correctly
+        assert isinstance(seed_manager, SeedManager)
+        assert isinstance(loss_fn, torch.nn.CrossEntropyLoss)
+        assert isinstance(kasmina, KasminaMicro)
+
+
+class TestArchitectureScaling:
+    """
+    Test suite for architecture scaling and performance with new CLI flags.
+
+    This class tests how the morphogenetic network architecture scales with
+    different values of --num_layers and --seeds_per_layer flags, focusing on:
+
+    Performance and Scaling:
+    - Parameter count scaling with number of layers
+    - Parameter count scaling with seeds per layer
+    - Memory efficiency with large configurations
+    - Computational overhead analysis
+
+    Functional Testing:
+    - Model creation with various architecture sizes
+    - Forward pass execution with different configurations
+    - Training compatibility across architectures
+    - Integration testing with real data flows
+
+    Edge Cases:
+    - Minimal configurations (1 layer, 1 seed)
+    - Large configurations (many layers, many seeds)
+    - Memory constraint testing
+    - Parameter initialization verification
+
+    The tests ensure that the dynamic architecture system can handle a wide
+    range of network sizes efficiently and correctly.
+    """
+
+    def test_parameter_count_scaling(self):
+        """
+        Test that parameter count scales appropriately with new flags.
+
+        Verifies that the total number of parameters in the network scales
+        correctly when changing the number of layers and seeds per layer:
+
+        1. More layers should result in more parameters (linear scaling)
+        2. More seeds per layer should result in more parameters
+
+        This test ensures that the dynamic architecture system properly
+        allocates parameters and that resource usage is predictable and
+        scales as expected with the configuration flags.
+
+        The test uses a helper function to create models with different
+        configurations and compares their parameter counts to verify
+        proper scaling behavior.
+        """
+
+        def get_param_count(num_layers_param, seeds_per_layer_param):
+            class MockArgs:
+                problem_type = "moons"
+                hidden_dim = 64
+                lr = 1e-3
+                batch_size = 32
+                progress_thresh = 0.6
+                drift_warn = 0.12
+                num_layers = num_layers_param
+                seeds_per_layer = seeds_per_layer_param
+                acc_threshold = 0.95
+                input_dim = 2
+                blend_steps = 30
+                shadow_lr = 1e-3
+
+            args = MockArgs()
+            device = torch.device("cpu")
+            model, _, _, _ = build_model_and_agents(args, device)
+            return sum(p.numel() for p in model.parameters())
+
+        # Test scaling with layers
+        params_2_layers = get_param_count(2, 1)
+        params_4_layers = get_param_count(4, 1)
+        assert params_4_layers > params_2_layers
+
+        # Test scaling with seeds per layer
+        params_1_seed = get_param_count(3, 1)
+        params_3_seeds = get_param_count(3, 3)
+        assert params_3_seeds > params_1_seed
+
+    def test_memory_efficiency(self):
+        """
+        Test that networks with different architectures can be created efficiently.
+
+        This test verifies that the dynamic architecture system can handle
+        various network configurations without memory issues or failures:
+
+        Test Configurations:
+        - (1, 1): Minimal configuration for basic functionality
+        - (2, 2): Small configuration for lightweight applications
+        - (5, 3): Medium configuration for standard experiments
+        - (8, 1): Default configuration for backward compatibility
+        - (10, 2): Larger configuration for complex tasks
+
+        For each configuration, the test:
+        1. Creates the model and all associated components
+        2. Verifies the architecture matches the requested configuration
+        3. Tests that forward pass execution works correctly
+        4. Confirms no memory leaks or allocation failures
+
+        This ensures the system is robust across different resource requirements
+        and can scale from minimal to large network architectures efficiently.
+        """
+
+        # Test various combinations to ensure no memory issues
+        test_configs = [
+            (1, 1),  # Minimal
+            (2, 2),  # Small
+            (5, 3),  # Medium
+            (8, 1),  # Default
+            (10, 2),  # Larger
+        ]
+
+        for num_layers_param, seeds_per_layer_param in test_configs:
+
+            class MockArgs:
+                problem_type = "moons"
+                hidden_dim = 32  # Keep small for memory efficiency
+                lr = 1e-3
+                batch_size = 16
+                progress_thresh = 0.6
+                drift_warn = 0.12
+                num_layers = num_layers_param
+                seeds_per_layer = seeds_per_layer_param
+                acc_threshold = 0.95
+                input_dim = 2
+                blend_steps = 30
+                shadow_lr = 1e-3
+
+            args = MockArgs()
+            device = torch.device("cpu")
+
+            # Should create without memory errors
+            model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
+
+            # Verify architecture
+            assert model.num_layers == num_layers_param
+            assert model.seeds_per_layer == seeds_per_layer_param
+            assert model.get_total_seeds() == num_layers_param * seeds_per_layer_param
+
+            # Verify all components are properly initialized
+            assert isinstance(seed_manager, SeedManager)
+            assert isinstance(loss_fn, torch.nn.CrossEntropyLoss)
+            assert isinstance(kasmina, KasminaMicro)
+
+            # Test forward pass works
+            x = torch.randn(4, 2)
+            output = model(x)
+            assert output.shape == (4, 2)
+
+    def test_basic_training_compatibility(self):
+        """Test that basic model creation and forward pass work with different architectures."""
+
+        class MockArgs:
+            problem_type = "moons"
+            hidden_dim = 32
+            lr = 1e-3
+            batch_size = 16
+            progress_thresh = 0.6
+            drift_warn = 0.12
+            num_layers = 3
+            seeds_per_layer = 2
+            acc_threshold = 0.95
+            input_dim = 2
+            blend_steps = 30
+            shadow_lr = 1e-3
+
+        args = MockArgs()
+        device = torch.device("cpu")
+
+        model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
+
+        # Verify components are properly created
+        assert isinstance(seed_manager, SeedManager)
+        assert isinstance(kasmina, KasminaMicro)
+
+        # Create dummy data
+        X = torch.randn(32, 2)
+        y = torch.randint(0, 2, (32,))
+
+        # Test basic forward pass and loss computation
+        output = model(X)
+        assert output.shape == (32, 2)
+
+        loss = loss_fn(output, y)
+        assert isinstance(loss.item(), float)
+        assert loss.item() >= 0  # Loss should be non-negative

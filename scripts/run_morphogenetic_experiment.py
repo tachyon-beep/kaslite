@@ -411,6 +411,18 @@ def parse_arguments():
         help="Hidden dimension size for the network",
     )
     parser.add_argument(
+        "--num_layers",
+        type=int,
+        default=8,
+        help="Number of hidden layers in the network (each with a corresponding seed)",
+    )
+    parser.add_argument(
+        "--seeds_per_layer",
+        type=int,
+        default=1,
+        help="Number of sentinel seeds per layer (allows multiple adaptive paths per layer)",
+    )
+    parser.add_argument(
         "--acc_threshold",
         type=float,
         default=0.95,
@@ -442,6 +454,8 @@ def setup_experiment(args):
         "adaptation_epochs": args.adaptation_epochs,
         "lr": args.lr,
         "hidden_dim": args.hidden_dim,
+        "num_layers": args.num_layers,
+        "seeds_per_layer": args.seeds_per_layer,
         "blend_steps": args.blend_steps,
         "shadow_lr": args.shadow_lr,
         "progress_thresh": args.progress_thresh,
@@ -508,6 +522,8 @@ def write_log_header(log_f, config, args):
     log_f.write(f"# adaptation_epochs: {args.adaptation_epochs}\n")
     log_f.write(f"# lr: {args.lr}\n")
     log_f.write(f"# hidden_dim: {args.hidden_dim}\n")
+    log_f.write(f"# num_layers: {args.num_layers}\n")
+    log_f.write(f"# seeds_per_layer: {args.seeds_per_layer}\n")
     log_f.write(f"# blend_steps: {args.blend_steps}\n")
     log_f.write(f"# shadow_lr: {args.shadow_lr}\n")
     log_f.write(f"# progress_thresh: {args.progress_thresh}\n")
@@ -581,6 +597,8 @@ def build_model_and_agents(args, device):
         args.hidden_dim,
         seed_manager=seed_manager,
         input_dim=args.input_dim,
+        num_layers=args.num_layers,
+        seeds_per_layer=args.seeds_per_layer,
         blend_steps=args.blend_steps,
         shadow_lr=args.shadow_lr,
         progress_thresh=args.progress_thresh,

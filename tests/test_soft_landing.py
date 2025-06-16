@@ -59,7 +59,7 @@ def test_forward_shapes():
 def test_grad_leak_blocked():
     """Test that gradient computation is properly isolated during seed training."""
     model = BaseNet(hidden_dim=4, seed_manager=SeedManager(), input_dim=2)
-    seed = model.seed1
+    seed = model.get_all_seeds()[0]  # Get first seed from dynamic structure
 
     # Ensure the seed is registered and initialize it
     seed.initialize_child()

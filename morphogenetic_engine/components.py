@@ -159,8 +159,10 @@ class SentinelSeed(nn.Module):
 
 class BaseNet(nn.Module):
     """
-    Trunk: 3 hidden linear blocks, each followed by a sentinel seed.
-    Then two extra seed–linear pairs so we end up with 8 seeds in total.
+    Configurable trunk network with dynamic number of hidden layers and seeds.
+    Each hidden layer can have multiple sentinel seeds for adaptive capacity.
+    Default configuration creates 8 layers with 1 seed each for backward compatibility.
+    Multiple seeds per layer are averaged to provide ensemble-like behavior.
     """
 
     def __init__(
@@ -169,6 +171,8 @@ class BaseNet(nn.Module):
         *,
         seed_manager: SeedManager,
         input_dim: int = 2,
+        num_layers: int = 8,
+        seeds_per_layer: int = 1,
         blend_steps: int = 30,
         shadow_lr: float = 1e-3,
         progress_thresh: float = 0.6,
@@ -176,104 +180,42 @@ class BaseNet(nn.Module):
     ):
         super().__init__()
 
-        self.fc1 = nn.Linear(input_dim, hidden_dim)
-        self.act1 = nn.ReLU()
-        self.seed1 = SentinelSeed(
-            "seed1",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
+        self.num_layers = num_layers
+        self.seeds_per_layer = seeds_per_layer
+        self.hidden_dim = hidden_dim
 
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.act2 = nn.ReLU()
-        self.seed2 = SentinelSeed(
-            "seed2",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
+        # Create input layer
+        self.input_layer = nn.Linear(input_dim, hidden_dim)
+        self.input_activation = nn.ReLU()
 
-        self.fc3 = nn.Linear(hidden_dim, hidden_dim)
-        self.act3 = nn.ReLU()
-        self.seed3 = SentinelSeed(
-            "seed3",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
+        # Dynamically create hidden layers and seeds
+        self.layers = nn.ModuleList()
+        self.activations = nn.ModuleList()
+        # Use a flat list for all seeds and organize by layer in forward()
+        self.all_seeds = nn.ModuleList()
 
-        # extra capacity layers + seeds --------------------
-        self.fc4 = nn.Linear(hidden_dim, hidden_dim)
-        self.act4 = nn.ReLU()
-        self.seed4 = SentinelSeed(
-            "seed4",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
+        for i in range(num_layers):
+            # Hidden layer
+            layer = nn.Linear(hidden_dim, hidden_dim)
+            activation = nn.ReLU()
 
-        self.fc5 = nn.Linear(hidden_dim, hidden_dim)
-        self.act5 = nn.ReLU()
-        self.seed5 = SentinelSeed(
-            "seed5",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
+            # Multiple seeds per layer
+            for j in range(seeds_per_layer):
+                seed = SentinelSeed(
+                    f"seed{i+1}_{j+1}",  # e.g., seed1_1, seed1_2, seed2_1, etc.
+                    hidden_dim,
+                    seed_manager,
+                    blend_steps=blend_steps,
+                    shadow_lr=shadow_lr,
+                    progress_thresh=progress_thresh,
+                    drift_warn=drift_warn,
+                )
+                self.all_seeds.append(seed)
 
-        self.fc6 = nn.Linear(hidden_dim, hidden_dim)
-        self.act6 = nn.ReLU()
-        self.seed6 = SentinelSeed(
-            "seed6",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
+            self.layers.append(layer)
+            self.activations.append(activation)
 
-        self.fc7 = nn.Linear(hidden_dim, hidden_dim)
-        self.act7 = nn.ReLU()
-        self.seed7 = SentinelSeed(
-            "seed7",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
-
-        self.fc8 = nn.Linear(hidden_dim, hidden_dim)
-        self.act8 = nn.ReLU()
-        self.seed8 = SentinelSeed(
-            "seed8",
-            hidden_dim,
-            seed_manager,
-            blend_steps=blend_steps,
-            shadow_lr=shadow_lr,
-            progress_thresh=progress_thresh,
-            drift_warn=drift_warn,
-        )
-        # ---------------------------------------------------
-
+        # Output layer
         self.out = nn.Linear(hidden_dim, 2)
 
     # ------------------------------------------------------------------
@@ -284,27 +226,51 @@ class BaseNet(nn.Module):
                 p.requires_grad = False
 
     # ------------------------------------------------------------------
+    def get_total_seeds(self) -> int:
+        """Get total number of seeds in the network."""
+        return len(self.all_seeds)
+
+    def get_all_seeds(self) -> list:
+        """Get a flat list of all seeds for compatibility."""
+        return list(self.all_seeds)
+
+    def get_seeds_for_layer(self, layer_idx: int) -> list:
+        """Get all seeds for a specific layer."""
+        start_idx = layer_idx * self.seeds_per_layer
+        end_idx = start_idx + self.seeds_per_layer
+        return list(self.all_seeds[start_idx:end_idx])
+
+    @property
+    def seeds(self):
+        """Backward compatibility property - returns all seeds."""
+        return self.all_seeds
 
     # ------------------------------------------------------------------
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the complete network."""
-        x = self.act1(self.fc1(x))
-        x = self.seed1(x)
-        x = self.act2(self.fc2(x))
-        x = self.seed2(x)
-        x = self.act3(self.fc3(x))
-        x = self.seed3(x)
+        # Input layer
+        x = self.input_activation(self.input_layer(x))
 
-        x = self.act4(self.fc4(x))
-        x = self.seed4(x)
-        x = self.act5(self.fc5(x))
-        x = self.seed5(x)
-        x = self.act6(self.fc6(x))
-        x = self.seed6(x)
-        x = self.act7(self.fc7(x))
-        x = self.seed7(x)
-        x = self.act8(self.fc8(x))
-        x = self.seed8(x)
+        # Dynamic hidden layers with multiple seeds per layer
+        for i in range(self.num_layers):
+            # Apply linear layer and activation
+            x = self.activations[i](self.layers[i](x))
+
+            # Apply seeds for this layer
+            layer_seeds = self.get_seeds_for_layer(i)
+
+            if self.seeds_per_layer == 1:
+                # Single seed case (backward compatible)
+                x = layer_seeds[0](x)
+            else:
+                # Multiple seeds case - apply all and average
+                seed_outputs = []
+                for seed in layer_seeds:
+                    seed_output = seed(x)
+                    seed_outputs.append(seed_output)
+
+                # Average the outputs from all seeds in this layer
+                x = torch.stack(seed_outputs, dim=0).mean(dim=0)
 
         return self.out(x)
 
