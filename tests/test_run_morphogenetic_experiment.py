@@ -939,6 +939,7 @@ class TestNewCLIFlags:
         """Test that the new flags work with the full model building pipeline."""
 
         class MockArgs:
+            """Mock arguments for testing model building with new CLI flags."""
             hidden_dim = 32
             input_dim = 2
             num_layers = 3
@@ -1035,6 +1036,7 @@ class TestNewCLIArguments:
         """Test that build_model_and_agents respects the new CLI flags."""
 
         class MockArgs:
+            """Mock arguments for testing build_model_and_agents with custom architecture."""
             problem_type = "moons"
             hidden_dim = 64
             lr = 1e-3
@@ -1070,6 +1072,7 @@ class TestNewCLIArguments:
         for dataset in datasets:
 
             class MockArgs:
+                """Mock arguments for testing integration with different datasets."""
                 problem_type = dataset
                 hidden_dim = 32
                 lr = 1e-3
@@ -1138,6 +1141,7 @@ class TestNewCLIArguments:
 
         # Should create backward-compatible model
         class MockArgs:
+            """Mock arguments for testing backward compatibility."""
             problem_type = "moons"
             hidden_dim = 64
             lr = 1e-3
@@ -1217,6 +1221,7 @@ class TestArchitectureScaling:
 
         def get_param_count(num_layers_param, seeds_per_layer_param):
             class MockArgs:
+                """Mock arguments for parameter counting test."""
                 problem_type = "moons"
                 hidden_dim = 64
                 lr = 1e-3
@@ -1281,6 +1286,7 @@ class TestArchitectureScaling:
         for num_layers_param, seeds_per_layer_param in test_configs:
 
             class MockArgs:
+                """Mock arguments for testing different layer configurations."""
                 problem_type = "moons"
                 hidden_dim = 32  # Keep small for memory efficiency
                 lr = 1e-3
@@ -1319,6 +1325,7 @@ class TestArchitectureScaling:
         """Test that basic model creation and forward pass work with different architectures."""
 
         class MockArgs:
+            """Mock arguments for testing basic training compatibility."""
             problem_type = "moons"
             hidden_dim = 32
             lr = 1e-3

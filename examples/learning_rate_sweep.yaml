@@ -1,0 +1,20 @@
+# Learning Rate Schedule Optimization
+# Fine-tuning learning rates for different components
+
+# Learning rate variations
+lr: [1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
+shadow_lr: [5e-5, 1e-4, 5e-4, 1e-3, 5e-3]
+
+# Training schedule
+warm_up_epochs: [25, 50, 75, 100]
+adaptation_epochs: [100, 200, 300]
+
+# Fixed architecture for consistency
+num_layers: 8
+seeds_per_layer: 2
+hidden_dim: 128
+blend_steps: 30
+
+# Test on multiple datasets
+problem_type: ["spirals", "moons", "clusters", "complex_moons"]
+input_dim: 3

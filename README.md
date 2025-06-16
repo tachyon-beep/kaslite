@@ -4,6 +4,8 @@ This repo demonstrates a morphogenetic architecture with "soft-landing" seeds. E
 
 ## Usage
 
+### Single Experiment Mode
+
 Run the training script with various configuration options for different dataset types:
 
 ```bash
@@ -28,6 +30,76 @@ python scripts/run_morphogenetic_experiment.py --device cuda --problem_type clus
 # Full configuration example with custom training parameters
 python scripts/run_morphogenetic_experiment.py --problem_type moons --input_dim 3 --device cuda --blend_steps 200 --shadow_lr 0.002 --batch_size 64 --train_frac 0.8
 ```
+
+### Parameter Sweep Mode
+
+Run hyperparameter sweeps using YAML configuration files to automatically test multiple parameter combinations:
+
+```bash
+# Run a basic hyperparameter sweep
+python scripts/run_morphogenetic_experiment.py --sweep_config examples/basic_sweep.yaml
+
+# Using short flag
+python scripts/run_morphogenetic_experiment.py -s examples/architecture_search.yaml
+
+# Run sweep from a directory of YAML files
+python scripts/run_morphogenetic_experiment.py --sweep_config examples/
+
+# Combine CLI flags with sweep config (CLI flags become defaults)
+python scripts/run_morphogenetic_experiment.py -s examples/quick_test.yaml --device cuda --batch_size 128
+```
+
+#### Sweep Configuration Format
+
+YAML sweep configs support multiple value formats:
+
+```yaml
+# YAML arrays
+num_layers: [4, 8, 16]
+seeds_per_layer: [1, 2, 4, 12, 16]
+
+# Comma-separated strings
+lr: "0.001,0.003,0.01"
+problem_type: "moons,spirals,clusters"
+
+# Single values (no sweep)
+device: cuda
+batch_size: 64
+
+# Mixed formats work together
+hidden_dim: [64, 128]        # Array format
+shadow_lr: 1e-4,5e-4,1e-3    # Comma-separated
+n_samples: 2000              # Single value
+```
+
+#### Grid Expansion
+
+The system creates a Cartesian product of all parameters with multiple values:
+
+- `num_layers: [4, 8]` and `lr: [0.001, 0.003]` → 4 experiments
+- `num_layers: [4, 8, 16]`, `seeds_per_layer: [1, 2]`, `lr: [0.001, 0.003]` → 12 experiments
+
+#### CLI Override Behavior
+
+- CLI flags provide default values for all experiments
+- YAML parameters override CLI defaults
+- Example: `--lr 0.001 -s config.yaml` where config has `lr: [0.003, 0.01]` will test lr=0.003 and lr=0.01
+
+#### Results Organization
+
+Sweep results are organized under `results/sweeps/YYYYMMDD_HHMMSS/`:
+
+```text
+results/sweeps/20250616_143022/
+├── run_001_a1b2c3d4/
+│   └── results_*.log
+├── run_002_e5f6g7h8/
+│   └── results_*.log
+├── ...
+└── sweep_summary.csv
+```
+
+The `sweep_summary.csv` contains all parameters and results for easy analysis.
 
 ### CLI Arguments
 

@@ -1,0 +1,19 @@
+# Basic Hyperparameter Sweep Configuration
+# Tests different learning rates and model architectures
+
+# Network architecture parameters
+num_layers: [4, 8, 16]
+seeds_per_layer: [1, 2, 4]
+hidden_dim: [64, 128, 256]
+
+# Training parameters
+lr: 0.001,0.003,0.01 # Comma-separated format
+shadow_lr: [1e-4, 5e-4, 1e-3] # YAML array format
+
+# Dataset selection
+problem_type: ["moons", "spirals", "clusters"]
+
+# Fixed parameters (single values)
+n_samples: 2000
+batch_size: 64
+device: cpu
