@@ -81,10 +81,10 @@ class TestMainFunction:
                                 mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
                                 try:
                                     main()
-                                except (
+                                except ( # pylint: disable=broad-except  # nosec # noqa: S110
                                     SystemExit,
                                     Exception,
-                                ):  # pylint: disable=broad-except  # nosec # noqa: S110
+                                ):
                                     pass  # We just want to test argument parsing
 
     def test_main_new_arguments(self):
@@ -119,7 +119,7 @@ class TestMainFunction:
 
                 try:
                     main()
-                except (
+                except ( # pylint: disable=broad-except  # nosec # noqa: S110
                     SystemExit,
                     Exception,
                 ):  # pylint: disable=broad-except  # nosec # noqa: S110
@@ -166,10 +166,10 @@ class TestCLIDispatch:
 
                     try:
                         main()
-                    except (
+                    except (    # pylint: disable=broad-except  # nosec # noqa: S110
                         SystemExit,
                         Exception,
-                    ):  # pylint: disable=broad-except  # nosec # noqa: S110
+                    ):
                         # Expected since we're mocking critical components
                         pass
 
@@ -211,10 +211,10 @@ class TestCLIDispatch:
 
                 try:
                     main()
-                except (
+                except ( # pylint: disable=broad-except  # nosec # noqa: S110
                     SystemExit,
                     Exception,
-                ):  # pylint: disable=broad-except  # nosec # noqa: S110
+                ):
                     pass
 
                 # Verify spirals was called with only relevant arguments
