@@ -33,7 +33,7 @@ from torch.utils.tensorboard import SummaryWriter
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 from morphogenetic_engine.logger import ExperimentLogger
-from scripts.cli_dashboard import RichDashboard
+from morphogenetic_engine.cli_dashboard import RichDashboard
 
 _last_report: Dict[str, Optional[str]] = defaultdict(lambda: None)
 
@@ -1115,11 +1115,16 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             
             # Phase 2
             logger.log_phase_transition(config["warm_up_epochs"], "phase_1", "phase_2")
-            tb_writer.add_text("phase/transitions", f"Epoch {config['warm_up_epochs']}: phase_1 → phase_2", config["warm_up_epochs"])
+            tb_writer.add_text(
+                "phase/transitions", 
+                f"Epoch {config['warm_up_epochs']}: phase_1 → phase_2", 
+                config["warm_up_epochs"]
+            )
             dashboard.show_phase_transition("phase_2", config["warm_up_epochs"])
 
             final_stats = execute_phase_2(
-                config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, best_acc_phase1, dashboard
+                config, model, loaders, loss_fn, seed_manager, kasmina, 
+                logger, tb_writer, log_f, best_acc_phase1, dashboard
             )
 
             logger.log_experiment_end(config["warm_up_epochs"] + config["adaptation_epochs"])
