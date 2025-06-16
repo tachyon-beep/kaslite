@@ -6,13 +6,16 @@ morphogenetic neural networks with adaptive architecture capabilities.
 """
 
 from . import cli_dashboard, components, core, datasets, experiment, logger, training
+from . import sweeps, cli
 
 __all__ = [
     "cli_dashboard",
-    "components",
+    "components", 
     "core",
     "datasets",
     "experiment",
     "logger",
     "training",
+    "sweeps",
+    "cli",
 ]

@@ -1,20 +1,39 @@
 # Learning Rate Schedule Optimization
 # Fine-tuning learning rates for different components
 
-# Learning rate variations
-lr: [1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
-shadow_lr: [5e-5, 1e-4, 5e-4, 1e-3, 5e-3]
+sweep_type: "grid"
 
-# Training schedule
-warm_up_epochs: [25, 50, 75, 100]
-adaptation_epochs: [100, 200, 300]
+# Fixed experiment parameters
+experiment:
+  input_dim: 3
+  num_layers: 8
+  seeds_per_layer: 2
+  hidden_dim: 128
+  blend_steps: 30
 
-# Fixed architecture for consistency
-num_layers: 8
-seeds_per_layer: 2
-hidden_dim: 128
-blend_steps: 30
+# Parameter grid focused on learning rates and schedules
+parameters:
+  # Learning rate variations
+  lr: [1e-4, 3e-4, 1e-3, 3e-3, 1e-2]
+  shadow_lr: [5e-5, 1e-4, 5e-4, 1e-3, 5e-3]
 
-# Test on multiple datasets
-problem_type: ["spirals", "moons", "clusters", "complex_moons"]
-input_dim: 3
+  # Training schedule
+  warm_up_epochs: [25, 50, 75, 100]
+  adaptation_epochs: [100, 200, 300]
+
+  # Test on multiple datasets
+  problem_type: ["spirals", "moons", "clusters", "complex_moons"]
+
+# Execution configuration
+execution:
+  max_parallel: 3
+  timeout_per_trial: 2400 # 40 minutes for longer training
+
+# Optimization settings
+optimization:
+  target_metric: "val_acc"
+  direction: "maximize"
+  secondary_metrics:
+    - "final_acc"
+    - "best_acc"
+    - "runtime"

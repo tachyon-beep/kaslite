@@ -8,4 +8,5 @@ pyyaml
 rich
 mlflow>=2.0.0
 dvc[all]>=3.0.0
+optuna>=3.0.0
 

@@ -34,7 +34,7 @@ from morphogenetic_engine.logger import ExperimentLogger
 from morphogenetic_engine.training import clear_seed_report_cache, execute_phase_1, execute_phase_2
 
 
-# MLflow import with graceful fallback and test environment detection
+# MLflow integration - required component
 def _is_testing_mode() -> bool:
     """Check if we're in testing mode."""
     try:
@@ -45,21 +45,11 @@ def _is_testing_mode() -> bool:
 
 TESTING_MODE = _is_testing_mode()
 
-try:
-    import mlflow
-    import mlflow.exceptions
+import mlflow
+import mlflow.exceptions
+import mlflow.pytorch
 
-    try:
-        import mlflow.pytorch
-
-        MLFLOW_PYTORCH_AVAILABLE = True
-    except ImportError:
-        MLFLOW_PYTORCH_AVAILABLE = False
-    MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
-except ImportError:
-    mlflow = None
-    MLFLOW_AVAILABLE = False
-    MLFLOW_PYTORCH_AVAILABLE = False
+MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
 
 # ---------- MAIN -------------------------------------------------------------
 
@@ -230,7 +220,7 @@ def setup_experiment(args):
     project_root = Path(__file__).parent.parent
 
     # Configure MLflow if available
-    if MLFLOW_AVAILABLE and mlflow is not None:
+    if MLFLOW_AVAILABLE:
         mlruns_dir = project_root / "mlruns"
         mlruns_dir.mkdir(exist_ok=True)
         mlflow.set_tracking_uri(config.get("mlflow_uri", "file://" + str(mlruns_dir)))
@@ -613,7 +603,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
     logger, tb_writer, log_f, device, config, slug, project_root = setup_experiment(args)
 
     # Start MLflow run if available
-    if MLFLOW_AVAILABLE and mlflow is not None:
+    if MLFLOW_AVAILABLE:
         try:
             # End any existing run first to avoid conflicts
             if mlflow.active_run() is not None:
@@ -649,7 +639,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             dashboard.show_phase_transition("phase_1", 0)
 
             # Log phase transition to MLflow
-            if MLFLOW_AVAILABLE and mlflow is not None:
+            if MLFLOW_AVAILABLE:
                 try:
                     mlflow.set_tag("phase", "phase_1")
                 except (ImportError, AttributeError, RuntimeError):
@@ -669,7 +659,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             dashboard.show_phase_transition("phase_2", config["warm_up_epochs"])
 
             # Log phase transition to MLflow
-            if MLFLOW_AVAILABLE and mlflow is not None:
+            if MLFLOW_AVAILABLE:
                 try:
                     mlflow.set_tag("phase", "phase_2")
                 except (ImportError, AttributeError, RuntimeError):
@@ -693,7 +683,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             log_final_summary(logger, final_stats, seed_manager, log_f)
 
             # Log final metrics and artifacts to MLflow
-            if MLFLOW_AVAILABLE and mlflow is not None:
+            if MLFLOW_AVAILABLE:
                 try:
                     mlflow.log_metric("final_best_acc", final_stats["best_acc"])
                     if "accuracy_dip" in final_stats and final_stats["accuracy_dip"] is not None:
@@ -724,10 +714,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
 
                     # Log model
                     try:
-                        if MLFLOW_PYTORCH_AVAILABLE and hasattr(mlflow, "pytorch"):
-                            mlflow.pytorch.log_model(model, "model")  # type: ignore[attr-defined]
-                        else:
-                            print("Warning: MLflow pytorch module not available")
+                        mlflow.pytorch.log_model(model, "model")
                     except (ImportError, RuntimeError, ValueError, OSError) as e:
                         print(f"Warning: Could not log model to MLflow: {e}")
                 except (ImportError, AttributeError, RuntimeError, ValueError, OSError) as e:
@@ -740,7 +727,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             tb_writer.close()
 
             # End MLflow run
-            if MLFLOW_AVAILABLE and mlflow is not None:
+            if MLFLOW_AVAILABLE:
                 try:
                     mlflow.end_run()
                 except (ImportError, AttributeError, RuntimeError):
@@ -763,7 +750,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             }
     except (RuntimeError, ValueError, KeyError, torch.cuda.OutOfMemoryError) as e:
         # End MLflow run on error
-        if MLFLOW_AVAILABLE and mlflow is not None:
+        if MLFLOW_AVAILABLE:
             try:
                 mlflow.end_run(status="FAILED")
             except (ImportError, AttributeError, RuntimeError):

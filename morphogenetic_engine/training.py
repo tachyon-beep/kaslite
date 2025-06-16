@@ -17,19 +17,12 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
 # MLflow import with test detection
-TESTING_MODE = False
-try:
-    import sys
-    TESTING_MODE = "pytest" in sys.modules or "unittest" in sys.modules
-except (ImportError, AttributeError):
-    pass
+import sys
+import mlflow
 
-try:
-    import mlflow
-    MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
-except ImportError:
-    mlflow = None
-    MLFLOW_AVAILABLE = False
+# Check if we're in testing mode to conditionally disable MLflow
+TESTING_MODE = "pytest" in sys.modules or "unittest" in sys.modules
+MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
 
 from morphogenetic_engine.core import SeedManager
 
@@ -157,7 +150,7 @@ def _log_seed_state_change(epoch, sid, mod, prev, logger, tb_writer):
         tb_writer.add_scalar(f"seed/{sid}/alpha", mod.alpha, epoch)
 
         # Log to MLflow if available
-        if MLFLOW_AVAILABLE and mlflow is not None and mlflow.active_run():
+        if MLFLOW_AVAILABLE and mlflow.active_run():
             mlflow.log_metric(f"seed/{sid}/alpha", mod.alpha, step=epoch)
     else:
         prev_state = prev.split(":")[0] if prev and ":" in prev else (prev or "unknown")
@@ -167,7 +160,7 @@ def _log_seed_state_change(epoch, sid, mod, prev, logger, tb_writer):
         )
 
         # Log seed state transitions to MLflow
-        if MLFLOW_AVAILABLE and mlflow is not None and mlflow.active_run():
+        if MLFLOW_AVAILABLE and mlflow.active_run():
             mlflow.log_text(
                 f"Epoch {epoch}: {prev_state} → {mod.state}", f"seed_{sid}_transitions.txt"
             )
@@ -238,7 +231,7 @@ def execute_phase_1(
         tb_writer.add_scalar("validation/best_acc", best_acc, epoch)
 
         # Log to MLflow if available
-        if MLFLOW_AVAILABLE and mlflow is not None and mlflow.active_run():
+        if MLFLOW_AVAILABLE and mlflow.active_run():
             mlflow.log_metric("train_loss", train_loss, step=epoch)
             mlflow.log_metric("val_loss", val_loss, step=epoch)
             mlflow.log_metric("val_acc", val_acc, step=epoch)
@@ -316,7 +309,7 @@ def _log_phase_2_metrics(epoch, metrics, logger, tb_writer, train_loss, dashboar
     tb_writer.add_scalar("validation/best_acc", metrics["best_acc"], epoch)
 
     # Log to MLflow if available
-    if MLFLOW_AVAILABLE and mlflow is not None and mlflow.active_run():
+    if MLFLOW_AVAILABLE and mlflow.active_run():
         if train_loss > 0:
             mlflow.log_metric("train_loss", train_loss, step=epoch)
         mlflow.log_metric("val_loss", metrics["val_loss"], step=epoch)

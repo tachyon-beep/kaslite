@@ -16,6 +16,8 @@ dependencies = [
     "torch>=1.9.0",
     "numpy>=1.20.0",
     "scikit-learn>=1.0.0",
+    "rich>=10.0.0",
+    "pyyaml>=5.0.0",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +28,10 @@ dev = [
     "pylint",
     "mypy",
 ]
+
+[project.scripts]
+morphogenetic-sweep = "morphogenetic_engine.cli.sweep:main"
+morphogenetic-reports = "morphogenetic_engine.cli.reports:main"
 
 # Pylint configuration for ML projects
 [tool.pylint.messages_control]
@@ -124,3 +130,6 @@ module = [
     "matplotlib.*",
 ]
 ignore_missing_imports = true
+
+[tool.setuptools.packages.find]
+include = ["morphogenetic_engine*"]
