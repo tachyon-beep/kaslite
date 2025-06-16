@@ -17,7 +17,7 @@ def run_command(cmd, description):
     print(f"COMMAND: {cmd}")
     print(f"{'='*60}")
 
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=False)
 
     if result.stdout:
         print("STDOUT:")

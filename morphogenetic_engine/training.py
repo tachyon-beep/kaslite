@@ -20,15 +20,13 @@ from torch.utils.data import DataLoader
 TESTING_MODE = False
 try:
     import sys
-
     TESTING_MODE = "pytest" in sys.modules or "unittest" in sys.modules
-except Exception:
+except (ImportError, AttributeError):
     pass
 
 try:
     import mlflow
-
-    MLFLOW_AVAILABLE = True and not TESTING_MODE  # Disable MLflow during testing
+    MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
 except ImportError:
     mlflow = None
     MLFLOW_AVAILABLE = False
