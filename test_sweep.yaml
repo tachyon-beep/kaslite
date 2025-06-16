@@ -1,0 +1,5 @@
+hidden_dim: [16, 32]
+warm_up_epochs: [1]
+adaptation_epochs: [1]
+problem_type: ["spirals"]
+device: ["cpu"]

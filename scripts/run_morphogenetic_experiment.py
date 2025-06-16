@@ -28,6 +28,7 @@ from sklearn.preprocessing import StandardScaler
 from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.tensorboard import SummaryWriter
 
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
@@ -493,7 +494,11 @@ def setup_experiment(args):
     logger = ExperimentLogger(str(log_path), config)
     log_f = log_path.open("w", encoding="utf-8")
 
-    return logger, log_f, device, config
+    # Create TensorBoard writer
+    tb_dir = project_root / "runs" / slug
+    tb_writer = SummaryWriter(log_dir=str(tb_dir))
+
+    return logger, tb_writer, log_f, device, config
 
 
 def write_log_header(log_f, config, args):
@@ -650,7 +655,7 @@ def format_alpha_value(alpha_val):
         return str(alpha_val)
 
 
-def log_seed_updates(epoch, seed_manager, logger, log_f):
+def log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f):
     """Handle the repetitive logic of checking and logging seed state transitions."""
     for sid, info in seed_manager.seeds.items():
         mod = info["module"]
@@ -664,16 +669,24 @@ def log_seed_updates(epoch, seed_manager, logger, log_f):
             # Use the experiment logger instead of direct logging
             if mod.state == "blending":
                 logger.log_blending_progress(epoch, sid, mod.alpha)
+                # Log alpha values to TensorBoard
+                tb_writer.add_scalar(f"seed/{sid}/alpha", mod.alpha, epoch)
             else:
                 # For other states, use seed_event logging
                 prev_state = prev.split(":")[0] if prev and ":" in prev else (prev or "unknown")
                 logger.log_seed_event(epoch, sid, prev_state, mod.state)
+                # Log state transitions to TensorBoard
+                tb_writer.add_text(
+                    f"seed/{sid}/events",
+                    f"Epoch {epoch}: {prev_state} → {mod.state}",
+                    epoch
+                )
 
             alpha_str = format_alpha_value(getattr(mod, "alpha", 0.0))
             log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")
 
 
-def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, log_f):
+def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f):
     """Run the initial warm-up training phase."""
     train_loader, val_loader = loaders
     device = next(model.parameters()).device
@@ -686,7 +699,7 @@ def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, log_f
     warm_up_epochs = config["warm_up_epochs"]
 
     for epoch in range(1, warm_up_epochs + 1):
-        train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device)
+        train_loss = train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device)
 
         val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
         best_acc = max(best_acc, val_acc)
@@ -694,13 +707,20 @@ def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, log_f
         logger.log_epoch_progress(
             epoch,
             {
+                "train_loss": train_loss,
                 "val_loss": val_loss,
                 "val_acc": val_acc,
                 "best_acc": best_acc,
             },
         )
 
-        log_seed_updates(epoch, seed_manager, logger, log_f)
+        # Log to TensorBoard
+        tb_writer.add_scalar("train/loss", train_loss, epoch)
+        tb_writer.add_scalar("validation/loss", val_loss, epoch)
+        tb_writer.add_scalar("validation/accuracy", val_acc, epoch)
+        tb_writer.add_scalar("validation/best_acc", best_acc, epoch)
+
+        log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
 
     return best_acc
 
@@ -715,7 +735,7 @@ def handle_germination_tracking(epoch, germ_epoch, acc_pre, acc_post, val_acc, t
 
 
 def execute_phase_2(
-    config, model, loaders, loss_fn, seed_manager, kasmina, logger, log_f, initial_best_acc
+    config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, initial_best_acc
 ):
     """Run the adaptation phase where the backbone is frozen and seeds can germinate."""
     train_loader, val_loader = loaders
@@ -742,8 +762,9 @@ def execute_phase_2(
     seeds_activated = False
 
     for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
+        train_loss = 0.0
         if optimiser:
-            train_epoch(
+            train_loss = train_epoch(
                 model,
                 train_loader,
                 optimiser,
@@ -770,6 +791,7 @@ def execute_phase_2(
         logger.log_epoch_progress(
             epoch,
             {
+                "train_loss": train_loss,
                 "val_loss": val_loss,
                 "val_acc": val_acc,
                 "best_acc": best_acc,
@@ -777,7 +799,14 @@ def execute_phase_2(
             },
         )
 
-        log_seed_updates(epoch, seed_manager, logger, log_f)
+        # Log to TensorBoard
+        if train_loss > 0:  # Only log train loss if we actually trained
+            tb_writer.add_scalar("train/loss", train_loss, epoch)
+        tb_writer.add_scalar("validation/loss", val_loss, epoch)
+        tb_writer.add_scalar("validation/accuracy", val_acc, epoch)
+        tb_writer.add_scalar("validation/best_acc", best_acc, epoch)
+
+        log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
 
     return {
         "best_acc": best_acc,
@@ -995,7 +1024,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
     np.random.seed(args.seed)
     random.seed(args.seed)
     
-    logger, log_f, device, config = setup_experiment(args)
+    logger, tb_writer, log_f, device, config = setup_experiment(args)
 
     try:
         with log_f:  # Ensure the log file is always closed
@@ -1010,17 +1039,22 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
 
             logger.log_phase_transition(0, "init", "phase_1")
+            tb_writer.add_text("phase/transitions", "Epoch 0: init → phase_1", 0)
             best_acc_phase1 = execute_phase_1(
-                config, model, loaders, loss_fn, seed_manager, logger, log_f
+                config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f
             )
             logger.log_phase_transition(config["warm_up_epochs"], "phase_1", "phase_2")
+            tb_writer.add_text("phase/transitions", f"Epoch {config['warm_up_epochs']}: phase_1 → phase_2", config["warm_up_epochs"])
 
             final_stats = execute_phase_2(
-                config, model, loaders, loss_fn, seed_manager, kasmina, logger, log_f, best_acc_phase1
+                config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, best_acc_phase1
             )
 
             logger.log_experiment_end(config["warm_up_epochs"] + config["adaptation_epochs"])
             log_final_summary(logger, final_stats, seed_manager, log_f)
+            
+            # Close TensorBoard writer
+            tb_writer.close()
             
             # Return results for sweep summary
             return {
@@ -1034,6 +1068,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
                                    if info["module"].state == "active")
             }
     except Exception as e:
+        tb_writer.close()  # Ensure writer is closed even on error
         print(f"Experiment failed: {e}")
         return {
             'run_id': run_id,
@@ -1050,7 +1085,7 @@ def create_run_directory_and_setup(sweep_dir: Path, run_slug: str, original_setu
     
     def setup_experiment_for_sweep(args_inner, run_dir_param=run_dir, original_setup_param=original_setup_func):
         """Modified setup_experiment that puts logs in the run directory."""
-        logger_inner, log_f_inner, device_inner, config_inner = original_setup_param(args_inner)
+        logger_inner, tb_writer_inner, log_f_inner, device_inner, config_inner = original_setup_param(args_inner)
         
         # Move the log file to the run directory
         original_log_path = Path(log_f_inner.name)
@@ -1063,7 +1098,12 @@ def create_run_directory_and_setup(sweep_dir: Path, run_slug: str, original_setu
         # Reopen with new path
         log_f_new = new_log_path.open("w", encoding="utf-8")
         
-        return logger_inner, log_f_new, device_inner, config_inner
+        # Close the original TensorBoard writer and create a new one in the run directory
+        tb_writer_inner.close()
+        tb_dir_new = run_dir_param / "tensorboard"
+        tb_writer_new = SummaryWriter(log_dir=str(tb_dir_new))
+        
+        return logger_inner, tb_writer_new, log_f_new, device_inner, config_inner
     
     return run_dir, setup_experiment_for_sweep
 
