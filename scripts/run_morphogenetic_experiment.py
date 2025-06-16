@@ -748,6 +748,60 @@ def handle_germination_tracking(epoch, germ_epoch, acc_pre, acc_post, val_acc, t
     return acc_post, t_recover
 
 
+def _setup_phase_2_optimizer(lr: float):
+    """Create and return optimizer and scheduler for phase 2."""
+    def rebuild_seed_opt(model):
+        params = [p for p in model.parameters() if p.requires_grad]
+        if not params:
+            return None, None
+        opt = torch.optim.Adam(params, lr=lr * 0.1, weight_decay=0.0)
+        sch = torch.optim.lr_scheduler.StepLR(opt, 20, 0.1)
+        return opt, sch
+    return rebuild_seed_opt
+
+
+def _handle_germination_step(kasmina, val_loss, val_acc, epoch, dashboard, seed_manager, rebuild_opt_fn, model):
+    """Handle germination logic and return updated state."""
+    seeds_activated = False
+    germ_epoch = None
+    acc_pre = None
+    optimiser = None
+    scheduler = None
+    
+    if kasmina.step(val_loss, val_acc):
+        seeds_activated = True
+        germ_epoch, acc_pre = epoch, val_acc
+        optimiser, scheduler = rebuild_opt_fn(model)
+        
+        # Show germination event in dashboard
+        if dashboard:
+            # Find which seed(s) just became active
+            for sid, info in seed_manager.seeds.items():
+                if info["module"].state in ["blending", "active"]:
+                    dashboard.show_germination_event(sid, epoch)
+                    break
+    
+    return seeds_activated, germ_epoch, acc_pre, optimiser, scheduler
+
+
+def _log_phase_2_metrics(epoch, metrics, logger, tb_writer, train_loss, dashboard, warm_up_epochs):
+    """Log metrics for phase 2."""
+    logger.log_epoch_progress(epoch, metrics)
+
+    # Update dashboard
+    if dashboard:
+        # Convert epoch to phase-relative epoch for progress bar
+        phase_epoch = epoch - warm_up_epochs
+        dashboard.update_progress(phase_epoch, metrics)
+
+    # Log to TensorBoard
+    if train_loss > 0:  # Only log train loss if we actually trained
+        tb_writer.add_scalar("train/loss", train_loss, epoch)
+    tb_writer.add_scalar("validation/loss", metrics["val_loss"], epoch)
+    tb_writer.add_scalar("validation/accuracy", metrics["val_acc"], epoch)
+    tb_writer.add_scalar("validation/best_acc", metrics["best_acc"], epoch)
+
+
 def execute_phase_2(
     config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, initial_best_acc, dashboard=None
 ):
@@ -765,57 +819,43 @@ def execute_phase_2(
     if dashboard:
         dashboard.start_phase("phase_2", adaptation_epochs, "🧬 Adaptation Phase")
 
-    # Define the rebuild_seed_opt helper function
-    def rebuild_seed_opt():
-        params = [p for p in model.parameters() if p.requires_grad]
-        if not params:
-            return None, None
-        opt = torch.optim.Adam(params, lr=lr * 0.1, weight_decay=0.0)
-        sch = torch.optim.lr_scheduler.StepLR(opt, 20, 0.1)
-        return opt, sch
-
-    optimiser, scheduler = rebuild_seed_opt()
+    # Setup optimizer rebuilding function
+    rebuild_opt_fn = _setup_phase_2_optimizer(lr)
+    optimiser, scheduler = rebuild_opt_fn(model)
+    
+    # Initialize state variables
     best_acc = initial_best_acc
     acc_pre = acc_post = t_recover = germ_epoch = None
     seeds_activated = False
 
     for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
+        # Training step
         train_loss = 0.0
         if optimiser:
-            train_loss = train_epoch(
-                model,
-                train_loader,
-                optimiser,
-                loss_fn,
-                seed_manager,
-                scheduler,
-                device,
-            )
+            train_loss = train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device)
 
+        # Evaluation step
         val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
 
-        if kasmina.step(val_loss, val_acc):
-            seeds_activated = True
-            germ_epoch, acc_pre = epoch, val_acc
-            optimiser, scheduler = rebuild_seed_opt()
-            
-            # Show germination event in dashboard
-            if dashboard:
-                # Find which seed(s) just became active
-                for sid, info in seed_manager.seeds.items():
-                    if info["module"].state in ["blending", "active"]:
-                        dashboard.show_germination_event(sid, epoch)
-                        break
-
-        acc_post, t_recover = handle_germination_tracking(
-            epoch, germ_epoch, acc_pre, acc_post, val_acc, t_recover
+        # Germination check
+        step_seeds_activated, step_germ_epoch, step_acc_pre, new_opt, new_sch = _handle_germination_step(
+            kasmina, val_loss, val_acc, epoch, dashboard, seed_manager, rebuild_opt_fn, model
         )
+        
+        if step_seeds_activated:
+            seeds_activated = True
+            germ_epoch, acc_pre = step_germ_epoch, step_acc_pre
+            optimiser, scheduler = new_opt, new_sch
 
+        # Recovery tracking
+        acc_post, t_recover = handle_germination_tracking(epoch, germ_epoch, acc_pre, acc_post, val_acc, t_recover)
+
+        # Update best accuracy
         if epoch % 10 == 0 or val_acc > best_acc:
             best_acc = max(best_acc, val_acc)
-        status = ", ".join(f"{sid}:{info['status']}" for sid, info in seed_manager.seeds.items())
         
-        # Prepare metrics for logging
+        # Prepare and log metrics
+        status = ", ".join(f"{sid}:{info['status']}" for sid, info in seed_manager.seeds.items())
         metrics = {
             "train_loss": train_loss,
             "val_loss": val_loss,
@@ -824,21 +864,7 @@ def execute_phase_2(
             "seeds": status,
         }
         
-        logger.log_epoch_progress(epoch, metrics)
-
-        # Update dashboard
-        if dashboard:
-            # Convert epoch to phase-relative epoch for progress bar
-            phase_epoch = epoch - warm_up_epochs
-            dashboard.update_progress(phase_epoch, metrics)
-
-        # Log to TensorBoard
-        if train_loss > 0:  # Only log train loss if we actually trained
-            tb_writer.add_scalar("train/loss", train_loss, epoch)
-        tb_writer.add_scalar("validation/loss", val_loss, epoch)
-        tb_writer.add_scalar("validation/accuracy", val_acc, epoch)
-        tb_writer.add_scalar("validation/best_acc", best_acc, epoch)
-
+        _log_phase_2_metrics(epoch, metrics, logger, tb_writer, train_loss, dashboard, warm_up_epochs)
         log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f, dashboard)
 
     return {
@@ -1075,7 +1101,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
 
             # Initialize seeds in dashboard
-            for sid in seed_manager.seeds.keys():
+            for sid in seed_manager.seeds:
                 dashboard.update_seed(sid, "dormant")
 
             # Phase 1
@@ -1113,7 +1139,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
                 'active_seeds': sum(1 for info in seed_manager.seeds.values() 
                                    if info["module"].state == "active")
             }
-    except Exception as e:
+    except (RuntimeError, ValueError, KeyError, torch.cuda.OutOfMemoryError) as e:
         tb_writer.close()  # Ensure writer is closed even on error
         dashboard.stop()  # Ensure dashboard is stopped even on error
         print(f"Experiment failed: {e}")
@@ -1224,7 +1250,7 @@ def run_parameter_sweep(args: argparse.Namespace) -> None:
     # Load and validate sweep configs
     try:
         sweep_configs = load_sweep_configs(args.sweep_config)
-    except Exception as e:
+    except (FileNotFoundError, yaml.YAMLError, ValueError) as e:
         print(f"Error loading sweep config: {e}")
         return
     

@@ -456,8 +456,8 @@ class TestSweepExecution:
     @patch('scripts.run_morphogenetic_experiment.load_sweep_configs')
     def test_run_parameter_sweep_load_error(self, mock_load):
         """Test sweep execution with config loading errors."""
-        # Setup mock to raise exception
-        mock_load.side_effect = Exception("Config file not found")
+        # Setup mock to raise a FileNotFoundError (more specific exception)
+        mock_load.side_effect = FileNotFoundError("Config file not found")
 
         args = argparse.Namespace(
             sweep_config="nonexistent.yaml",

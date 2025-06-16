@@ -10,6 +10,8 @@ This module provides a live dashboard that displays:
 
 from __future__ import annotations
 
+import random
+import time
 from typing import Any, Dict, Optional
 
 from rich.console import Console
@@ -230,9 +232,6 @@ class RichDashboard:
 
 def demo_dashboard():
     """Demo function to showcase the dashboard capabilities."""
-    import random
-    import time
-    
     console = Console()
     
     with RichDashboard(console) as dashboard:
