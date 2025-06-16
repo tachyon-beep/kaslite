@@ -33,6 +33,7 @@ from torch.utils.tensorboard import SummaryWriter
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 from morphogenetic_engine.logger import ExperimentLogger
+from scripts.cli_dashboard import RichDashboard
 
 _last_report: Dict[str, Optional[str]] = defaultdict(lambda: None)
 
@@ -655,7 +656,7 @@ def format_alpha_value(alpha_val):
         return str(alpha_val)
 
 
-def log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f):
+def log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f, dashboard=None):
     """Handle the repetitive logic of checking and logging seed state transitions."""
     for sid, info in seed_manager.seeds.items():
         mod = info["module"]
@@ -665,6 +666,11 @@ def log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f):
 
         if should_log:
             _last_report[sid] = tag
+
+            # Update dashboard with seed state
+            if dashboard:
+                alpha_val = getattr(mod, "alpha", 0.0)
+                dashboard.update_seed(sid, mod.state, alpha_val)
 
             # Use the experiment logger instead of direct logging
             if mod.state == "blending":
@@ -686,7 +692,7 @@ def log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f):
             log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")
 
 
-def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f):
+def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f, dashboard=None):
     """Run the initial warm-up training phase."""
     train_loader, val_loader = loaders
     device = next(model.parameters()).device
@@ -698,21 +704,29 @@ def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_wr
     best_acc = 0.0
     warm_up_epochs = config["warm_up_epochs"]
 
+    # Start phase 1 in dashboard if available
+    if dashboard:
+        dashboard.start_phase("phase_1", warm_up_epochs, "🔥 Warm-up Training")
+
     for epoch in range(1, warm_up_epochs + 1):
         train_loss = train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device)
 
         val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
         best_acc = max(best_acc, val_acc)
 
-        logger.log_epoch_progress(
-            epoch,
-            {
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-                "val_acc": val_acc,
-                "best_acc": best_acc,
-            },
-        )
+        # Prepare metrics for logging
+        metrics = {
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "val_acc": val_acc,
+            "best_acc": best_acc,
+        }
+
+        logger.log_epoch_progress(epoch, metrics)
+
+        # Update dashboard
+        if dashboard:
+            dashboard.update_progress(epoch, metrics)
 
         # Log to TensorBoard
         tb_writer.add_scalar("train/loss", train_loss, epoch)
@@ -720,7 +734,7 @@ def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_wr
         tb_writer.add_scalar("validation/accuracy", val_acc, epoch)
         tb_writer.add_scalar("validation/best_acc", best_acc, epoch)
 
-        log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
+        log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f, dashboard)
 
     return best_acc
 
@@ -735,7 +749,7 @@ def handle_germination_tracking(epoch, germ_epoch, acc_pre, acc_post, val_acc, t
 
 
 def execute_phase_2(
-    config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, initial_best_acc
+    config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, initial_best_acc, dashboard=None
 ):
     """Run the adaptation phase where the backbone is frozen and seeds can germinate."""
     train_loader, val_loader = loaders
@@ -746,6 +760,10 @@ def execute_phase_2(
 
     # Freeze the model's backbone
     model.freeze_backbone()
+
+    # Start phase 2 in dashboard if available
+    if dashboard:
+        dashboard.start_phase("phase_2", adaptation_epochs, "🧬 Adaptation Phase")
 
     # Define the rebuild_seed_opt helper function
     def rebuild_seed_opt():
@@ -780,6 +798,14 @@ def execute_phase_2(
             seeds_activated = True
             germ_epoch, acc_pre = epoch, val_acc
             optimiser, scheduler = rebuild_seed_opt()
+            
+            # Show germination event in dashboard
+            if dashboard:
+                # Find which seed(s) just became active
+                for sid, info in seed_manager.seeds.items():
+                    if info["module"].state in ["blending", "active"]:
+                        dashboard.show_germination_event(sid, epoch)
+                        break
 
         acc_post, t_recover = handle_germination_tracking(
             epoch, germ_epoch, acc_pre, acc_post, val_acc, t_recover
@@ -788,16 +814,23 @@ def execute_phase_2(
         if epoch % 10 == 0 or val_acc > best_acc:
             best_acc = max(best_acc, val_acc)
         status = ", ".join(f"{sid}:{info['status']}" for sid, info in seed_manager.seeds.items())
-        logger.log_epoch_progress(
-            epoch,
-            {
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-                "val_acc": val_acc,
-                "best_acc": best_acc,
-                "seeds": status,
-            },
-        )
+        
+        # Prepare metrics for logging
+        metrics = {
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "val_acc": val_acc,
+            "best_acc": best_acc,
+            "seeds": status,
+        }
+        
+        logger.log_epoch_progress(epoch, metrics)
+
+        # Update dashboard
+        if dashboard:
+            # Convert epoch to phase-relative epoch for progress bar
+            phase_epoch = epoch - warm_up_epochs
+            dashboard.update_progress(phase_epoch, metrics)
 
         # Log to TensorBoard
         if train_loss > 0:  # Only log train loss if we actually trained
@@ -806,7 +839,7 @@ def execute_phase_2(
         tb_writer.add_scalar("validation/accuracy", val_acc, epoch)
         tb_writer.add_scalar("validation/best_acc", best_acc, epoch)
 
-        log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
+        log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f, dashboard)
 
     return {
         "best_acc": best_acc,
@@ -1026,8 +1059,11 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
     
     logger, tb_writer, log_f, device, config = setup_experiment(args)
 
+    # Initialize Rich dashboard
+    dashboard = RichDashboard()
+
     try:
-        with log_f:  # Ensure the log file is always closed
+        with log_f, dashboard:  # Ensure both log file and dashboard are properly closed
             # Write the detailed configuration header
             write_log_header(log_f, config, args)
 
@@ -1038,16 +1074,26 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
 
             model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
 
+            # Initialize seeds in dashboard
+            for sid in seed_manager.seeds.keys():
+                dashboard.update_seed(sid, "dormant")
+
+            # Phase 1
             logger.log_phase_transition(0, "init", "phase_1")
             tb_writer.add_text("phase/transitions", "Epoch 0: init → phase_1", 0)
+            dashboard.show_phase_transition("phase_1", 0)
+            
             best_acc_phase1 = execute_phase_1(
-                config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f
+                config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f, dashboard
             )
+            
+            # Phase 2
             logger.log_phase_transition(config["warm_up_epochs"], "phase_1", "phase_2")
             tb_writer.add_text("phase/transitions", f"Epoch {config['warm_up_epochs']}: phase_1 → phase_2", config["warm_up_epochs"])
+            dashboard.show_phase_transition("phase_2", config["warm_up_epochs"])
 
             final_stats = execute_phase_2(
-                config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, best_acc_phase1
+                config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, best_acc_phase1, dashboard
             )
 
             logger.log_experiment_end(config["warm_up_epochs"] + config["adaptation_epochs"])
@@ -1069,6 +1115,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             }
     except Exception as e:
         tb_writer.close()  # Ensure writer is closed even on error
+        dashboard.stop()  # Ensure dashboard is stopped even on error
         print(f"Experiment failed: {e}")
         return {
             'run_id': run_id,

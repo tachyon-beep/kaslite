@@ -124,6 +124,75 @@ The `sweep_summary.csv` contains all parameters and results for easy analysis.
 - `--n_centers`: Number of cluster centers for clusters dataset (default: `2`)
 - `--cluster_std`: Standard deviation for clusters dataset (default: `1.0`)
 
+## Monitoring & Visualization
+
+### Real-time Rich CLI Dashboard
+
+The experiment runner includes a beautiful live CLI dashboard powered by Rich that displays:
+
+- **Progress bars**: Live progress for warm-up and adaptation phases
+- **Metrics table**: Real-time training/validation loss, accuracy, and best accuracy
+- **Seed states panel**: Color-coded status of each seed (dormant/blending/active) with α values
+- **Phase transitions**: Highlighted banners when transitioning between experiment phases
+- **Germination events**: Special notifications when seeds become active
+
+Example output during training:
+
+```text
+🔥 Warm-up Training ━━━━━━━━━━━━━━━━━━━━━ 2/2 • 0:00:01
+
+📊 Experiment Metrics
+┏━━━━━━━━━━━━━━━┳━━━━━━━━━┓
+┃ Metric        ┃ Value   ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━━━┩
+│ Epoch         │ 2       │
+│ Phase         │ phase_1 │
+│ Train Loss    │ 0.3456  │
+│ Val Loss      │ 0.2891  │
+│ Val Accuracy  │ 0.8320  │
+│ Best Accuracy │ 0.8320  │
+│ Seeds Active  │ 0/2     │
+└───────────────┴─────────┘
+
+🌱 Seed States
+seed1_1: dormant
+seed2_1: dormant
+```
+
+### TensorBoard Integration
+
+All experiments automatically log comprehensive metrics to TensorBoard:
+
+**Scalar Metrics:**
+
+- `train/loss`: Training loss per epoch
+- `validation/loss`: Validation loss per epoch  
+- `validation/accuracy`: Validation accuracy per epoch
+- `validation/best_acc`: Best validation accuracy achieved
+- `seed/{id}/alpha`: Alpha blending values for each seed
+
+**Text Summaries:**
+
+- `phase/transitions`: Phase transition events with timestamps
+- `seed/{id}/events`: Seed state transition events
+
+**Launch TensorBoard:**
+
+```bash
+# View all experiment runs
+tensorboard --logdir=runs
+
+# View specific experiment
+tensorboard --logdir=runs/spirals_dim3_cpu_h128_bs30_lr0.001_pt0.6_dw0.12
+```
+
+TensorBoard will be available at `http://localhost:6006` showing detailed curves for:
+
+- Loss convergence during both phases
+- Accuracy improvements over time  
+- Seed activation patterns and alpha ramping
+- Phase transition timing
+
 ### Datasets
 
 - **spirals**: Classic two-spiral classification problem, padded to `input_dim`

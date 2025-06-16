@@ -5,4 +5,5 @@ torchvision
 clearml>=1.8.4
 tensorboard
 pyyaml
+rich
 
