@@ -49,5 +49,5 @@ def mock_args():
         lr = 1e-3
         batch_size = 16
         problem_type = "moons"
-    
+
     return MockArgs()

@@ -955,12 +955,11 @@ class TestMultiSeedArchitecture:
         # Check gradients for all trainable parameters
         has_gradients = False
         for name, param in net.named_parameters():
-            if param.requires_grad:
-                if param.grad is not None and not torch.allclose(
-                    param.grad, torch.zeros_like(param.grad)
-                ):
-                    has_gradients = True
-                    break
+            if param.requires_grad and param.grad is not None and not torch.allclose(
+                param.grad, torch.zeros_like(param.grad)
+            ):
+                has_gradients = True
+                break
             # Use the name variable to avoid unused variable warning
             assert isinstance(name, str), "Parameter name should be a string"
 
