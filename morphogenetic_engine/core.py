@@ -154,7 +154,7 @@ class KasminaMicro:
         """
         # Import here to avoid circular imports
         from .monitoring import get_monitor
-        
+
         # Check if loss has not improved by at least delta
         if self.prev_loss - val_loss < self.delta:
             self.plateau += 1

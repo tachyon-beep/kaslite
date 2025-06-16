@@ -218,6 +218,7 @@ def setup_experiment(args):
 
     # Initialize Prometheus monitoring
     from morphogenetic_engine.monitoring import initialize_monitoring
+
     initialize_monitoring(experiment_id=slug, port=8000)
 
     # Determine log location and initialise logger
@@ -742,6 +743,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
 
             # Cleanup monitoring
             from morphogenetic_engine.monitoring import cleanup_monitoring
+
             cleanup_monitoring()
 
             # Return results for sweep summary
@@ -759,8 +761,9 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
     except (RuntimeError, ValueError, KeyError, torch.cuda.OutOfMemoryError) as e:
         # Cleanup monitoring on error
         from morphogenetic_engine.monitoring import cleanup_monitoring
+
         cleanup_monitoring()
-        
+
         # End MLflow run on error
         if MLFLOW_AVAILABLE:
             try:
