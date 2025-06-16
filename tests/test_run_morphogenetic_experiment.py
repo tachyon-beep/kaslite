@@ -453,9 +453,7 @@ class TestMainFunction:
                         with patch("torch.utils.data.random_split") as mock_split:
                             # Mock the data splitting to avoid actual computation
                             mock_split.return_value = (Mock(), Mock())
-                            with patch(
-                                "morphogenetic_engine.training.evaluate"
-                            ) as mock_eval:
+                            with patch("morphogenetic_engine.training.evaluate") as mock_eval:
                                 mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
                                 try:
                                     main()
@@ -478,9 +476,7 @@ class TestMainFunction:
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch(
                 "scripts.run_morphogenetic_experiment.datasets.create_complex_moons"
-            ) as mock_create, patch(
-                "morphogenetic_engine.components.BaseNet"
-            ) as mock_net, patch(
+            ) as mock_create, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
                 "torch.optim.Adam"
             ) as mock_optim, patch(
                 "builtins.open", create=True
@@ -720,9 +716,7 @@ class TestCLIDispatch:
             with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
                 with patch(
                     f"scripts.run_morphogenetic_experiment.datasets.{expected_function}"
-                ) as mock_func, patch(
-                    "morphogenetic_engine.components.BaseNet"
-                ) as mock_net, patch(
+                ) as mock_func, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
                     "torch.optim.Adam"
                 ) as mock_optim, patch(
                     "builtins.open", create=True
@@ -765,9 +759,7 @@ class TestCLIDispatch:
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch(
                 "scripts.run_morphogenetic_experiment.datasets.create_spirals"
-            ) as mock_spirals, patch(
-                "morphogenetic_engine.components.BaseNet"
-            ) as mock_net, patch(
+            ) as mock_spirals, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
                 "torch.optim.Adam"
             ) as mock_optim, patch(
                 "builtins.open", create=True
@@ -938,6 +930,7 @@ class TestNewCLIFlags:
 
         class MockArgs:
             """Mock arguments for testing model building with new CLI flags."""
+
             hidden_dim = 32
             input_dim = 2
             num_layers = 3
@@ -1035,6 +1028,7 @@ class TestNewCLIArguments:
 
         class MockArgs:
             """Mock arguments for testing build_model_and_agents with custom architecture."""
+
             problem_type = "moons"
             hidden_dim = 64
             lr = 1e-3
@@ -1071,6 +1065,7 @@ class TestNewCLIArguments:
 
             class MockArgs:
                 """Mock arguments for testing integration with different datasets."""
+
                 problem_type = dataset
                 hidden_dim = 32
                 lr = 1e-3
@@ -1140,6 +1135,7 @@ class TestNewCLIArguments:
         # Should create backward-compatible model
         class MockArgs:
             """Mock arguments for testing backward compatibility."""
+
             problem_type = "moons"
             hidden_dim = 64
             lr = 1e-3
@@ -1220,6 +1216,7 @@ class TestArchitectureScaling:
         def get_param_count(num_layers_param, seeds_per_layer_param):
             class MockArgs:
                 """Mock arguments for parameter counting test."""
+
                 problem_type = "moons"
                 hidden_dim = 64
                 lr = 1e-3
@@ -1285,6 +1282,7 @@ class TestArchitectureScaling:
 
             class MockArgs:
                 """Mock arguments for testing different layer configurations."""
+
                 problem_type = "moons"
                 hidden_dim = 32  # Keep small for memory efficiency
                 lr = 1e-3
@@ -1324,6 +1322,7 @@ class TestArchitectureScaling:
 
         class MockArgs:
             """Mock arguments for testing basic training compatibility."""
+
             problem_type = "moons"
             hidden_dim = 32
             lr = 1e-3

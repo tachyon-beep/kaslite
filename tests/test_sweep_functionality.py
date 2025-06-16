@@ -10,6 +10,7 @@ import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 import yaml
 
@@ -67,31 +68,21 @@ class TestValidateSweepConfig:
     def test_valid_config(self):
         """Test validation with valid configuration."""
         valid_args = get_valid_argument_names()
-        config = {
-            "num_layers": [4, 8, 16],
-            "hidden_dim": [64, 128],
-            "lr": [0.001, 0.003]
-        }
+        config = {"num_layers": [4, 8, 16], "hidden_dim": [64, 128], "lr": [0.001, 0.003]}
         # Should not raise an exception
         validate_sweep_config(config, valid_args)
 
     def test_invalid_parameter(self):
         """Test validation with invalid parameter name."""
         valid_args = get_valid_argument_names()
-        config = {
-            "invalid_param": [1, 2, 3],
-            "num_layers": [4, 8]
-        }
+        config = {"invalid_param": [1, 2, 3], "num_layers": [4, 8]}
         with pytest.raises(ValueError, match="Unknown parameter in sweep config: 'invalid_param'"):
             validate_sweep_config(config, valid_args)
 
     def test_dashed_parameter_names(self):
         """Test validation handles dashed parameter names."""
         valid_args = get_valid_argument_names()
-        config = {
-            "--num_layers": [4, 8],  # With dashes
-            "hidden_dim": [64, 128]  # Without dashes
-        }
+        config = {"--num_layers": [4, 8], "hidden_dim": [64, 128]}  # With dashes  # Without dashes
         # Should not raise an exception (dashes are stripped)
         validate_sweep_config(config, valid_args)
 
@@ -108,12 +99,9 @@ class TestLoadSweepConfigs:
 
     def test_load_single_yaml_file(self):
         """Test loading a single YAML file."""
-        config_data = {
-            "num_layers": [4, 8, 16],
-            "hidden_dim": [64, 128]
-        }
+        config_data = {"num_layers": [4, 8, 16], "hidden_dim": [64, 128]}
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(config_data, f)
             temp_path = f.name
 
@@ -134,9 +122,9 @@ class TestLoadSweepConfigs:
             config1_path = Path(temp_dir) / "config1.yaml"
             config2_path = Path(temp_dir) / "config2.yml"
 
-            with open(config1_path, 'w', encoding='utf-8') as f:
+            with open(config1_path, "w", encoding="utf-8") as f:
                 yaml.dump(config1, f)
-            with open(config2_path, 'w', encoding='utf-8') as f:
+            with open(config2_path, "w", encoding="utf-8") as f:
                 yaml.dump(config2, f)
 
             configs = load_sweep_configs(temp_dir)
@@ -147,12 +135,14 @@ class TestLoadSweepConfigs:
 
     def test_invalid_file_extension(self):
         """Test error handling for invalid file extension."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
             f.write("some text")
             temp_path = f.name
 
         try:
-            with pytest.raises(ValueError, match="Sweep config file must have .yml or .yaml extension"):
+            with pytest.raises(
+                ValueError, match="Sweep config file must have .yml or .yaml extension"
+            ):
                 load_sweep_configs(temp_path)
         finally:
             os.unlink(temp_path)
@@ -167,7 +157,7 @@ class TestLoadSweepConfigs:
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a non-YAML file
             non_yaml_path = Path(temp_dir) / "config.txt"
-            with open(non_yaml_path, 'w', encoding='utf-8') as f:
+            with open(non_yaml_path, "w", encoding="utf-8") as f:
                 f.write("not yaml")
 
             with pytest.raises(ValueError, match="No YAML files found in directory"):
@@ -181,50 +171,36 @@ class TestExpandGrid:
         """Test grid expansion with single parameter having multiple values."""
         config = {"num_layers": [4, 8, 16]}
         grid = expand_grid(config)
-        expected = [
-            {"num_layers": 4},
-            {"num_layers": 8},
-            {"num_layers": 16}
-        ]
+        expected = [{"num_layers": 4}, {"num_layers": 8}, {"num_layers": 16}]
         assert grid == expected
 
     def test_multiple_parameters(self):
         """Test grid expansion with multiple parameters."""
-        config = {
-            "num_layers": [4, 8],
-            "hidden_dim": [64, 128]
-        }
+        config = {"num_layers": [4, 8], "hidden_dim": [64, 128]}
         grid = expand_grid(config)
         expected = [
             {"num_layers": 4, "hidden_dim": 64},
             {"num_layers": 4, "hidden_dim": 128},
             {"num_layers": 8, "hidden_dim": 64},
-            {"num_layers": 8, "hidden_dim": 128}
+            {"num_layers": 8, "hidden_dim": 128},
         ]
         assert grid == expected
 
     def test_mixed_single_and_multiple_values(self):
         """Test grid expansion with mix of single and multiple values."""
-        config = {
-            "num_layers": [4, 8],
-            "hidden_dim": 128,  # Single value
-            "lr": [0.001, 0.003]
-        }
+        config = {"num_layers": [4, 8], "hidden_dim": 128, "lr": [0.001, 0.003]}  # Single value
         grid = expand_grid(config)
         expected = [
             {"num_layers": 4, "hidden_dim": 128, "lr": 0.001},
             {"num_layers": 4, "hidden_dim": 128, "lr": 0.003},
             {"num_layers": 8, "hidden_dim": 128, "lr": 0.001},
-            {"num_layers": 8, "hidden_dim": 128, "lr": 0.003}
+            {"num_layers": 8, "hidden_dim": 128, "lr": 0.003},
         ]
         assert grid == expected
 
     def test_comma_separated_strings(self):
         """Test grid expansion with comma-separated string values."""
-        config = {
-            "num_layers": "4,8,16",
-            "problem_type": "moons,spirals"
-        }
+        config = {"num_layers": "4,8,16", "problem_type": "moons,spirals"}
         grid = expand_grid(config)
         assert len(grid) == 6  # 3 × 2 combinations
         assert {"num_layers": "4", "problem_type": "moons"} in grid
@@ -243,18 +219,12 @@ class TestMergeArgsWithCombo:
     def test_override_existing_args(self):
         """Test merging combo that overrides existing arguments."""
         base_args = argparse.Namespace(
-            num_layers=8,
-            hidden_dim=128,
-            lr=0.001,
-            problem_type="spirals"
+            num_layers=8, hidden_dim=128, lr=0.001, problem_type="spirals"
         )
-        combo = {
-            "num_layers": "4",
-            "lr": "0.003"
-        }
-        
+        combo = {"num_layers": "4", "lr": "0.003"}
+
         merged = merge_args_with_combo(base_args, combo)
-        
+
         assert merged.num_layers == 4  # Converted to int
         assert merged.lr == pytest.approx(0.003)  # Converted to float
         assert merged.hidden_dim == 128  # Unchanged
@@ -262,17 +232,11 @@ class TestMergeArgsWithCombo:
 
     def test_add_new_args(self):
         """Test merging combo that adds new arguments."""
-        base_args = argparse.Namespace(
-            num_layers=8,
-            hidden_dim=128
-        )
-        combo = {
-            "new_param": "value",
-            "another_param": 42
-        }
-        
+        base_args = argparse.Namespace(num_layers=8, hidden_dim=128)
+        combo = {"new_param": "value", "another_param": 42}
+
         merged = merge_args_with_combo(base_args, combo)
-        
+
         assert merged.num_layers == 8  # Unchanged
         assert merged.hidden_dim == 128  # Unchanged
         assert merged.new_param == "value"  # Added
@@ -281,14 +245,14 @@ class TestMergeArgsWithCombo:
     def test_boolean_conversion(self):
         """Test boolean value conversion."""
         base_args = argparse.Namespace(use_feature=False)
-        
+
         # Test string boolean values
-        for true_val in ['true', 'True', '1', 'yes', 'on']:
+        for true_val in ["true", "True", "1", "yes", "on"]:
             combo = {"use_feature": true_val}
             merged = merge_args_with_combo(base_args, combo)
             assert merged.use_feature is True
 
-        for false_val in ['false', 'False', '0', 'no', 'off']:
+        for false_val in ["false", "False", "0", "no", "off"]:
             combo = {"use_feature": false_val}
             merged = merge_args_with_combo(base_args, combo)
             assert merged.use_feature is False
@@ -296,20 +260,17 @@ class TestMergeArgsWithCombo:
     def test_type_preservation(self):
         """Test that type conversion respects original argument types."""
         base_args = argparse.Namespace(
-            int_param=10,
-            float_param=1.5,
-            str_param="hello",
-            bool_param=True
+            int_param=10, float_param=1.5, str_param="hello", bool_param=True
         )
         combo = {
             "int_param": "20",
             "float_param": "2.7",
             "str_param": "world",
-            "bool_param": "false"
+            "bool_param": "false",
         }
-        
+
         merged = merge_args_with_combo(base_args, combo)
-        
+
         assert isinstance(merged.int_param, int) and merged.int_param == 20
         assert isinstance(merged.float_param, float) and merged.float_param == pytest.approx(2.7)
         assert isinstance(merged.str_param, str) and merged.str_param == "world"
@@ -355,14 +316,22 @@ class TestGetValidArgumentNames:
     def test_contains_expected_args(self):
         """Test that valid args contain expected parameter names."""
         valid_args = get_valid_argument_names()
-        
+
         # Check some key arguments are present
         expected_args = {
-            'num_layers', 'seeds_per_layer', 'hidden_dim', 'lr',
-            'problem_type', 'n_samples', 'input_dim', 'device',
-            'sweep_config', 'blend_steps', 'shadow_lr'
+            "num_layers",
+            "seeds_per_layer",
+            "hidden_dim",
+            "lr",
+            "problem_type",
+            "n_samples",
+            "input_dim",
+            "device",
+            "sweep_config",
+            "blend_steps",
+            "shadow_lr",
         }
-        
+
         for arg in expected_args:
             assert arg in valid_args, f"Expected argument '{arg}' not found in valid args"
 
@@ -397,33 +366,25 @@ class TestCLISweepIntegration:
 class TestSweepExecution:
     """Test the actual sweep execution functionality."""
 
-    @patch('scripts.run_morphogenetic_experiment.run_single_experiment')
-    @patch('scripts.run_morphogenetic_experiment.load_sweep_configs')
-    @patch('scripts.run_morphogenetic_experiment.create_sweep_results_summary')
+    @patch("scripts.run_morphogenetic_experiment.run_single_experiment")
+    @patch("scripts.run_morphogenetic_experiment.load_sweep_configs")
+    @patch("scripts.run_morphogenetic_experiment.create_sweep_results_summary")
     def test_run_parameter_sweep_basic(self, mock_summary, mock_load, mock_run):
         """Test basic parameter sweep execution."""
         # Setup mocks
-        mock_load.return_value = [{
-            "num_layers": [4, 8],
-            "hidden_dim": [64, 128]
-        }]
-        mock_run.return_value = {
-            'run_id': 'test_run',
-            'best_acc': 0.95,
-            'seeds_activated': True
-        }
+        mock_load.return_value = [{"num_layers": [4, 8], "hidden_dim": [64, 128]}]
+        mock_run.return_value = {"run_id": "test_run", "best_acc": 0.95, "seeds_activated": True}
 
         # Create mock args
         args = argparse.Namespace(
             sweep_config="test_config.yaml",
             num_layers=8,  # Base values
             hidden_dim=128,
-            problem_type="spirals"
+            problem_type="spirals",
         )
 
         # Run the sweep
-        with patch('pathlib.Path.mkdir'), \
-             patch('builtins.print'):
+        with patch("pathlib.Path.mkdir"), patch("builtins.print"):
             run_parameter_sweep(args)
 
         # Verify sweep was executed
@@ -431,41 +392,32 @@ class TestSweepExecution:
         assert mock_run.call_count == 4  # 2×2 grid
         assert mock_summary.called
 
-    @patch('scripts.run_morphogenetic_experiment.load_sweep_configs')
+    @patch("scripts.run_morphogenetic_experiment.load_sweep_configs")
     def test_run_parameter_sweep_validation_error(self, mock_load):
         """Test sweep execution with validation errors."""
         # Setup mock to return invalid config
-        mock_load.return_value = [{
-            "invalid_param": [1, 2, 3]
-        }]
+        mock_load.return_value = [{"invalid_param": [1, 2, 3]}]
 
-        args = argparse.Namespace(
-            sweep_config="test_config.yaml",
-            problem_type="spirals"
-        )
+        args = argparse.Namespace(sweep_config="test_config.yaml", problem_type="spirals")
 
         # Should handle validation error gracefully
-        with patch('pathlib.Path.mkdir'), \
-             patch('builtins.print') as mock_print:
+        with patch("pathlib.Path.mkdir"), patch("builtins.print") as mock_print:
             run_parameter_sweep(args)
 
         # Check that error was printed
         print_calls = [call[0][0] for call in mock_print.call_args_list]
         assert any("Error in sweep config" in call for call in print_calls)
 
-    @patch('scripts.run_morphogenetic_experiment.load_sweep_configs')
+    @patch("scripts.run_morphogenetic_experiment.load_sweep_configs")
     def test_run_parameter_sweep_load_error(self, mock_load):
         """Test sweep execution with config loading errors."""
         # Setup mock to raise a FileNotFoundError (more specific exception)
         mock_load.side_effect = FileNotFoundError("Config file not found")
 
-        args = argparse.Namespace(
-            sweep_config="nonexistent.yaml",
-            problem_type="spirals"
-        )
+        args = argparse.Namespace(sweep_config="nonexistent.yaml", problem_type="spirals")
 
         # Should handle loading error gracefully
-        with patch('builtins.print') as mock_print:
+        with patch("builtins.print") as mock_print:
             run_parameter_sweep(args)
 
         # Check that error was printed
@@ -483,23 +435,33 @@ class TestSweepConfigExamples:
             "seeds_per_layer": [1, 2, 4],
             "hidden_dim": [64, 128, 256],
             "lr": "0.001,0.003,0.01",
-            "problem_type": ["moons", "spirals"]
+            "problem_type": ["moons", "spirals"],
         }
-        
+
         # Validate and expand
         valid_args = get_valid_argument_names()
         validate_sweep_config(config, valid_args)
-        
+
         grid = expand_grid(config)
-        
+
         # Should generate 3×3×3×3×2 = 162 combinations
         assert len(grid) == 162
-        
+
         # Check a few specific combinations
-        assert {"num_layers": 4, "seeds_per_layer": 1, "hidden_dim": 64, 
-                "lr": "0.001", "problem_type": "moons"} in grid
-        assert {"num_layers": 16, "seeds_per_layer": 4, "hidden_dim": 256, 
-                "lr": "0.01", "problem_type": "spirals"} in grid
+        assert {
+            "num_layers": 4,
+            "seeds_per_layer": 1,
+            "hidden_dim": 64,
+            "lr": "0.001",
+            "problem_type": "moons",
+        } in grid
+        assert {
+            "num_layers": 16,
+            "seeds_per_layer": 4,
+            "hidden_dim": 256,
+            "lr": "0.01",
+            "problem_type": "spirals",
+        } in grid
 
     def test_architecture_search_config(self):
         """Test an architecture search focused sweep config."""
@@ -507,28 +469,26 @@ class TestSweepConfigExamples:
             "num_layers": [2, 4, 6, 8, 12, 16],
             "seeds_per_layer": [1, 2, 3, 4],
             "hidden_dim": [32, 64, 128, 256],
-            "blend_steps": "10,20,30,50"
+            "blend_steps": "10,20,30,50",
         }
-        
+
         valid_args = get_valid_argument_names()
         validate_sweep_config(config, valid_args)
-        
+
         grid = expand_grid(config)
-        
+
         # Should generate 6×4×4×4 = 384 combinations
         assert len(grid) == 384
 
     def test_single_parameter_sweep(self):
         """Test sweep with only one parameter varying."""
-        config = {
-            "lr": [0.0001, 0.0003, 0.001, 0.003, 0.01]
-        }
-        
+        config = {"lr": [0.0001, 0.0003, 0.001, 0.003, 0.01]}
+
         valid_args = get_valid_argument_names()
         validate_sweep_config(config, valid_args)
-        
+
         grid = expand_grid(config)
-        
+
         # Should generate 5 combinations
         assert len(grid) == 5
         assert all("lr" in combo and len(combo) == 1 for combo in grid)

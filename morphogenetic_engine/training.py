@@ -18,7 +18,6 @@ from torch.utils.data import DataLoader
 
 from morphogenetic_engine.core import SeedManager
 
-
 # Global variable to track seed update reporting
 _last_report: dict[str, Optional[str]] = defaultdict(lambda: None)
 
@@ -145,9 +144,7 @@ def _log_seed_state_change(epoch, sid, mod, prev, logger, tb_writer):
         prev_state = prev.split(":")[0] if prev and ":" in prev else (prev or "unknown")
         logger.log_seed_event(epoch, sid, prev_state, mod.state)
         tb_writer.add_text(
-            f"seed/{sid}/events",
-            f"Epoch {epoch}: {prev_state} → {mod.state}",
-            epoch
+            f"seed/{sid}/events", f"Epoch {epoch}: {prev_state} → {mod.state}", epoch
         )
 
 
@@ -169,7 +166,9 @@ def log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f, dashboard=No
             log_f.write(f"{epoch},{sid},{mod.state},{alpha_str}\n")
 
 
-def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f, dashboard=None):
+def execute_phase_1(
+    config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f, dashboard=None
+):
     """Run the initial warm-up training phase."""
     train_loader, val_loader = loaders
     device = next(model.parameters()).device
@@ -186,7 +185,9 @@ def execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_wr
         dashboard.start_phase("phase_1", warm_up_epochs, "🔥 Warm-up Training")
 
     for epoch in range(1, warm_up_epochs + 1):
-        train_loss = train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device)
+        train_loss = train_epoch(
+            model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device
+        )
 
         val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
         best_acc = max(best_acc, val_acc)
@@ -227,6 +228,7 @@ def handle_germination_tracking(epoch, germ_epoch, acc_pre, acc_post, val_acc, t
 
 def _setup_phase_2_optimizer(lr: float):
     """Create and return optimizer and scheduler for phase 2."""
+
     def rebuild_seed_opt(model):
         params = [p for p in model.parameters() if p.requires_grad]
         if not params:
@@ -234,22 +236,25 @@ def _setup_phase_2_optimizer(lr: float):
         opt = torch.optim.Adam(params, lr=lr * 0.1, weight_decay=0.0)
         sch = torch.optim.lr_scheduler.StepLR(opt, 20, 0.1)
         return opt, sch
+
     return rebuild_seed_opt
 
 
-def _handle_germination_step(kasmina, val_loss, val_acc, epoch, dashboard, seed_manager, rebuild_opt_fn, model):
+def _handle_germination_step(
+    kasmina, val_loss, val_acc, epoch, dashboard, seed_manager, rebuild_opt_fn, model
+):
     """Handle germination logic and return updated state."""
     seeds_activated = False
     germ_epoch = None
     acc_pre = None
     optimiser = None
     scheduler = None
-    
+
     if kasmina.step(val_loss, val_acc):
         seeds_activated = True
         germ_epoch, acc_pre = epoch, val_acc
         optimiser, scheduler = rebuild_opt_fn(model)
-        
+
         # Show germination event in dashboard
         if dashboard:
             # Find which seed(s) just became active
@@ -257,7 +262,7 @@ def _handle_germination_step(kasmina, val_loss, val_acc, epoch, dashboard, seed_
                 if info["module"].state in ["blending", "active"]:
                     dashboard.show_germination_event(sid, epoch)
                     break
-    
+
     return seeds_activated, germ_epoch, acc_pre, optimiser, scheduler
 
 
@@ -280,7 +285,17 @@ def _log_phase_2_metrics(epoch, metrics, logger, tb_writer, train_loss, dashboar
 
 
 def execute_phase_2(
-    config, model, loaders, loss_fn, seed_manager, kasmina, logger, tb_writer, log_f, initial_best_acc, dashboard=None
+    config,
+    model,
+    loaders,
+    loss_fn,
+    seed_manager,
+    kasmina,
+    logger,
+    tb_writer,
+    log_f,
+    initial_best_acc,
+    dashboard=None,
 ):
     """Run the adaptation phase where the backbone is frozen and seeds can germinate."""
     train_loader, val_loader = loaders
@@ -299,7 +314,7 @@ def execute_phase_2(
     # Setup optimizer rebuilding function
     rebuild_opt_fn = _setup_phase_2_optimizer(lr)
     optimiser, scheduler = rebuild_opt_fn(model)
-    
+
     # Initialize state variables
     best_acc = initial_best_acc
     acc_pre = acc_post = t_recover = germ_epoch = None
@@ -309,28 +324,34 @@ def execute_phase_2(
         # Training step
         train_loss = 0.0
         if optimiser:
-            train_loss = train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device)
+            train_loss = train_epoch(
+                model, train_loader, optimiser, loss_fn, seed_manager, scheduler, device
+            )
 
         # Evaluation step
         val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
 
         # Germination check
-        step_seeds_activated, step_germ_epoch, step_acc_pre, new_opt, new_sch = _handle_germination_step(
-            kasmina, val_loss, val_acc, epoch, dashboard, seed_manager, rebuild_opt_fn, model
+        step_seeds_activated, step_germ_epoch, step_acc_pre, new_opt, new_sch = (
+            _handle_germination_step(
+                kasmina, val_loss, val_acc, epoch, dashboard, seed_manager, rebuild_opt_fn, model
+            )
         )
-        
+
         if step_seeds_activated:
             seeds_activated = True
             germ_epoch, acc_pre = step_germ_epoch, step_acc_pre
             optimiser, scheduler = new_opt, new_sch
 
         # Recovery tracking
-        acc_post, t_recover = handle_germination_tracking(epoch, germ_epoch, acc_pre, acc_post, val_acc, t_recover)
+        acc_post, t_recover = handle_germination_tracking(
+            epoch, germ_epoch, acc_pre, acc_post, val_acc, t_recover
+        )
 
         # Update best accuracy
         if epoch % 10 == 0 or val_acc > best_acc:
             best_acc = max(best_acc, val_acc)
-        
+
         # Prepare and log metrics
         status = ", ".join(f"{sid}:{info['status']}" for sid, info in seed_manager.seeds.items())
         metrics = {
@@ -340,8 +361,10 @@ def execute_phase_2(
             "best_acc": best_acc,
             "seeds": status,
         }
-        
-        _log_phase_2_metrics(epoch, metrics, logger, tb_writer, train_loss, dashboard, warm_up_epochs)
+
+        _log_phase_2_metrics(
+            epoch, metrics, logger, tb_writer, train_loss, dashboard, warm_up_epochs
+        )
         log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f, dashboard)
 
     return {

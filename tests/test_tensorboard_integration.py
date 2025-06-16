@@ -3,11 +3,12 @@
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+
 import pytest
 
-from scripts.run_morphogenetic_experiment import setup_experiment
-from morphogenetic_engine.training import log_seed_updates, clear_seed_report_cache
 from morphogenetic_engine.core import SeedManager
+from morphogenetic_engine.training import clear_seed_report_cache, log_seed_updates
+from scripts.run_morphogenetic_experiment import setup_experiment
 
 
 class TestTensorBoardIntegration:
@@ -37,24 +38,24 @@ class TestTensorBoardIntegration:
         args.acc_threshold = 0.95
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch('scripts.run_morphogenetic_experiment.Path') as mock_path:
+            with patch("scripts.run_morphogenetic_experiment.Path") as mock_path:
                 # Mock the project root to use our temp directory
                 mock_project_root = Path(temp_dir)
                 mock_path.return_value.parent.parent = mock_project_root
                 mock_path.__file__ = temp_dir + "/scripts/run_morphogenetic_experiment.py"
-                
+
                 # Mock ExperimentLogger to avoid file operations
-                with patch('scripts.run_morphogenetic_experiment.ExperimentLogger') as mock_logger:
-                    with patch('scripts.run_morphogenetic_experiment.SummaryWriter') as mock_writer:
+                with patch("scripts.run_morphogenetic_experiment.ExperimentLogger") as mock_logger:
+                    with patch("scripts.run_morphogenetic_experiment.SummaryWriter") as mock_writer:
                         mock_logger.return_value = Mock()
                         mock_writer.return_value = Mock()
-                        
+
                         result = setup_experiment(args)
-                        
+
                         # Should return 5 items: logger, tb_writer, log_f, device, config
                         assert len(result) == 5
                         _, tb_writer, _, _, _ = result
-                        
+
                         # Verify TensorBoard writer was created
                         mock_writer.assert_called_once()
                         assert tb_writer is not None
@@ -77,10 +78,7 @@ class TestTensorBoardIntegration:
         mock_seed.alpha = 0.75
 
         # Add seed to manager
-        seed_manager.seeds["test_seed"] = {
-            "module": mock_seed,
-            "status": "active"
-        }
+        seed_manager.seeds["test_seed"] = {"module": mock_seed, "status": "active"}
 
         # Call the function
         log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
@@ -107,23 +105,18 @@ class TestTensorBoardIntegration:
         mock_seed = Mock()
         mock_seed.state = "active"
         mock_seed.alpha = 0.0
-        
+
         # Add seed to manager
-        seed_manager.seeds["test_seed"] = {
-            "module": mock_seed,
-            "status": "active"
-        }
-        
+        seed_manager.seeds["test_seed"] = {"module": mock_seed, "status": "active"}
+
         # Call the function
         log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
-        
+
         # Verify TensorBoard text was logged for state transition
         tb_writer.add_text.assert_called_with(
-            "seed/test_seed/events",
-            "Epoch 10: unknown → active",
-            epoch
+            "seed/test_seed/events", "Epoch 10: unknown → active", epoch
         )
-        
+
         # Verify logger was called
         logger.log_seed_event.assert_called_with(epoch, "test_seed", "unknown", "active")
 
