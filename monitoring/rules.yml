@@ -1,0 +1,101 @@
+groups:
+  - name: kaslite-morphogenetic-alerts
+    rules:
+      # Validation Accuracy Drop Alert
+      - alert: ValidationAccuracyDrop
+        expr: kaslite_validation_accuracy{phase="phase_2"} < 0.85
+        for: 2m
+        labels:
+          severity: warning
+          component: training
+        annotations:
+          summary: "Validation accuracy dropped below 85% in {{ $labels.experiment_id }}"
+          description: "Phase 2 validation accuracy is {{ $value | humanizePercentage }} in experiment {{ $labels.experiment_id }}"
+
+      # Critical Accuracy Drop
+      - alert: CriticalAccuracyDrop
+        expr: kaslite_validation_accuracy < 0.70
+        for: 1m
+        labels:
+          severity: critical
+          component: training
+        annotations:
+          summary: "Critical validation accuracy drop in {{ $labels.experiment_id }}"
+          description: "Validation accuracy dropped to {{ $value | humanizePercentage }} in {{ $labels.phase }} of experiment {{ $labels.experiment_id }}"
+
+      # High Seed Drift Alert
+      - alert: SeedDriftHigh
+        expr: kaslite_seed_drift > 0.15
+        for: 1m
+        labels:
+          severity: warning
+          component: seeds
+        annotations:
+          summary: "High seed drift detected for {{ $labels.seed_id }}"
+          description: "Seed {{ $labels.seed_id }} in experiment {{ $labels.experiment_id }} has drift {{ $value | humanizePercentage }}"
+
+      # Critical Seed Drift
+      - alert: CriticalSeedDrift
+        expr: kaslite_seed_drift > 0.25
+        for: 30s
+        labels:
+          severity: critical
+          component: seeds
+        annotations:
+          summary: "Critical seed drift for {{ $labels.seed_id }}"
+          description: "Seed {{ $labels.seed_id }} in experiment {{ $labels.experiment_id }} has critical drift {{ $value | humanizePercentage }}"
+
+      # No Germinations Alert
+      - alert: NoGerminationsInPhase2
+        expr: increase(kaslite_germinations_total[10m]) == 0 and on(experiment_id) kaslite_validation_accuracy{phase="phase_2"} < 0.90
+        for: 5m
+        labels:
+          severity: warning
+          component: germination
+        annotations:
+          summary: "No seed germinations in phase 2 for {{ $labels.experiment_id }}"
+          description: "No seeds have germinated in the last 10 minutes during phase 2 with accuracy below 90%"
+
+      # Experiment Stalled
+      - alert: ExperimentStalled
+        expr: increase(kaslite_epochs_total[5m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: training
+        annotations:
+          summary: "Experiment {{ $labels.experiment_id }} appears stalled"
+          description: "No epoch progress in the last 5 minutes for experiment {{ $labels.experiment_id }}"
+
+      # Training Loss Explosion
+      - alert: TrainingLossExplosion
+        expr: kaslite_training_loss > 10
+        for: 1m
+        labels:
+          severity: critical
+          component: training
+        annotations:
+          summary: "Training loss explosion in {{ $labels.experiment_id }}"
+          description: "Training loss reached {{ $value }} in {{ $labels.phase }} of experiment {{ $labels.experiment_id }}"
+
+      # Kasmina Controller Issues
+      - alert: KasminaHighPlateau
+        expr: kaslite_kasmina_plateau_counter / kaslite_kasmina_patience > 0.8
+        for: 2m
+        labels:
+          severity: warning
+          component: kasmina
+        annotations:
+          summary: "Kasmina controller plateau approaching threshold"
+          description: "Plateau counter is {{ $value | humanizePercentage }} of patience threshold in experiment {{ $labels.experiment_id }}"
+
+      # Seed Health Issues
+      - alert: SeedHealthDegraded
+        expr: kaslite_seed_health_signal < 0.01 and kaslite_seed_state > 0
+        for: 2m
+        labels:
+          severity: warning
+          component: seeds
+        annotations:
+          summary: "Seed {{ $labels.seed_id }} health degraded"
+          description: "Active seed {{ $labels.seed_id }} has very low health signal {{ $value }} in experiment {{ $labels.experiment_id }}"

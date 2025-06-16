@@ -254,6 +254,92 @@ TensorBoard will be available at `http://localhost:6006` showing detailed curves
 - Seed activation patterns and alpha ramping
 - Phase transition timing
 
+### Live Monitoring & Dashboards
+
+The morphogenetic engine includes comprehensive **Prometheus metrics** and **Grafana dashboards** for real-time monitoring and alerting.
+
+#### Prometheus Metrics
+
+All experiments automatically expose detailed metrics at `http://localhost:8000/metrics`:
+
+**Training Metrics:**
+- `kaslite_epochs_total`: Number of epochs completed by phase
+- `kaslite_validation_loss` / `kaslite_validation_accuracy`: Real-time performance
+- `kaslite_best_accuracy`: Best accuracy achieved
+- `kaslite_germinations_total`: Total seed germinations
+
+**Seed-Level Metrics:**
+- `kaslite_seed_alpha`: Blending alpha values for each seed
+- `kaslite_seed_drift`: Interface drift measurements
+- `kaslite_seed_health_signal`: Activation variance health indicators
+- `kaslite_seed_state`: Current state (dormant/training/blending/active)
+
+**Controller Metrics:**
+- `kaslite_kasmina_plateau_counter`: Current plateau detection counter
+- `kaslite_epoch_duration_seconds`: Training time per epoch
+
+#### Docker Compose Monitoring Stack
+
+Launch the complete monitoring infrastructure with Docker Compose:
+
+```bash
+# Start the full monitoring stack
+docker compose up -d
+
+# Or run just the monitoring services
+docker compose up -d prometheus grafana alertmanager
+```
+
+**Access URLs:**
+- **Application Metrics**: http://localhost:8000/metrics
+- **Prometheus UI**: http://localhost:9090
+- **Grafana Dashboards**: http://localhost:3000 (admin/kaslite)
+- **Alertmanager**: http://localhost:9093
+
+#### Grafana Dashboard
+
+The included dashboard provides:
+
+- **Validation Accuracy Trends**: Real-time accuracy curves by phase
+- **Training/Validation Loss**: Loss convergence visualization
+- **Seed Status Table**: Live view of all seed states, alpha values, and drift
+- **Seed Alpha Blending**: Time-series view of alpha ramping
+- **Interface Drift Monitoring**: Drift levels with warning thresholds
+- **Germination Events**: Controller activity and seed activation rates
+- **Performance Stats**: Best accuracy, experiment duration, active seed counts
+
+#### Automated Alerting
+
+Alertmanager monitors key thresholds and sends notifications for:
+
+**Critical Alerts:**
+- Validation accuracy drops below 70%
+- Training loss explosion (>10)
+- Critical seed drift (>25%)
+- Experiment stalled (no progress)
+
+**Warning Alerts:**
+- Validation accuracy drops below 85% in phase 2
+- High seed drift (>15%)
+- No germinations during phase 2 with low accuracy
+- Kasmina plateau counter approaching threshold
+
+Configure Slack webhooks in `monitoring/alertmanager.yml` to receive real-time notifications.
+
+#### Quick Start: Monitoring
+
+```bash
+# 1. Start the monitoring stack
+docker compose up -d
+
+# 2. Run an experiment (metrics auto-exposed)
+python scripts/run_morphogenetic_experiment.py --problem_type spirals
+
+# 3. View real-time dashboards
+open http://localhost:3000  # Grafana
+open http://localhost:9090  # Prometheus
+```
+
 ### Directory Structure
 
 ```

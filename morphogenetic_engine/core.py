@@ -152,6 +152,9 @@ class KasminaMicro:
         Returns:
             True if germination occurred, False otherwise
         """
+        # Import here to avoid circular imports
+        from .monitoring import get_monitor
+        
         # Check if loss has not improved by at least delta
         if self.prev_loss - val_loss < self.delta:
             self.plateau += 1
@@ -160,6 +163,11 @@ class KasminaMicro:
 
         self.prev_loss = val_loss
 
+        # Update Prometheus metrics for Kasmina controller
+        monitor = get_monitor()
+        if monitor:
+            monitor.update_kasmina_metrics(self.plateau, self.patience)
+
         # Only trigger germination if:
         # 1. Accuracy is below threshold (problem not solved)
         # 2. Loss plateau persists beyond patience
@@ -167,6 +175,9 @@ class KasminaMicro:
             self.plateau = 0  # Reset plateau counter
             seed_id = self._select_seed()
             if seed_id and self.seed_manager.request_germination(seed_id):
+                # Record germination in monitoring
+                if monitor:
+                    monitor.record_germination()
                 return True  # Signal germination occurred
         return False
 

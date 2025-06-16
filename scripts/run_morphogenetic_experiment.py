@@ -216,6 +216,10 @@ def setup_experiment(args):
         f"_dw{args.drift_warn}"
     )
 
+    # Initialize Prometheus monitoring
+    from morphogenetic_engine.monitoring import initialize_monitoring
+    initialize_monitoring(experiment_id=slug, port=8000)
+
     # Determine log location and initialise logger
     project_root = Path(__file__).parent.parent
 
@@ -736,6 +740,10 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             # Export metrics for DVC
             export_metrics_for_dvc(final_stats, slug, project_root)
 
+            # Cleanup monitoring
+            from morphogenetic_engine.monitoring import cleanup_monitoring
+            cleanup_monitoring()
+
             # Return results for sweep summary
             return {
                 "run_id": run_id,
@@ -749,6 +757,10 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
                 ),
             }
     except (RuntimeError, ValueError, KeyError, torch.cuda.OutOfMemoryError) as e:
+        # Cleanup monitoring on error
+        from morphogenetic_engine.monitoring import cleanup_monitoring
+        cleanup_monitoring()
+        
         # End MLflow run on error
         if MLFLOW_AVAILABLE:
             try:
