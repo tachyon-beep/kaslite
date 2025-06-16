@@ -6,4 +6,6 @@ clearml>=1.8.4
 tensorboard
 pyyaml
 rich
+mlflow>=2.0.0
+dvc[all]>=3.0.0
 

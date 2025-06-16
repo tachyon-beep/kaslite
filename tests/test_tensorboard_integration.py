@@ -8,7 +8,7 @@ import pytest
 
 from morphogenetic_engine.core import SeedManager
 from morphogenetic_engine.training import clear_seed_report_cache, log_seed_updates
-from scripts.run_morphogenetic_experiment import setup_experiment
+from scripts.run_morphogenetic_experiment import setup_experiment_for_tests as setup_experiment
 
 
 class TestTensorBoardIntegration:

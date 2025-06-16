@@ -1,0 +1,27 @@
+# DVC ignore file
+# Ignore temporary files and directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.env
+
+# Ignore log files that change frequently
+*.log
+
+# Ignore MLflow tracking files (optional, if you want to version them separately)
+mlruns/
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore OS files
+.DS_Store
+Thumbs.db

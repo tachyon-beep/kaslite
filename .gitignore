@@ -7,4 +7,5 @@ __pycache__/
 results/
 !results/*.log
 runs/
+mlruns/
 .coverage

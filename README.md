@@ -2,6 +2,65 @@
 
 This repo demonstrates a morphogenetic architecture with "soft-landing" seeds. Each sentinel seed now awakens gradually: it shadow-trains as an auto-encoder, blends its output into the trunk using a ramped alpha parameter, then becomes fully active.
 
+## Phase 2: Experiment Tracking & Artifacts
+
+This project now includes comprehensive experiment tracking and versioning using **MLflow** and **DVC**, providing a fully reproducible, queryable record of every run's parameters, metrics, and generated artifacts.
+
+### MLflow Integration
+
+All experiments are automatically tracked with MLflow:
+
+- **Parameters**: All CLI flags and configuration values are logged
+- **Metrics**: Training/validation loss, accuracy, seed alpha values, and more
+- **Artifacts**: Model weights, TensorBoard logs, experiment logs
+- **Phase Transitions**: Tagged with phase_1/phase_2 for easy filtering
+- **Seed Tracking**: Individual seed states and alpha blending values
+
+### DVC Pipeline
+
+Data and model versioning is handled by DVC with a reproducible pipeline:
+
+```bash
+# Initialize DVC (first time only)
+dvc init
+
+# Reproduce entire pipeline from scratch
+dvc repro
+
+# Generate data only
+dvc repro generate_data
+
+# Run training only (after data exists)
+dvc repro train
+
+# Pull data from remote storage
+dvc pull
+
+# Push data/models to remote storage
+dvc push
+```
+
+### Quick Start with MLflow + DVC
+
+```bash
+# Install dependencies (includes MLflow and DVC)
+pip install -r requirements.txt
+
+# Initialize DVC (first time only)
+dvc init
+
+# Run a complete reproducible experiment
+dvc repro
+
+# View results in different UIs
+tensorboard --logdir runs/          # TensorBoard metrics
+mlflow ui                          # MLflow experiment tracking
+
+# Experiment tracking URLs
+# TensorBoard: http://localhost:6006
+# MLflow: http://localhost:5000
+```
+
 ## Usage
 
 ### Single Experiment Mode
@@ -30,6 +89,8 @@ python scripts/run_morphogenetic_experiment.py --device cuda --problem_type clus
 # Full configuration example with custom training parameters
 python scripts/run_morphogenetic_experiment.py --problem_type moons --input_dim 3 --device cuda --blend_steps 200 --shadow_lr 0.002 --batch_size 64 --train_frac 0.8
 ```
+
+All experiments are automatically tracked in MLflow with full parameter and metric logging.
 
 ### Parameter Sweep Mode
 
@@ -193,6 +254,45 @@ TensorBoard will be available at `http://localhost:6006` showing detailed curves
 - Seed activation patterns and alpha ramping
 - Phase transition timing
 
+### Directory Structure
+
+```
+project/
+├── data/                 # raw + generated datasets (DVC-tracked)
+├── morphogenetic_engine/ # your code (CLI + modules)
+├── mlruns/               # MLflow local tracking store
+├── runs/                 # TensorBoard logs per-run
+├── results/              # logs, models, metrics.json per-run (DVC outputs)
+├── scripts/              # experiment and data generation scripts
+├── dvc.yaml              # DVC pipeline stages
+├── dvc.lock              # DVC lock file (auto-generated)
+├── params.yaml           # default parameters for DVC
+├── requirements.txt      # dependencies including MLflow + DVC
+└── .dvcignore           # DVC ignore patterns
+```
+
+### Reproducible Workflows
+
+The project supports fully reproducible experiments:
+
+1. **DVC Pipeline**: `dvc repro` regenerates everything from data to final model
+2. **MLflow Tracking**: Every run is logged with parameters, metrics, and artifacts  
+3. **Data Versioning**: Raw datasets and models are version-controlled
+4. **Parameter Files**: Default configurations in `params.yaml`
+
+```bash
+# Complete reproduction workflow
+dvc repro                    # Run full pipeline
+mlflow ui                    # Inspect experiment runs
+tensorboard --logdir runs/  # View training curves
+
+# Version and share your work
+dvc remote add -d storage s3://my-bucket/dvc-storage  # Configure remote
+dvc push                     # Push data/models to remote
+git add . && git commit -m "Experiment results"       # Version code/config
+git push                     # Share with team
+```
+
 ### Datasets
 
 - **spirals**: Classic two-spiral classification problem, padded to `input_dim`
@@ -200,6 +300,23 @@ TensorBoard will be available at `http://localhost:6006` showing detailed curves
 - **clusters**: Gaussian blob clusters with configurable centers and spread
 - **spheres**: Points on concentric spherical shells with noise
 - **complex_moons**: Legacy combination of moons and clusters datasets
+
+## Features
+
+### Experiment Tracking
+- **MLflow**: Complete experiment lifecycle tracking
+- **TensorBoard**: Real-time training visualization
+- **JSON Metrics**: Structured metrics for DVC pipeline integration
+
+### Data Management  
+- **DVC**: Data and model versioning
+- **Synthetic Data**: Reproducible dataset generation
+- **Pipeline**: Automated data → train → evaluate workflow
+
+### Morphogenetic Architecture
+- **Sentinel Seeds**: Adaptive architecture expansion
+- **Soft Landing**: Gradual seed activation with alpha blending
+- **Phase-based Training**: Warm-up → adaptation phases
 
 ## Changelog
 

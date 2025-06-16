@@ -1,0 +1,57 @@
+stages:
+  generate_data:
+    cmd: python scripts/generate_data.py --problem_type ${problem_type} --n_samples ${n_samples} --input_dim ${input_dim} --output data/${problem_type}
+    params:
+      - problem_type
+      - n_samples
+      - input_dim
+    outs:
+      - data/${problem_type}.npz
+
+  train:
+    cmd: >
+      python scripts/run_morphogenetic_experiment.py 
+      --problem_type ${problem_type}
+      --n_samples ${n_samples}
+      --input_dim ${input_dim}
+      --hidden_dim ${hidden_dim}
+      --batch_size ${batch_size}
+      --lr ${lr}
+      --warm_up_epochs ${warm_up_epochs}
+      --adaptation_epochs ${adaptation_epochs}
+      --device ${device}
+      --seed ${seed}
+      --blend_steps ${blend_steps}
+      --shadow_lr ${shadow_lr}
+      --progress_thresh ${progress_thresh}
+      --drift_warn ${drift_warn}
+      --acc_threshold ${acc_threshold}
+      --num_layers ${num_layers}
+      --seeds_per_layer ${seeds_per_layer}
+      --train_frac ${train_frac}
+    deps:
+      - scripts/run_morphogenetic_experiment.py
+      - morphogenetic_engine/
+      - data/${problem_type}.npz
+    params:
+      - problem_type
+      - n_samples
+      - input_dim
+      - hidden_dim
+      - batch_size
+      - lr
+      - warm_up_epochs
+      - adaptation_epochs
+      - device
+      - seed
+      - blend_steps
+      - shadow_lr
+      - progress_thresh
+      - drift_warn
+      - acc_threshold
+      - num_layers
+      - seeds_per_layer
+      - train_frac
+    outs:
+      - results/
+      - runs/
