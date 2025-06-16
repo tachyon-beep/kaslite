@@ -81,7 +81,7 @@ class TestMainFunction:
                                 mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
                                 try:
                                     main()
-                                except ( # pylint: disable=broad-except  # nosec # noqa: S110
+                                except (  # pylint: disable=broad-except  # nosec # noqa: S110
                                     SystemExit,
                                     Exception,
                                 ):
@@ -119,7 +119,7 @@ class TestMainFunction:
 
                 try:
                     main()
-                except ( # pylint: disable=broad-except  # nosec # noqa: S110
+                except (  # pylint: disable=broad-except  # nosec # noqa: S110
                     SystemExit,
                     Exception,
                 ):  # pylint: disable=broad-except  # nosec # noqa: S110
@@ -166,7 +166,7 @@ class TestCLIDispatch:
 
                     try:
                         main()
-                    except (    # pylint: disable=broad-except  # nosec # noqa: S110
+                    except (  # pylint: disable=broad-except  # nosec # noqa: S110
                         SystemExit,
                         Exception,
                     ):
@@ -211,7 +211,7 @@ class TestCLIDispatch:
 
                 try:
                     main()
-                except ( # pylint: disable=broad-except  # nosec # noqa: S110
+                except (  # pylint: disable=broad-except  # nosec # noqa: S110
                     SystemExit,
                     Exception,
                 ):

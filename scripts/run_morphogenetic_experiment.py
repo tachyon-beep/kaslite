@@ -33,21 +33,25 @@ from morphogenetic_engine.experiment import build_model_and_agents as build_core
 from morphogenetic_engine.logger import ExperimentLogger
 from morphogenetic_engine.training import clear_seed_report_cache, execute_phase_1, execute_phase_2
 
+
 # MLflow import with graceful fallback and test environment detection
 def _is_testing_mode() -> bool:
     """Check if we're in testing mode."""
     try:
-        return 'pytest' in sys.modules or 'unittest' in sys.modules
+        return "pytest" in sys.modules or "unittest" in sys.modules
     except (ImportError, AttributeError):
         return False
+
 
 TESTING_MODE = _is_testing_mode()
 
 try:
     import mlflow
     import mlflow.exceptions
+
     try:
         import mlflow.pytorch
+
         MLFLOW_PYTORCH_AVAILABLE = True
     except ImportError:
         MLFLOW_PYTORCH_AVAILABLE = False
@@ -224,7 +228,7 @@ def setup_experiment(args):
 
     # Determine log location and initialise logger
     project_root = Path(__file__).parent.parent
-    
+
     # Configure MLflow if available
     if MLFLOW_AVAILABLE and mlflow is not None:
         mlruns_dir = project_root / "mlruns"
@@ -389,13 +393,13 @@ def export_metrics_for_dvc(final_stats: Dict[str, Any], slug: str, project_root:
         "recovery_time": final_stats.get("recovery_time"),
         "seeds_activated": final_stats.get("seeds_activated", False),
     }
-    
+
     # Remove None values
     metrics = {k: v for k, v in metrics.items() if v is not None}
-    
+
     # Save metrics JSON
     metrics_path = project_root / "results" / f"metrics_{slug}.json"
-    with open(metrics_path, 'w', encoding='utf-8') as f:
+    with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
 
@@ -643,7 +647,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
             logger.log_phase_transition(0, "init", "phase_1")
             tb_writer.add_text("phase/transitions", "Epoch 0: init → phase_1", 0)
             dashboard.show_phase_transition("phase_1", 0)
-            
+
             # Log phase transition to MLflow
             if MLFLOW_AVAILABLE and mlflow is not None:
                 try:
@@ -663,7 +667,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
                 config["warm_up_epochs"],
             )
             dashboard.show_phase_transition("phase_2", config["warm_up_epochs"])
-            
+
             # Log phase transition to MLflow
             if MLFLOW_AVAILABLE and mlflow is not None:
                 try:
@@ -696,27 +700,31 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
                         mlflow.log_metric("accuracy_dip", final_stats["accuracy_dip"])
                     if "recovery_time" in final_stats and final_stats["recovery_time"] is not None:
                         mlflow.log_metric("recovery_time", final_stats["recovery_time"])
-                    
+
                     mlflow.log_metric("total_seeds", len(seed_manager.seeds))
                     active_seeds_count = sum(
-                        1 for info in seed_manager.seeds.values() if info["module"].state == "active"
+                        1
+                        for info in seed_manager.seeds.values()
+                        if info["module"].state == "active"
                     )
                     mlflow.log_metric("active_seeds", active_seeds_count)
-                    mlflow.set_tag("seeds_activated", str(final_stats.get("seeds_activated", False)))
+                    mlflow.set_tag(
+                        "seeds_activated", str(final_stats.get("seeds_activated", False))
+                    )
 
                     # Log artifacts
                     log_path = project_root / "results" / f"results_{slug}.log"
                     if log_path.exists():
                         mlflow.log_artifact(str(log_path))
-                    
+
                     # Log TensorBoard logs
                     tb_dir = project_root / "runs" / slug
                     if tb_dir.exists():
                         mlflow.log_artifacts(str(tb_dir), "tensorboard")
-                        
+
                     # Log model
                     try:
-                        if MLFLOW_PYTORCH_AVAILABLE and hasattr(mlflow, 'pytorch'):
+                        if MLFLOW_PYTORCH_AVAILABLE and hasattr(mlflow, "pytorch"):
                             mlflow.pytorch.log_model(model, "model")  # type: ignore[attr-defined]
                         else:
                             print("Warning: MLflow pytorch module not available")
@@ -724,13 +732,13 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
                         print(f"Warning: Could not log model to MLflow: {e}")
                 except (ImportError, AttributeError, RuntimeError, ValueError, OSError) as e:
                     print(f"Warning: MLflow logging failed: {e}")
-            
+
             # Export metrics for DVC
             export_metrics_for_dvc(final_stats, slug, project_root)
 
             # Close TensorBoard writer
             tb_writer.close()
-            
+
             # End MLflow run
             if MLFLOW_AVAILABLE and mlflow is not None:
                 try:
@@ -775,9 +783,15 @@ def create_run_directory_and_setup(sweep_dir: Path, run_slug: str, original_setu
         args_inner, run_dir_param=run_dir, original_setup_param=original_setup_func
     ):
         """Modified setup_experiment that puts logs in the run directory."""
-        logger_inner, tb_writer_inner, log_f_inner, device_inner, config_inner, slug_inner, project_root_inner = (
-            original_setup_param(args_inner)
-        )
+        (
+            logger_inner,
+            tb_writer_inner,
+            log_f_inner,
+            device_inner,
+            config_inner,
+            slug_inner,
+            project_root_inner,
+        ) = original_setup_param(args_inner)
 
         # Move the log file to the run directory
         original_log_path = Path(log_f_inner.name)
@@ -795,7 +809,15 @@ def create_run_directory_and_setup(sweep_dir: Path, run_slug: str, original_setu
         tb_dir_new = run_dir_param / "tensorboard"
         tb_writer_new = SummaryWriter(log_dir=str(tb_dir_new))
 
-        return logger_inner, tb_writer_new, log_f_new, device_inner, config_inner, slug_inner, project_root_inner
+        return (
+            logger_inner,
+            tb_writer_new,
+            log_f_new,
+            device_inner,
+            config_inner,
+            slug_inner,
+            project_root_inner,
+        )
 
     return run_dir, setup_experiment_for_sweep
 
@@ -935,6 +957,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.benchmark = False
 
     main()
+
 
 def setup_experiment_for_tests(args):
     """Backward-compatible setup_experiment for tests that expect 5 return values."""
