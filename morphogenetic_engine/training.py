@@ -8,17 +8,17 @@ and executing different phases of morphogenetic experiments.
 from __future__ import annotations
 
 import random
+
+# MLflow import with test detection
+import sys
 from collections import defaultdict
 from typing import Optional
 
+import mlflow
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
-
-# MLflow import with test detection
-import sys
-import mlflow
 
 # Check if we're in testing mode to conditionally disable MLflow
 TESTING_MODE = "pytest" in sys.modules or "unittest" in sys.modules

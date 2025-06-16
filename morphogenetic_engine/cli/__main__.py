@@ -15,23 +15,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI package."""
     if argv is None:
         argv = sys.argv[1:]
-    
+
     if not argv:
         print("Usage: python -m morphogenetic_engine.cli {sweep|reports} [args...]")
         print("Available commands:")
         print("  sweep   - Run hyperparameter sweeps")
         print("  reports - Generate and analyze sweep reports")
         return 1
-    
+
     command = argv[0]
     args = argv[1:]
-    
-    if command == 'sweep':
+
+    if command == "sweep":
         from .sweep import SweepCLI
+
         cli = SweepCLI()
         return cli.main(args)
-    elif command == 'reports':
+    elif command == "reports":
         from .reports import ReportsCLI
+
         cli = ReportsCLI()
         return cli.main(args)
     else:
@@ -40,5 +42,5 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

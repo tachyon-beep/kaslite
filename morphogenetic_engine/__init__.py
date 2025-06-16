@@ -5,12 +5,11 @@ This package provides core components for building and training
 morphogenetic neural networks with adaptive architecture capabilities.
 """
 
-from . import cli_dashboard, components, core, datasets, experiment, logger, training
-from . import sweeps, cli
+from . import cli, cli_dashboard, components, core, datasets, experiment, logger, sweeps, training
 
 __all__ = [
     "cli_dashboard",
-    "components", 
+    "components",
     "core",
     "datasets",
     "experiment",

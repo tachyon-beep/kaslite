@@ -47,7 +47,7 @@ TESTING_MODE = _is_testing_mode()
 
 import mlflow
 import mlflow.exceptions
-import mlflow.pytorch
+import mlflow.pytorch as mlflow_pytorch
 
 MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
 
@@ -714,7 +714,7 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
 
                     # Log model
                     try:
-                        mlflow.pytorch.log_model(model, "model")
+                        mlflow_pytorch.log_model(model, "model")
                     except (ImportError, RuntimeError, ValueError, OSError) as e:
                         print(f"Warning: Could not log model to MLflow: {e}")
                 except (ImportError, AttributeError, RuntimeError, ValueError, OSError) as e:

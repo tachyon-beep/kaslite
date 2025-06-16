@@ -11,13 +11,14 @@ This script demonstrates the new sweep capabilities including:
 import subprocess
 import sys
 from pathlib import Path
+
 from rich.console import Console
 
 
 def run_command(cmd, description, capture=False):
     """Run a command and optionally capture output."""
     console = Console()
-    
+
     console.print(f"\n{'='*60}")
     console.print(f"STEP: {description}")
     console.print(f"COMMAND: {cmd}")
@@ -44,21 +45,25 @@ def main():
 
     # Check if we're in the right directory
     if not Path("examples/quick_sweep.yaml").exists():
-        console.print("❌ Error: quick_sweep.yaml not found. Please run this script from the project root.")
+        console.print(
+            "❌ Error: quick_sweep.yaml not found. Please run this script from the project root."
+        )
         sys.exit(1)
 
     # 1. Test CLI help commands
     if not run_command("python -m morphogenetic_engine.cli.sweep --help", "Test sweep CLI help")[0]:
         return
 
-    if not run_command("python -m morphogenetic_engine.cli.reports --help", "Test reports CLI help")[0]:
+    if not run_command(
+        "python -m morphogenetic_engine.cli.reports --help", "Test reports CLI help"
+    )[0]:
         return
 
     # 2. Generate test data if needed
     if not Path("data/spirals.npz").exists():
         if not run_command(
             "python scripts/generate_data.py --output data/spirals.npz --problem spirals --samples 1000",
-            "Generate test data for spirals problem"
+            "Generate test data for spirals problem",
         )[0]:
             return
 
@@ -66,7 +71,7 @@ def main():
     console.print("\n[bold cyan]Running Quick Grid Search Sweep[/bold cyan]")
     if not run_command(
         "python -m morphogenetic_engine.cli.sweep grid --config examples/quick_sweep.yaml --parallel 2",
-        "Execute grid search with parallel execution"
+        "Execute grid search with parallel execution",
     )[0]:
         console.print("⚠️  Grid search failed, but continuing with demo...")
 
@@ -74,13 +79,13 @@ def main():
     console.print("\n[bold cyan]Testing Quick Sweep Command[/bold cyan]")
     if not run_command(
         "python -m morphogenetic_engine.cli.sweep quick --problem spirals --trials 4",
-        "Run quick validation sweep"
+        "Run quick validation sweep",
     )[0]:
         console.print("⚠️  Quick sweep failed, but continuing with demo...")
 
     # 5. Find and analyze results
     console.print("\n[bold cyan]Analyzing Sweep Results[/bold cyan]")
-    
+
     # Find the most recent sweep directory
     results_dir = Path("results/sweeps")
     if results_dir.exists():
@@ -89,18 +94,18 @@ def main():
             # Get the most recent directory
             latest_sweep = max(sweep_dirs, key=lambda x: x.stat().st_mtime)
             console.print(f"Found sweep results in: {latest_sweep}")
-            
+
             # Generate summary report
             if not run_command(
                 f"python -m morphogenetic_engine.cli.reports summary --sweep-dir {latest_sweep}",
-                "Generate sweep summary report"
+                "Generate sweep summary report",
             )[0]:
                 console.print("⚠️  Summary report failed")
-            
+
             # Generate detailed analysis
             if not run_command(
                 f"python -m morphogenetic_engine.cli.reports analysis --sweep-dir {latest_sweep}",
-                "Generate detailed parameter analysis"
+                "Generate detailed parameter analysis",
             )[0]:
                 console.print("⚠️  Analysis report failed")
         else:
@@ -113,14 +118,14 @@ def main():
     success, output = run_command(
         "python -c \"import optuna; print('Optuna available')\"",
         "Check Optuna availability",
-        capture=True
+        capture=True,
     )
-    
+
     if success:
         console.print("✅ Optuna is available, testing Bayesian optimization")
         if not run_command(
             "python -m morphogenetic_engine.cli.sweep bayesian --config examples/bayesian_sweep.yaml --trials 3",
-            "Run Bayesian optimization sweep"
+            "Run Bayesian optimization sweep",
         )[0]:
             console.print("⚠️  Bayesian optimization failed")
     else:
@@ -135,10 +140,10 @@ def main():
         console.print("Found sweep configurations:")
         for config in sweep_configs:
             console.print(f"  📄 {config.name}")
-            
+
             # Show first few lines of each config
             try:
-                with open(config, 'r') as f:
+                with open(config, "r") as f:
                     lines = f.readlines()[:5]
                     console.print("     " + "".join(lines).rstrip())
                     if len(lines) == 5:
@@ -154,16 +159,20 @@ def main():
     console.print("✅ Rich-powered progress tracking and reporting")
     console.print("✅ Flexible YAML configuration system")
     console.print("✅ Results analysis and parameter importance")
-    
+
     if success:  # Optuna was available
         console.print("✅ Bayesian optimization with Optuna integration")
     else:
         console.print("⚠️  Bayesian optimization requires Optuna (pip install optuna)")
-    
+
     console.print("\n[bold cyan]Next Steps:[/bold cyan]")
     console.print("• Explore the examples/ directory for more sweep configurations")
-    console.print("• Run larger sweeps with: morphogenetic-sweep grid --config examples/enhanced_sweep.yaml")
-    console.print("• Generate detailed reports with: morphogenetic-reports summary --sweep-dir <path>")
+    console.print(
+        "• Run larger sweeps with: morphogenetic-sweep grid --config examples/enhanced_sweep.yaml"
+    )
+    console.print(
+        "• Generate detailed reports with: morphogenetic-reports summary --sweep-dir <path>"
+    )
     console.print("• Set up CI/CD with the provided .github/workflows/ci.yml")
 
 
