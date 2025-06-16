@@ -37,18 +37,16 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from morphogenetic_engine.components import BaseNet, SentinelSeed
 from morphogenetic_engine.core import KasminaMicro, SeedManager
-from scripts.run_morphogenetic_experiment import (
-    build_model_and_agents,
+from morphogenetic_engine.datasets import (
     create_clusters,
     create_complex_moons,
     create_moons,
     create_spheres,
     create_spirals,
-    evaluate,
-    main,
-    parse_arguments,
-    train_epoch,
 )
+from morphogenetic_engine.experiment import build_model_and_agents
+from morphogenetic_engine.training import evaluate, train_epoch
+from scripts.run_morphogenetic_experiment import main, parse_arguments
 
 
 class TestCreateSpirals:
@@ -456,7 +454,7 @@ class TestMainFunction:
                             # Mock the data splitting to avoid actual computation
                             mock_split.return_value = (Mock(), Mock())
                             with patch(
-                                "scripts.run_morphogenetic_experiment.evaluate"
+                                "morphogenetic_engine.training.evaluate"
                             ) as mock_eval:
                                 mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
                                 try:
@@ -479,9 +477,9 @@ class TestMainFunction:
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch(
-                "scripts.run_morphogenetic_experiment.create_complex_moons"
+                "scripts.run_morphogenetic_experiment.datasets.create_complex_moons"
             ) as mock_create, patch(
-                "scripts.run_morphogenetic_experiment.BaseNet"
+                "morphogenetic_engine.components.BaseNet"
             ) as mock_net, patch(
                 "torch.optim.Adam"
             ) as mock_optim, patch(
@@ -721,9 +719,9 @@ class TestCLIDispatch:
 
             with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
                 with patch(
-                    f"scripts.run_morphogenetic_experiment.{expected_function}"
+                    f"scripts.run_morphogenetic_experiment.datasets.{expected_function}"
                 ) as mock_func, patch(
-                    "scripts.run_morphogenetic_experiment.BaseNet"
+                    "morphogenetic_engine.components.BaseNet"
                 ) as mock_net, patch(
                     "torch.optim.Adam"
                 ) as mock_optim, patch(
@@ -766,9 +764,9 @@ class TestCLIDispatch:
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch(
-                "scripts.run_morphogenetic_experiment.create_spirals"
+                "scripts.run_morphogenetic_experiment.datasets.create_spirals"
             ) as mock_spirals, patch(
-                "scripts.run_morphogenetic_experiment.BaseNet"
+                "morphogenetic_engine.components.BaseNet"
             ) as mock_net, patch(
                 "torch.optim.Adam"
             ) as mock_optim, patch(

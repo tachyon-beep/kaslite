@@ -4,11 +4,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 import pytest
-import torch
-from torch.utils.tensorboard import SummaryWriter
 
-from scripts.run_morphogenetic_experiment import setup_experiment, log_seed_updates
-from morphogenetic_engine.logger import ExperimentLogger
+from scripts.run_morphogenetic_experiment import setup_experiment
+from morphogenetic_engine.training import log_seed_updates, clear_seed_report_cache
 from morphogenetic_engine.core import SeedManager
 
 
@@ -64,49 +62,47 @@ class TestTensorBoardIntegration:
     def test_log_seed_updates_with_tensorboard(self):
         """Test that log_seed_updates correctly logs to TensorBoard."""
         # Clear global state first
-        from scripts.run_morphogenetic_experiment import _last_report
-        _last_report.clear()
-        
+        clear_seed_report_cache()
+
         # Create mock objects
         epoch = 5
         seed_manager = SeedManager()
         logger = Mock()
         tb_writer = Mock()
         log_f = Mock()
-        
+
         # Create a mock seed
         mock_seed = Mock()
         mock_seed.state = "blending"
         mock_seed.alpha = 0.75
-        
+
         # Add seed to manager
         seed_manager.seeds["test_seed"] = {
             "module": mock_seed,
             "status": "active"
         }
-        
+
         # Call the function
         log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
-        
+
         # Verify TensorBoard scalar was logged for alpha
         tb_writer.add_scalar.assert_called_with("seed/test_seed/alpha", 0.75, epoch)
-        
+
         # Verify logger was called
         logger.log_blending_progress.assert_called_with(epoch, "test_seed", 0.75)
 
     def test_log_seed_updates_state_transition_tensorboard(self):
         """Test that state transitions are logged to TensorBoard as text."""
         # Clear global state first
-        from scripts.run_morphogenetic_experiment import _last_report
-        _last_report.clear()
-        
+        clear_seed_report_cache()
+
         # Create mock objects
         epoch = 10
         seed_manager = SeedManager()
         logger = Mock()
         tb_writer = Mock()
         log_f = Mock()
-        
+
         # Create a mock seed in a different state
         mock_seed = Mock()
         mock_seed.state = "active"
@@ -136,13 +132,11 @@ class TestTensorBoardIntegration:
         # This test would be part of integration testing
         # to ensure that tb_writer.close() is called
         # The implementation already includes this in the try/except blocks
-        pass
 
     def test_tensorboard_directory_structure(self):
         """Test that TensorBoard logs are saved in the correct directory structure."""
         # This would test that runs/<slug>/ directories are created correctly
         # The directory structure follows: runs/{problem_type}_dim{input_dim}_{device}_h{hidden_dim}_...
-        pass
 
 
 if __name__ == "__main__":

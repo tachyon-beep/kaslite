@@ -14,15 +14,15 @@ import pytest
 import yaml
 
 from scripts.run_morphogenetic_experiment import (
-    parse_value_list,
-    validate_sweep_config,
-    load_sweep_configs,
     expand_grid,
-    merge_args_with_combo,
     generate_run_slug,
     get_valid_argument_names,
+    load_sweep_configs,
+    merge_args_with_combo,
+    parse_arguments,
+    parse_value_list,
     run_parameter_sweep,
-    parse_arguments
+    validate_sweep_config,
 )
 
 
