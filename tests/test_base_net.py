@@ -3,6 +3,7 @@
 # pylint: disable=protected-access
 
 from typing import cast
+
 import pytest
 import torch
 
@@ -138,7 +139,7 @@ class TestBaseNet:
         assert net.out.in_features == 64
         assert net.out.out_features == 2
 
-        for i, layer in enumerate(net.layers):
+        for layer in net.layers:
             assert layer.in_features == 64
             assert layer.out_features == 64
 
@@ -154,11 +155,7 @@ class TestMultiSeedBaseNet:
     def test_multi_seed_initialization(self):
         """Test BaseNet with multiple seeds per layer."""
         net = BaseNet(
-            hidden_dim=32,
-            seed_manager=SeedManager(),
-            input_dim=3,
-            num_layers=2,
-            seeds_per_layer=3
+            hidden_dim=32, seed_manager=SeedManager(), input_dim=3, num_layers=2, seeds_per_layer=3
         )
 
         assert net.num_layers == 2
@@ -173,11 +170,7 @@ class TestMultiSeedBaseNet:
     def test_single_seed_compatibility(self):
         """Test that single seed per layer works as before."""
         net = BaseNet(
-            hidden_dim=32,
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=3,
-            seeds_per_layer=1
+            hidden_dim=32, seed_manager=SeedManager(), input_dim=2, num_layers=3, seeds_per_layer=1
         )
 
         assert net.get_total_seeds() == 3
@@ -188,11 +181,7 @@ class TestMultiSeedBaseNet:
     def test_get_seeds_for_layer(self):
         """Test getting seeds for specific layers."""
         net = BaseNet(
-            hidden_dim=32,
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=2,
-            seeds_per_layer=3
+            hidden_dim=32, seed_manager=SeedManager(), input_dim=2, num_layers=2, seeds_per_layer=3
         )
 
         layer0_seeds = net.get_seeds_for_layer(0)
@@ -208,11 +197,7 @@ class TestMultiSeedBaseNet:
     def test_multi_seed_forward_pass(self):
         """Test forward pass with multiple seeds per layer."""
         net = BaseNet(
-            hidden_dim=32,
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=2,
-            seeds_per_layer=2
+            hidden_dim=32, seed_manager=SeedManager(), input_dim=2, num_layers=2, seeds_per_layer=2
         )
 
         x = torch.randn(4, 2)
@@ -227,11 +212,7 @@ class TestMultiSeedBaseNet:
     def test_multi_seed_gradient_flow(self):
         """Test gradient flow with multiple seeds."""
         net = BaseNet(
-            hidden_dim=32,
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=2,
-            seeds_per_layer=3
+            hidden_dim=32, seed_manager=SeedManager(), input_dim=2, num_layers=2, seeds_per_layer=3
         )
 
         # Initialize some seeds
@@ -248,7 +229,7 @@ class TestMultiSeedBaseNet:
         # Check that at least some parameters have gradients
         params_with_grads = 0
         total_trainable_params = 0
-        
+
         for _, param in net.named_parameters():
             if param.requires_grad:
                 total_trainable_params += 1
@@ -256,20 +237,18 @@ class TestMultiSeedBaseNet:
                     params_with_grads += 1
 
         # At least some trainable parameters should have gradients
-        assert params_with_grads > 0, f"No parameters received gradients out of {total_trainable_params} trainable"
+        assert (
+            params_with_grads > 0
+        ), f"No parameters received gradients out of {total_trainable_params} trainable"
 
     def test_extreme_configuration(self):
         """Test with extreme multi-seed configuration."""
         net = BaseNet(
-            hidden_dim=16,
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=1,
-            seeds_per_layer=5
+            hidden_dim=16, seed_manager=SeedManager(), input_dim=2, num_layers=1, seeds_per_layer=5
         )
 
         assert net.get_total_seeds() == 5
-        
+
         x = torch.randn(2, 2)
         output = net.forward(x)
         assert output.shape == (2, 2)
@@ -283,11 +262,7 @@ class TestMultiSeedBaseNet:
     def test_seed_averaging_behavior(self):
         """Test that multiple seeds in a layer work together."""
         net = BaseNet(
-            hidden_dim=32,
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=1,
-            seeds_per_layer=3
+            hidden_dim=32, seed_manager=SeedManager(), input_dim=2, num_layers=1, seeds_per_layer=3
         )
 
         # Initialize all seeds in different states
@@ -301,7 +276,7 @@ class TestMultiSeedBaseNet:
         x = torch.randn(4, 2)
         output = net.forward(x)
         assert output.shape == (4, 2)
-        
+
         # Verify each seed processed the input
         for seed in seeds:
             # Verify the seed is properly configured and accessible

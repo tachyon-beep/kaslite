@@ -1,6 +1,7 @@
 """Tests for CLI flags, compatibility, and edge cases."""
 
 from typing import cast
+
 import torch
 
 from morphogenetic_engine.components import BaseNet, SentinelSeed
@@ -61,7 +62,7 @@ class TestCLIFlags:
             assert net.num_layers == num_layers
             assert net.seeds_per_layer == seeds_per_layer
             assert len(net.all_seeds) == expected_total
-            
+
             actual_ids = [seed.seed_id for seed in net.all_seeds]
             assert actual_ids == expected_ids
 
@@ -93,26 +94,22 @@ class TestMultiSeedArchitecture:
         """Test forward pass with different seed configurations."""
         # Single seed (backward compatibility)
         net1 = BaseNet(seed_manager=SeedManager(), input_dim=2, num_layers=2, seeds_per_layer=1)
-        
+
         # Multiple seeds
         net2 = BaseNet(seed_manager=SeedManager(), input_dim=2, num_layers=2, seeds_per_layer=3)
 
         x = torch.randn(4, 2)
-        
+
         output1 = net1(x)
         output2 = net2(x)
-        
+
         assert output1.shape == (4, 2)
         assert output2.shape == (4, 2)
 
     def test_seed_averaging_and_independence(self):
         """Test seed averaging behavior and independence."""
         net = BaseNet(
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=1,
-            seeds_per_layer=3,
-            hidden_dim=4
+            seed_manager=SeedManager(), input_dim=2, num_layers=1, seeds_per_layer=3, hidden_dim=4
         )
 
         layer_seeds = net.get_seeds_for_layer(0)
@@ -225,31 +222,24 @@ class TestEdgeCases:
         )
 
         assert len(net.all_seeds) == 100
-        
+
         x = torch.randn(2, 3)
         output = net(x)
         assert output.shape == (2, 2)  # Output is always 2D
 
     def test_parameter_scaling(self):
         """Test parameter count scaling with architecture size."""
+
         def count_parameters(net):
             return sum(p.numel() for p in net.parameters())
 
         # Compare networks with different seed counts
         net1 = BaseNet(
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=2,
-            seeds_per_layer=1,
-            hidden_dim=4
+            seed_manager=SeedManager(), input_dim=2, num_layers=2, seeds_per_layer=1, hidden_dim=4
         )
 
         net2 = BaseNet(
-            seed_manager=SeedManager(),
-            input_dim=2,
-            num_layers=2,
-            seeds_per_layer=3,
-            hidden_dim=4
+            seed_manager=SeedManager(), input_dim=2, num_layers=2, seeds_per_layer=3, hidden_dim=4
         )
 
         params1 = count_parameters(net1)
@@ -262,12 +252,9 @@ class TestEdgeCases:
         """Test networks with different input dimensions."""
         for input_dim in [1, 2, 3, 5, 10]:
             net = BaseNet(
-                seed_manager=SeedManager(),
-                input_dim=input_dim,
-                num_layers=2,
-                seeds_per_layer=2
+                seed_manager=SeedManager(), input_dim=input_dim, num_layers=2, seeds_per_layer=2
             )
-            
+
             x = torch.randn(4, input_dim)
             output = net(x)
             assert output.shape == (4, 2)  # Output is always 2D

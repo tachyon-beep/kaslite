@@ -85,7 +85,7 @@ class TestSentinelSeed:
         # After initialization, should have proper weights
         seed.initialize_child()
         assert seed.state == "training"
-        
+
         weight_params = [p for p in seed.child.parameters() if p.dim() > 1]
         for param in weight_params:
             assert not torch.allclose(param, torch.zeros_like(param))
@@ -99,7 +99,7 @@ class TestSentinelSeed:
             seed_manager=self._create_seed_manager(),
             progress_thresh=0.5,
         )
-        
+
         inputs = torch.randn(4, 32)
         initial_progress = seed.training_progress
 
@@ -156,7 +156,7 @@ class TestSentinelSeed:
         seed.initialize_child()
         output = seed.forward(inputs)
         assert torch.allclose(output, inputs)
-        
+
         # But train_child_step should increase progress
         initial_progress = seed.training_progress
         seed.train_child_step(inputs)
@@ -187,11 +187,11 @@ class TestSentinelSeed:
         seed.initialize_child()
         seed._set_state("blending")
         seed.alpha = 0.5
-        
+
         # Forward pass should compute and record drift
         inputs = torch.randn(4, 32)
         output = seed.forward(inputs)
-        
+
         # Verify output shape and that drift was recorded
         assert output.shape == inputs.shape
         telemetry = seed.seed_manager.seeds[seed.seed_id]["telemetry"]
@@ -223,7 +223,7 @@ class TestSentinelSeed:
 
         # Complete cycle: dormant -> training -> blending -> active -> dormant
         assert seed.state == "dormant"
-        
+
         seed._set_state("training")
         assert seed.state == "training"
         assert seed.seed_manager.seeds["test_seed"]["status"] == "pending"

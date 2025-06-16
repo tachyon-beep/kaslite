@@ -5,9 +5,9 @@ This module provides common test fixtures and utilities used across
 all test modules in the morphogenetic engine test suite.
 """
 
+import numpy as np
 import pytest
 import torch
-import numpy as np
 
 
 @pytest.fixture
@@ -35,8 +35,10 @@ def small_dataset():
 @pytest.fixture
 def mock_args():
     """Provide mock arguments for testing."""
+
     class MockArgs:
         """Mock arguments class for testing with default values."""
+
         hidden_dim = 32
         input_dim = 2
         num_layers = 3

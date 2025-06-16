@@ -14,40 +14,26 @@ For new development, import directly from the specific test modules.
 This file maintains backward compatibility for existing test runners.
 """
 
+from .test_cli import TestCLIDispatch, TestMainFunction, TestNewCLIArguments, TestNewCLIFlags
+
 # Import all test classes from refactored modules for backward compatibility
-from .test_datasets import (
-    TestCreateSpirals,
-    TestCreateComplexMoons,
-    TestNewDatasets,
-)
-
-from .test_training import (
-    TestTrainEpoch,
-    TestEvaluate,
-)
-
-from .test_cli import (
-    TestMainFunction,
-    TestCLIDispatch,
-    TestNewCLIFlags,
-    TestNewCLIArguments,
-)
-
+from .test_datasets import TestCreateComplexMoons, TestCreateSpirals, TestNewDatasets
 from .test_integration import (
-    TestIntegration,
-    TestHighDimensionalIntegration,
     TestArchitectureScaling,
+    TestHighDimensionalIntegration,
+    TestIntegration,
 )
+from .test_training import TestEvaluate, TestTrainEpoch
 
 # Re-export all test classes to maintain existing imports
 __all__ = [
     "TestCreateSpirals",
-    "TestCreateComplexMoons", 
+    "TestCreateComplexMoons",
     "TestNewDatasets",
     "TestTrainEpoch",
     "TestEvaluate",
     "TestMainFunction",
-    "TestCLIDispatch", 
+    "TestCLIDispatch",
     "TestNewCLIFlags",
     "TestNewCLIArguments",
     "TestIntegration",

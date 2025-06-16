@@ -81,7 +81,10 @@ class TestMainFunction:
                                 mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
                                 try:
                                     main()
-                                except (SystemExit, Exception):  # pylint: disable=broad-except  # nosec # noqa: S110
+                                except (
+                                    SystemExit,
+                                    Exception,
+                                ):  # pylint: disable=broad-except  # nosec # noqa: S110
                                     pass  # We just want to test argument parsing
 
     def test_main_new_arguments(self):
@@ -116,7 +119,10 @@ class TestMainFunction:
 
                 try:
                     main()
-                except (SystemExit, Exception):  # pylint: disable=broad-except  # nosec # noqa: S110
+                except (
+                    SystemExit,
+                    Exception,
+                ):  # pylint: disable=broad-except  # nosec # noqa: S110
                     # Expected since we're mocking critical components
                     pass
 
@@ -160,7 +166,10 @@ class TestCLIDispatch:
 
                     try:
                         main()
-                    except (SystemExit, Exception):  # pylint: disable=broad-except  # nosec # noqa: S110
+                    except (
+                        SystemExit,
+                        Exception,
+                    ):  # pylint: disable=broad-except  # nosec # noqa: S110
                         # Expected since we're mocking critical components
                         pass
 
@@ -202,7 +211,10 @@ class TestCLIDispatch:
 
                 try:
                     main()
-                except (SystemExit, Exception):  # pylint: disable=broad-except  # nosec # noqa: S110
+                except (
+                    SystemExit,
+                    Exception,
+                ):  # pylint: disable=broad-except  # nosec # noqa: S110
                     pass
 
                 # Verify spirals was called with only relevant arguments
