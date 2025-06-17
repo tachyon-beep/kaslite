@@ -8,12 +8,12 @@ and tracking model metadata in MLflow's Model Registry.
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import mlflow
 import mlflow.exceptions
 import mlflow.pytorch
-from mlflow.entities.model_registry import ModelVersion, RegisteredModel
+from mlflow.entities.model_registry import ModelVersion
 from mlflow.tracking import MlflowClient
 
 logger = logging.getLogger(__name__)
@@ -75,17 +75,19 @@ class ModelRegistry:
             )
 
             logger.info(
-                f"Registered model {model_name} version {model_version.version} "
-                f"from run {run_id}"
+                "Registered model %s version %s from run %s",
+                model_name,
+                model_version.version,
+                run_id,
             )
 
             return model_version
 
         except mlflow.exceptions.MlflowException as e:
-            logger.error(f"Failed to register model: {e}")
+            logger.error("Failed to register model: %s", e)
             return None
-        except Exception as e:
-            logger.error(f"Unexpected error registering model: {e}")
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error("Unexpected error registering model: %s", e)
             return None
 
     def get_best_model_version(
@@ -108,52 +110,70 @@ class ModelRegistry:
         """
         try:
             model_name = model_name or self.model_name
-
-            # Get all model versions
-            versions = self.client.search_model_versions(filter_string=f"name='{model_name}'")
-
-            if stage:
-                versions = [v for v in versions if v.current_stage == stage]
+            versions = self._get_filtered_versions(model_name, stage)
 
             if not versions:
-                logger.warning(f"No model versions found for {model_name}")
+                logger.warning("No model versions found for %s", model_name)
                 return None
 
-            # Find best version by metric
-            best_version = None
-            best_metric = float("-inf") if higher_is_better else float("inf")
-
-            for version in versions:
-                if not version.run_id:
-                    continue
-
-                try:
-                    # Get metrics from the run
-                    run = self.client.get_run(version.run_id)
-                    metric_value = float(run.data.metrics.get(metric_name, 0))
-
-                    is_better = (higher_is_better and metric_value > best_metric) or (
-                        not higher_is_better and metric_value < best_metric
-                    )
-
-                    if is_better:
-                        best_metric = metric_value
-                        best_version = version
-
-                except (ValueError, KeyError):
-                    continue
+            best_version, best_metric = self._find_best_version(
+                versions, metric_name, higher_is_better
+            )
 
             if best_version:
                 logger.info(
-                    f"Best model version: {best_version.version} "
-                    f"with {metric_name}={best_metric:.4f}"
+                    "Best model version: %s with %s=%.4f",
+                    best_version.version,
+                    metric_name,
+                    best_metric,
                 )
 
             return best_version
 
         except mlflow.exceptions.MlflowException as e:
-            logger.error(f"Failed to find best model: {e}")
+            logger.error("Failed to find best model: %s", e)
             return None
+
+    def _get_filtered_versions(self, model_name: str, stage: Optional[str]) -> List[ModelVersion]:
+        """Get model versions filtered by stage."""
+        versions = self.client.search_model_versions(filter_string=f"name='{model_name}'")
+
+        if stage:
+            versions = [v for v in versions if v.current_stage == stage]
+
+        return versions
+
+    def _find_best_version(
+        self, versions: List[ModelVersion], metric_name: str, higher_is_better: bool
+    ):
+        """Find the best version from a list based on a metric."""
+        best_version = None
+        best_metric = float("-inf") if higher_is_better else float("inf")
+
+        for version in versions:
+            if not version.run_id:
+                continue
+
+            try:
+                metric_value = self._get_metric_value(version.run_id, metric_name)
+
+                if self._is_better_metric(metric_value, best_metric, higher_is_better):
+                    best_metric = metric_value
+                    best_version = version
+
+            except (ValueError, KeyError):
+                continue
+
+        return best_version, best_metric
+
+    def _get_metric_value(self, run_id: str, metric_name: str) -> float:
+        """Get metric value from a run."""
+        run = self.client.get_run(run_id)
+        return float(run.data.metrics.get(metric_name, 0))
+
+    def _is_better_metric(self, current: float, best: float, higher_is_better: bool) -> bool:
+        """Check if current metric is better than the best so far."""
+        return (higher_is_better and current > best) or (not higher_is_better and current < best)
 
     def promote_model(
         self,
@@ -200,11 +220,11 @@ class ModelRegistry:
                 name=model_name, version=version, stage=stage
             )
 
-            logger.info(f"Promoted model {model_name} v{version} to {stage}")
+            logger.info("Promoted model %s v%s to %s", model_name, version, stage)
             return True
 
         except mlflow.exceptions.MlflowException as e:
-            logger.error(f"Failed to promote model: {e}")
+            logger.error("Failed to promote model: %s", e)
             return False
 
     def list_model_versions(
@@ -233,7 +253,7 @@ class ModelRegistry:
             return sorted(versions, key=lambda v: int(v.version), reverse=True)
 
         except mlflow.exceptions.MlflowException as e:
-            logger.error(f"Failed to list model versions: {e}")
+            logger.error("Failed to list model versions: %s", e)
             return []
 
     def get_production_model_uri(self, model_name: Optional[str] = None) -> Optional[str]:
@@ -255,6 +275,6 @@ class ModelRegistry:
 
             return None
 
-        except Exception as e:
-            logger.error(f"Failed to get production model URI: {e}")
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error("Failed to get production model URI: %s", e)
             return None

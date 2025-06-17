@@ -7,7 +7,6 @@ with monitoring, health checks, and model management capabilities.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -74,7 +73,7 @@ class ModelInfo(BaseModel):
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """Manage application lifespan events."""
     # Startup
     logger.info("Starting morphogenetic inference server...")
@@ -120,7 +119,7 @@ async def prometheus_middleware(request: Request, call_next):
 
 async def load_production_model() -> bool:
     """Load the current production model from the registry."""
-    global current_model_version
+    global current_model_version  # pylint: disable=global-statement
 
     try:
         with MODEL_LOAD_TIME.time():
@@ -144,11 +143,11 @@ async def load_production_model() -> bool:
             model_cache[model_version] = model
             current_model_version = model_version
 
-            logger.info(f"Loaded production model version: {model_version}")
+            logger.info("Loaded production model version: %s", model_version)
             return True
 
-    except Exception as e:
-        logger.error(f"Failed to load production model: {e}")
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error("Failed to load production model: %s", e)
         return False
 
 
@@ -167,11 +166,11 @@ async def load_specific_model(version: str) -> bool:
             model.eval()
 
             model_cache[version] = model
-            logger.info(f"Loaded model version: {version}")
+            logger.info("Loaded model version: %s", version)
             return True
 
-    except Exception as e:
-        logger.error(f"Failed to load model version {version}: {e}")
+    except Exception as e:  # pylint: disable=broad-except
+        logger.error("Failed to load model version %s: %s", version, e)
         return False
 
 
@@ -206,8 +205,8 @@ async def get_model_info():
             model_name="KasminaModel",
         )
     except Exception as e:
-        logger.error(f"Failed to get model info: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve model information")
+        logger.error("Failed to get model info: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to retrieve model information") from e
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -237,7 +236,7 @@ async def predict(request: PredictionRequest):
             if input_tensor.dim() == 1:
                 input_tensor = input_tensor.unsqueeze(0)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid input data: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid input data: {e}") from e
 
         # Make prediction
         with MODEL_PREDICTION_TIME.time():
@@ -262,8 +261,8 @@ async def predict(request: PredictionRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Prediction failed: {e}")
-        raise HTTPException(status_code=500, detail="Prediction failed")
+        logger.error("Prediction failed: %s", e)
+        raise HTTPException(status_code=500, detail="Prediction failed") from e
 
 
 @app.post("/reload-model")
@@ -281,14 +280,14 @@ async def reload_production_model():
     except HTTPException:
         raise  # Re-raise HTTPExceptions as-is
     except Exception as e:
-        logger.error(f"Model reload failed: {e}")
-        raise HTTPException(status_code=500, detail="Model reload failed")
+        logger.error("Model reload failed: %s", e)
+        raise HTTPException(status_code=500, detail="Model reload failed") from e
 
 
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(_request: Request, exc: Exception):
     """Global exception handler for better error reporting."""
-    logger.error(f"Unhandled exception: {exc}")
+    logger.error("Unhandled exception: %s", exc)
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
