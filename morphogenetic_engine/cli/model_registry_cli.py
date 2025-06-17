@@ -12,6 +12,7 @@ import logging
 import sys
 
 from mlflow.tracking import MlflowClient
+
 from morphogenetic_engine.model_registry import ModelRegistry
 
 # Configure logging

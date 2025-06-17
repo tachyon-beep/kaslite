@@ -23,10 +23,10 @@ import numpy as np
 import pytest
 import torch
 
+from morphogenetic_engine.cli.arguments import parse_experiment_arguments
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 from morphogenetic_engine.experiment import build_model_and_agents
-from morphogenetic_engine.cli.arguments import parse_experiment_arguments
 from scripts.run_morphogenetic_experiment import main
 
 
@@ -102,11 +102,9 @@ class TestMainFunction:
         ]
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            with patch(
-                "morphogenetic_engine.datasets.create_complex_moons"
-            ) as mock_create, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
-                "torch.optim.Adam"
-            ) as mock_optim, patch(
+            with patch("morphogenetic_engine.datasets.create_complex_moons") as mock_create, patch(
+                "morphogenetic_engine.components.BaseNet"
+            ) as mock_net, patch("torch.optim.Adam") as mock_optim, patch(
                 "builtins.open", create=True
             ):
                 # Mock expensive operations
@@ -195,11 +193,9 @@ class TestCLIDispatch:
         ]
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            with patch(
-                "morphogenetic_engine.datasets.create_spirals"
-            ) as mock_spirals, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
-                "torch.optim.Adam"
-            ) as mock_optim, patch(
+            with patch("morphogenetic_engine.datasets.create_spirals") as mock_spirals, patch(
+                "morphogenetic_engine.components.BaseNet"
+            ) as mock_net, patch("torch.optim.Adam") as mock_optim, patch(
                 "builtins.open", create=True
             ):
                 rng = np.random.default_rng(42)

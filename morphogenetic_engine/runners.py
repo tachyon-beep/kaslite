@@ -43,6 +43,7 @@ if MLFLOW_AVAILABLE:
     try:
         import mlflow
         import mlflow.pytorch as mlflow_pytorch
+
         from morphogenetic_engine.model_registry import ModelRegistry
     except ImportError:
         MLFLOW_AVAILABLE = False
@@ -66,6 +67,7 @@ def setup_experiment(args):
 
     # Initialize Prometheus monitoring
     from morphogenetic_engine.monitoring import initialize_monitoring
+
     initialize_monitoring(experiment_id=slug, port=8000)
 
     # Determine log location and initialise logger
@@ -77,7 +79,7 @@ def setup_experiment(args):
         mlruns_dir.mkdir(exist_ok=True)
         mlflow.set_tracking_uri(config.get("mlflow_uri", "file://" + str(mlruns_dir)))
         mlflow.set_experiment(config.get("experiment_name", args.problem_type))
-    
+
     log_dir = project_root / "results"
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / f"results_{slug}.log"
@@ -160,7 +162,7 @@ def setup_mlflow_logging(config: Dict[str, Any], slug: str) -> None:
     """Setup MLflow run and log parameters."""
     if not MLFLOW_AVAILABLE or mlflow is None:
         return
-        
+
     try:
         # End any existing run first to avoid conflicts
         if mlflow.active_run() is not None:
@@ -171,12 +173,13 @@ def setup_mlflow_logging(config: Dict[str, Any], slug: str) -> None:
         print(f"Warning: MLflow initialization failed: {e}")
 
 
-def log_mlflow_metrics_and_artifacts(final_stats: Dict[str, Any], model, seed_manager, 
-                                    project_root: Path, slug: str, args) -> None:
+def log_mlflow_metrics_and_artifacts(
+    final_stats: Dict[str, Any], model, seed_manager, project_root: Path, slug: str, args
+) -> None:
     """Log metrics, artifacts, and model to MLflow."""
     if not MLFLOW_AVAILABLE or mlflow is None or mlflow_pytorch is None:
         return
-        
+
     try:
         # Log metrics
         mlflow.log_metric("final_best_acc", final_stats["best_acc"])
@@ -225,8 +228,10 @@ def log_mlflow_metrics_and_artifacts(final_stats: Dict[str, Any], model, seed_ma
                             },
                         )
                         if model_version:
-                            print(f"✅ Model registered: v{model_version.version} "
-                                  f"(Val Acc: {final_stats.get('val_acc', 0):.4f})")
+                            print(
+                                f"✅ Model registered: v{model_version.version} "
+                                f"(Val Acc: {final_stats.get('val_acc', 0):.4f})"
+                            )
 
                             # Auto-promote to Staging if very good accuracy
                             if final_stats.get("val_acc", 0) >= 0.9:
@@ -240,7 +245,7 @@ def log_mlflow_metrics_and_artifacts(final_stats: Dict[str, Any], model, seed_ma
 
         except (ImportError, RuntimeError, ValueError, OSError) as e:
             print(f"Warning: Could not log model to MLflow: {e}")
-            
+
     except (ImportError, AttributeError, RuntimeError, ValueError, OSError) as e:
         print(f"Warning: MLflow logging failed: {e}")
 
@@ -326,7 +331,9 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
             log_final_summary(logger, final_stats, seed_manager, log_f)
 
             # Log final metrics and artifacts to MLflow
-            log_mlflow_metrics_and_artifacts(final_stats, model, seed_manager, project_root, slug, args)
+            log_mlflow_metrics_and_artifacts(
+                final_stats, model, seed_manager, project_root, slug, args
+            )
 
             # Export metrics for DVC
             export_metrics_for_dvc(final_stats, slug, project_root)
@@ -343,6 +350,7 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
 
             # Cleanup monitoring
             from morphogenetic_engine.monitoring import cleanup_monitoring
+
             cleanup_monitoring()
 
             # Return results for sweep summary
@@ -357,10 +365,11 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
                     1 for info in seed_manager.seeds.values() if info["module"].state == "active"
                 ),
             }
-            
+
     except (RuntimeError, ValueError, KeyError, torch.cuda.OutOfMemoryError) as e:
         # Cleanup monitoring on error
         from morphogenetic_engine.monitoring import cleanup_monitoring
+
         cleanup_monitoring()
 
         # End MLflow run on error

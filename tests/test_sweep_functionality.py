@@ -14,6 +14,8 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+from morphogenetic_engine.cli.arguments import get_valid_argument_names
+from morphogenetic_engine.cli.arguments import parse_experiment_arguments as parse_arguments
 from morphogenetic_engine.sweeps.runner import (
     expand_grid,
     generate_run_slug,
@@ -22,10 +24,6 @@ from morphogenetic_engine.sweeps.runner import (
     parse_value_list,
     run_parameter_sweep,
     validate_sweep_config,
-)
-from morphogenetic_engine.cli.arguments import (
-    get_valid_argument_names,
-    parse_experiment_arguments as parse_arguments,
 )
 
 

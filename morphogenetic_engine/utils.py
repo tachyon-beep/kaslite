@@ -57,17 +57,24 @@ def create_experiment_config(args, device) -> Dict[str, Any]:
 def write_experiment_log_header(log_f, config: Dict[str, Any], args) -> None:
     """Write the detailed configuration header to the log file."""
     from morphogenetic_engine.training import clear_seed_report_cache
-    
+
     clear_seed_report_cache()
 
     # Write comprehensive configuration header
     log_f.write("# Morphogenetic Architecture Experiment Log\n")
     log_f.write(f"# Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     log_f.write("# Configuration:\n")
-    
+
     # Basic parameters
-    for key in ["problem_type", "n_samples", "input_dim", "train_frac", 
-                "batch_size", "device", "seed"]:
+    for key in [
+        "problem_type",
+        "n_samples",
+        "input_dim",
+        "train_frac",
+        "batch_size",
+        "device",
+        "seed",
+    ]:
         if key in config:
             log_f.write(f"# {key}: {config[key]}\n")
 
@@ -92,14 +99,22 @@ def write_experiment_log_header(log_f, config: Dict[str, Any], args) -> None:
 
     # Morphogenetic architecture parameters
     morpho_params = [
-        "warm_up_epochs", "adaptation_epochs", "lr", "hidden_dim", 
-        "num_layers", "seeds_per_layer", "blend_steps", "shadow_lr", 
-        "progress_thresh", "drift_warn", "acc_threshold"
+        "warm_up_epochs",
+        "adaptation_epochs",
+        "lr",
+        "hidden_dim",
+        "num_layers",
+        "seeds_per_layer",
+        "blend_steps",
+        "shadow_lr",
+        "progress_thresh",
+        "drift_warn",
+        "acc_threshold",
     ]
     for param in morpho_params:
         if param in config:
             log_f.write(f"# {param}: {config[param]}\n")
-    
+
     log_f.write("#\n")
     log_f.write("# Data format: epoch,seed,state,alpha\n")
     log_f.write("epoch,seed,state,alpha\n")
@@ -111,7 +126,7 @@ def write_experiment_log_footer(log_f, final_stats: Dict[str, Any], seed_manager
     log_f.write("# Experiment completed successfully\n")
     log_f.write(f"# End timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     log_f.write(f"# Final best accuracy: {final_stats['best_acc']:.4f}\n")
-    
+
     if final_stats.get("seeds_activated", False):
         active_seeds = sum(
             1 for info in seed_manager.seeds.values() if info["module"].state == "active"
@@ -119,7 +134,7 @@ def write_experiment_log_footer(log_f, final_stats: Dict[str, Any], seed_manager
         log_f.write(f"# Seeds activated: {active_seeds}/{len(seed_manager.seeds)}\n")
     else:
         log_f.write(f"# Seeds activated: 0/{len(seed_manager.seeds)}\n")
-    
+
     log_f.write("# ===== LOG COMPLETE =====\n")
 
 

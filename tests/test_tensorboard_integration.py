@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from morphogenetic_engine.core import SeedManager
-from morphogenetic_engine.training import clear_seed_report_cache, log_seed_updates
 from morphogenetic_engine.runners import setup_experiment
+from morphogenetic_engine.training import clear_seed_report_cache, log_seed_updates
 
 
 class TestTensorBoardIntegration:

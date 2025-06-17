@@ -186,7 +186,7 @@ def create_run_directory_and_setup(sweep_dir: Path, run_slug: str, original_setu
     ):
         """Modified setup_experiment that puts logs in the run directory."""
         from torch.utils.tensorboard import SummaryWriter
-        
+
         (
             logger_inner,
             tb_writer_inner,
@@ -236,7 +236,7 @@ def process_single_sweep_config(
 ) -> tuple[List[Dict[str, Any]], int]:
     """Process a single sweep configuration and return results and updated counter."""
     from morphogenetic_engine.runners import run_single_experiment, setup_experiment
-    
+
     print(f"\nProcessing sweep config {config_idx + 1}")
 
     # Validate configuration
@@ -269,6 +269,7 @@ def process_single_sweep_config(
 
         # Temporarily replace setup_experiment
         import morphogenetic_engine.runners as runners_module
+
         original_setup_ref = runners_module.setup_experiment
         runners_module.setup_experiment = setup_func
 

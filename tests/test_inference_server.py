@@ -12,11 +12,7 @@ import pytest
 import torch
 from fastapi.testclient import TestClient
 
-from morphogenetic_engine.inference_server import (
-    app,
-    load_production_model,
-    load_specific_model,
-)
+from morphogenetic_engine.inference_server import app, load_production_model, load_specific_model
 
 
 class TestInferenceServer:

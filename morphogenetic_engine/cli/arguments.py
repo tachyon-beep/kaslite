@@ -13,7 +13,7 @@ def create_experiment_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser for morphogenetic experiments."""
     parser = argparse.ArgumentParser(
         description="Run morphogenetic-architecture experiments on various datasets",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
     # Sweep configuration
@@ -26,12 +26,18 @@ def create_experiment_parser() -> argparse.ArgumentParser:
     )
 
     # Existing morphogenetic parameters
-    parser.add_argument("--blend_steps", type=int, default=30,
-                       help="Number of blend steps for morphogenetic adaptation")
-    parser.add_argument("--shadow_lr", type=float, default=1e-3,
-                       help="Learning rate for shadow networks")
-    parser.add_argument("--progress_thresh", type=float, default=0.6,
-                       help="Progress threshold for seed activation")
+    parser.add_argument(
+        "--blend_steps",
+        type=int,
+        default=30,
+        help="Number of blend steps for morphogenetic adaptation",
+    )
+    parser.add_argument(
+        "--shadow_lr", type=float, default=1e-3, help="Learning rate for shadow networks"
+    )
+    parser.add_argument(
+        "--progress_thresh", type=float, default=0.6, help="Progress threshold for seed activation"
+    )
     parser.add_argument(
         "--drift_warn",
         type=float,
@@ -46,8 +52,7 @@ def create_experiment_parser() -> argparse.ArgumentParser:
         default="spirals",
         help="Type of problem to solve",
     )
-    parser.add_argument("--n_samples", type=int, default=2000, 
-                       help="Total samples (split evenly)")
+    parser.add_argument("--n_samples", type=int, default=2000, help="Total samples (split evenly)")
     parser.add_argument(
         "--input_dim",
         type=int,
@@ -55,34 +60,24 @@ def create_experiment_parser() -> argparse.ArgumentParser:
         help="Embedding/dimension for clusters and spheres",
     )
     parser.add_argument(
-        "--train_frac", type=float, default=0.8, 
-        help="Train/validation split fraction"
+        "--train_frac", type=float, default=0.8, help="Train/validation split fraction"
     )
-    parser.add_argument("--batch_size", type=int, default=64, 
-                       help="DataLoader batch size")
-    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu", 
-                       help='"cpu" or "cuda"')
+    parser.add_argument("--batch_size", type=int, default=64, help="DataLoader batch size")
+    parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu", help='"cpu" or "cuda"')
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
 
     # Spirals-specific parameters
-    parser.add_argument("--noise", type=float, default=0.25, 
-                       help="Spirals noise")
-    parser.add_argument("--rotations", type=int, default=4, 
-                       help="Spirals turns")
+    parser.add_argument("--noise", type=float, default=0.25, help="Spirals noise")
+    parser.add_argument("--rotations", type=int, default=4, help="Spirals turns")
 
     # Moons-specific parameters
-    parser.add_argument("--moon_noise", type=float, default=0.1, 
-                       help="Gaussian noise for moons")
-    parser.add_argument("--moon_sep", type=float, default=0.5, 
-                       help="Separation between half-moons")
+    parser.add_argument("--moon_noise", type=float, default=0.1, help="Gaussian noise for moons")
+    parser.add_argument("--moon_sep", type=float, default=0.5, help="Separation between half-moons")
 
     # Clusters-specific parameters
-    parser.add_argument("--cluster_count", type=int, default=2, 
-                       help="Number of Gaussian blobs")
-    parser.add_argument("--cluster_size", type=int, default=500, 
-                       help="Points per cluster")
-    parser.add_argument("--cluster_std", type=float, default=0.5, 
-                       help="Cluster standard deviation")
+    parser.add_argument("--cluster_count", type=int, default=2, help="Number of Gaussian blobs")
+    parser.add_argument("--cluster_size", type=int, default=500, help="Points per cluster")
+    parser.add_argument("--cluster_std", type=float, default=0.5, help="Cluster standard deviation")
     parser.add_argument(
         "--cluster_sep",
         type=float,
@@ -97,11 +92,9 @@ def create_experiment_parser() -> argparse.ArgumentParser:
         default=2,
         help="Number of concentric spherical shells",
     )
-    parser.add_argument("--sphere_size", type=int, default=500, 
-                       help="Points per sphere shell")
+    parser.add_argument("--sphere_size", type=int, default=500, help="Points per sphere shell")
     parser.add_argument(
-        "--sphere_radii", type=str, default="1,2", 
-        help="Comma-separated list of radii"
+        "--sphere_radii", type=str, default="1,2", help="Comma-separated list of radii"
     )
     parser.add_argument(
         "--sphere_noise",
