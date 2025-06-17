@@ -109,7 +109,9 @@ class RichDashboard:
             content = Text("No seeds initialized yet", style="dim white")
         else:
             content = Text()
-            for i, seed in enumerate(self.seeds.values()):
+            # Sort seeds alphabetically by seed_id for consistent display
+            sorted_seeds = sorted(self.seeds.values(), key=lambda seed: seed.seed_id)
+            for i, seed in enumerate(sorted_seeds):
                 if i > 0:
                     content.append("\n")
                 content.append(seed.get_styled_status())

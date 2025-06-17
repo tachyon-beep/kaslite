@@ -12,6 +12,8 @@ from morphogenetic_engine.core import SeedManager
 @pytest.fixture
 def fresh_seed_manager() -> SeedManager:
     """Fixture for creating a fresh SeedManager instance for each test."""
+    # Reset singleton state before each test
+    SeedManager.reset_singleton()
     return SeedManager()
 
 

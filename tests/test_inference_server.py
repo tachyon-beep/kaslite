@@ -6,6 +6,7 @@ and monitoring functionality.
 """
 from unittest.mock import Mock, patch
 
+import pytest
 import torch
 from fastapi.testclient import TestClient
 
@@ -294,6 +295,7 @@ class TestInferenceServer:
 class TestInferenceServerLifecycle:
     """Test server lifecycle and model loading functions."""
 
+    @pytest.mark.asyncio
     @patch("morphogenetic_engine.inference_server.ModelRegistry")
     @patch("mlflow.pytorch.load_model")
     async def test_load_production_model_success(self, mock_load_model, mock_registry_class):
@@ -323,6 +325,7 @@ class TestInferenceServerLifecycle:
             # Verify model was cached
             mock_cache.__setitem__.assert_called_once()
 
+    @pytest.mark.asyncio
     @patch("morphogenetic_engine.inference_server.ModelRegistry")
     async def test_load_production_model_no_model(self, mock_registry_class):
         """Test production model loading when no model exists."""

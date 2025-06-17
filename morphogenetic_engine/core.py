@@ -118,6 +118,20 @@ class SeedManager:
             if seed_id in self.seeds:
                 self.seeds[seed_id]["telemetry"]["drift"] = drift
 
+    def reset(self) -> None:
+        """Reset the SeedManager to initial state. Primarily for testing."""
+        with self.lock:
+            self.seeds.clear()
+            self.germination_log.clear()
+
+    @classmethod
+    def reset_singleton(cls) -> None:
+        """Reset the singleton instance. Primarily for testing."""
+        with cls._singleton_lock:
+            if cls._instance is not None:
+                cls._instance.reset()
+                cls._instance = None
+
 
 class KasminaMicro:
     """

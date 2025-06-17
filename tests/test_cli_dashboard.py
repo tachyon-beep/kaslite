@@ -59,16 +59,17 @@ class DashboardTestBuilder:
         return dashboard
 
 
-def create_test_console(width: int = 80, no_color: bool = False) -> Console:
+def create_test_console(width: int = 80, no_color: bool = False) -> tuple[Console, StringIO]:
     """Factory for creating test consoles with different capabilities."""
     string_io = StringIO()
-    return Console(
+    console = Console(
         file=string_io, 
         force_terminal=True, 
         width=width,
         no_color=no_color,
         legacy_windows=False
     )
+    return console, string_io
 
 
 def assert_metrics_equal(actual: dict, expected: dict) -> None:
@@ -481,6 +482,47 @@ class TestRichDashboard:
         assert dashboard.metrics["epoch"] == 5
         assert dashboard.metrics["val_loss"] == pytest.approx(0.5)
         assert dashboard.metrics["val_acc"] == pytest.approx(0.8)
+
+    def test_seeds_panel_depicts_all_seeds_correctly(self):
+        """
+        Integration test to verify the "Seeds" panel renders a list of seeds correctly.
+        """
+        # Arrange
+        # 1. Create a dashboard with a real console to capture output
+        console, string_io = create_test_console() # Using your existing factory
+        dashboard = RichDashboard(console=console)
+        dashboard._setup_layout() # Ensure layout exists
+
+        # 2. Add a specific set of seeds in a known order
+        dashboard.update_seed("seed_gamma", "dormant")
+        dashboard.update_seed("seed_alpha", "active", 0.8)
+        dashboard.update_seed("seed_beta", "blending", 0.4)
+
+        # Act
+        # 3. Directly call the method responsible for creating the seed panel
+        #    This isolates the logic we want to test.
+        seeds_panel = dashboard._create_seeds_panel()
+        
+        # 4. Render *only this panel* to the console to capture its output
+        dashboard.console.print(seeds_panel)
+        output = strip_ansi_codes(string_io.getvalue())
+
+        # Assert
+        # 5. Check for the content and order of the seeds in the output
+        #    This is much more specific than checking the entire dashboard's output.
+        
+        # The seeds should be sorted alphabetically by seed_id
+        expected_order = [
+            "seed_alpha: active α=0.800",
+            "seed_beta: blending α=0.400",
+            "seed_gamma: dormant"
+        ]
+        
+        # Find the indices of each expected line to verify order
+        positions = [output.find(line) for line in expected_order]
+
+        assert -1 not in positions, f"Not all expected seed lines found in output:\n{output}"
+        assert positions == sorted(positions), f"Seeds are not in the expected alphabetical order in output:\n{output}"
 
     # Integration Tests with Real Rich Components
     
