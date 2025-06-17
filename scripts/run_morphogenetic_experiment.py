@@ -9,7 +9,6 @@ The actual experiment logic has been refactored into the morphogenetic_engine pa
 """
 
 import random
-import sys
 
 import numpy as np
 import torch

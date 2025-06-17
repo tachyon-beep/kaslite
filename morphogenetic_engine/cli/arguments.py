@@ -6,7 +6,12 @@ morphogenetic architecture experiments with various datasets and parameters.
 """
 
 import argparse
-from typing import Optional
+from typing import Optional, List
+
+
+def parse_float_list(value: str) -> List[float]:
+    """Parse a comma-separated string of floats."""
+    return [float(x.strip()) for x in value.split(",")]
 
 
 def create_experiment_parser() -> argparse.ArgumentParser:
@@ -94,7 +99,7 @@ def create_experiment_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--sphere_size", type=int, default=500, help="Points per sphere shell")
     parser.add_argument(
-        "--sphere_radii", type=str, default="1,2", help="Comma-separated list of radii"
+        "--sphere_radii", type=parse_float_list, default="1,2", help="Comma-separated list of radii"
     )
     parser.add_argument(
         "--sphere_noise",

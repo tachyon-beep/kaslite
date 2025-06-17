@@ -180,7 +180,13 @@ def log_mlflow_metrics_and_artifacts(
 
         # Log and register model
         try:
-            mlflow_pytorch.log_model(model, "model")
+            # Create a clean copy of the model for serialization
+            # (avoid thread locks and other non-serializable objects)
+            model_copy = type(model)(model.input_dim, model.hidden_dim, model.output_dim)
+            model_copy.load_state_dict(model.state_dict())
+            model_copy.eval()
+            
+            mlflow_pytorch.log_model(model_copy, "model")
 
             # Register model in Model Registry if validation accuracy meets threshold
             if final_stats.get("val_acc", 0) >= 0.7 and ModelRegistry is not None:

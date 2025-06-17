@@ -1,7 +1,7 @@
 """
 Comprehensive test suite for the run_morphogenetic_experiment script.
 
-This module provides backward compatibility by importing all test classes
+This module previously provided backward compatibility by importing all test classes
 from the refactored test modules. The tests have been split into smaller,
 more manageable files:
 
@@ -11,36 +11,9 @@ more manageable files:
 - test_integration.py: Integration and architecture scaling tests
 
 For new development, import directly from the specific test modules.
-This file maintains backward compatibility for existing test runners.
+This file is now empty to avoid duplicate test execution.
 """
 
-from .test_cli import TestCLIDispatch, TestMainFunction, TestNewCLIArguments, TestNewCLIFlags
-
-# Import all test classes from refactored modules for backward compatibility
-from .test_datasets import TestCreateComplexMoons, TestCreateSpirals, TestNewDatasets
-from .test_integration import (
-    TestArchitectureScaling,
-    TestHighDimensionalIntegration,
-    TestIntegration,
-)
-from .test_training import TestEvaluate, TestTrainEpoch
-
-# Re-export all test classes to maintain existing imports
-__all__ = [
-    "TestCreateSpirals",
-    "TestCreateComplexMoons",
-    "TestNewDatasets",
-    "TestTrainEpoch",
-    "TestEvaluate",
-    "TestMainFunction",
-    "TestCLIDispatch",
-    "TestNewCLIFlags",
-    "TestNewCLIArguments",
-    "TestIntegration",
-    "TestHighDimensionalIntegration",
-    "TestArchitectureScaling",
-]
-
-
-# All tests are now imported from the refactored modules above.
-# This ensures backward compatibility while keeping code organized.
+# All tests have been moved to specific test modules
+# to avoid duplication and maintain better organization.
+# Import directly from test_cli.py, test_datasets.py, etc. as needed.

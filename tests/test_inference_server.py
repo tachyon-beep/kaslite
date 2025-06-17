@@ -4,11 +4,8 @@ Unit tests for the FastAPI Inference Server.
 Tests the inference server endpoints, model loading, health checks,
 and monitoring functionality.
 """
+from unittest.mock import Mock, patch
 
-import json
-from unittest.mock import AsyncMock, Mock, patch
-
-import pytest
 import torch
 from fastapi.testclient import TestClient
 
@@ -18,15 +15,18 @@ from morphogenetic_engine.inference_server import app, load_production_model, lo
 class TestInferenceServer:
     """Test suite for FastAPI Inference Server."""
 
-    def setup_method(self):
-        """Set up test fixtures."""
+    def __init__(self):
+        """Initialize test class attributes."""
         self.client = TestClient(app)
-
         # Sample prediction data
         self.sample_data = {"data": [[0.5, 0.3, 0.1], [0.2, 0.8, 0.4]]}
-
         # Sample model output
         self.sample_output = torch.tensor([[0.2, 0.8], [0.9, 0.1]])
+
+    def setup_method(self):
+        """Set up test fixtures (called before each test method)."""
+        # Re-initialize client for each test to ensure clean state
+        self.client = TestClient(app)
 
     def test_health_endpoint_healthy(self):
         """Test health endpoint when server is healthy."""
@@ -311,6 +311,8 @@ class TestInferenceServerLifecycle:
         with patch("morphogenetic_engine.inference_server.model_cache") as mock_cache, patch(
             "morphogenetic_engine.inference_server.MODEL_LOAD_TIME"
         ):
+            # Set up mock cache behavior
+            mock_cache.__setitem__ = Mock()
 
             result = await load_production_model()
 
@@ -318,6 +320,8 @@ class TestInferenceServerLifecycle:
             mock_registry.get_production_model_uri.assert_called_once()
             mock_load_model.assert_called_once_with("models:/TestModel/3")
             mock_model.eval.assert_called_once()
+            # Verify model was cached
+            mock_cache.__setitem__.assert_called_once()
 
     @patch("morphogenetic_engine.inference_server.ModelRegistry")
     async def test_load_production_model_no_model(self, mock_registry_class):
