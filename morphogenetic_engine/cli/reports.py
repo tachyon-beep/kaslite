@@ -6,12 +6,15 @@ for experiment results.
 """
 
 import argparse
+import json
 from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
 
 from ..sweeps.results import ResultsAnalyzer, SweepResults
+
+PATH_TO_SWEEP_RESULTS_DIR_HELP = "Path to sweep results directory"
 
 
 class ReportsCLI:
@@ -33,7 +36,7 @@ class ReportsCLI:
         # Summary command
         summary_parser = subparsers.add_parser("summary", help="Show experiment summary")
         summary_parser.add_argument(
-            "--sweep-dir", "-d", type=Path, required=True, help="Path to sweep results directory"
+            "--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP
         )
         summary_parser.add_argument(
             "--metric",
@@ -49,7 +52,7 @@ class ReportsCLI:
         # Analysis command
         analysis_parser = subparsers.add_parser("analysis", help="Detailed parameter analysis")
         analysis_parser.add_argument(
-            "--sweep-dir", "-d", type=Path, required=True, help="Path to sweep results directory"
+            "--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP
         )
         analysis_parser.add_argument(
             "--metric",
@@ -79,7 +82,7 @@ class ReportsCLI:
         # Export command
         export_parser = subparsers.add_parser("export", help="Export results to different formats")
         export_parser.add_argument(
-            "--sweep-dir", "-d", type=Path, required=True, help="Path to sweep results directory"
+            "--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP
         )
         export_parser.add_argument(
             "--format",
@@ -109,8 +112,6 @@ class ReportsCLI:
             # Try to load existing results
             json_summary = args.sweep_dir / "sweep_summary.json"
             if json_summary.exists():
-                import json
-
                 with open(json_summary, "r", encoding="utf-8") as f:
                     summary_data = json.load(f)
                     results.results = summary_data.get("results", [])
@@ -121,8 +122,6 @@ class ReportsCLI:
                 # Try to load individual result files
                 result_files = list(args.sweep_dir.glob("result_*.json"))
                 if result_files:
-                    import json
-
                     for result_file in result_files:
                         with open(result_file, "r", encoding="utf-8") as f:
                             result = json.load(f)
@@ -144,7 +143,7 @@ class ReportsCLI:
 
             return 0
 
-        except Exception as e:
+        except (ValueError, RuntimeError, ImportError, FileNotFoundError) as e:
             self.console.print(f"[bold red]Error loading results: {e}[/bold red]")
             return 1
 
@@ -162,8 +161,6 @@ class ReportsCLI:
             # Load results (same logic as summary)
             json_summary = args.sweep_dir / "sweep_summary.json"
             if json_summary.exists():
-                import json
-
                 with open(json_summary, "r", encoding="utf-8") as f:
                     summary_data = json.load(f)
                     results.results = summary_data.get("results", [])
@@ -184,7 +181,7 @@ class ReportsCLI:
 
             return 0
 
-        except Exception as e:
+        except (ValueError, RuntimeError, ImportError, FileNotFoundError) as e:
             self.console.print(f"[bold red]Error analyzing results: {e}[/bold red]")
             return 1
 

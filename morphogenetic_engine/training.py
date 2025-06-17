@@ -20,11 +20,11 @@ from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
+from morphogenetic_engine.core import SeedManager
+
 # Check if we're in testing mode to conditionally disable MLflow
 TESTING_MODE = "pytest" in sys.modules or "unittest" in sys.modules
 MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
-
-from morphogenetic_engine.core import SeedManager
 
 # Global variable to track seed update reporting
 _last_report: dict[str, Optional[str]] = defaultdict(lambda: None)

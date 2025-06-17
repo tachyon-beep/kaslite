@@ -95,14 +95,12 @@ def parse_value_list(value: Any) -> List[Any]:
     """Parse a parameter value into a list of possible values."""
     if isinstance(value, list):
         return value
-    elif isinstance(value, str):
+    if isinstance(value, str):
         # Handle comma-separated values
         if "," in value:
             return [item.strip() for item in value.split(",")]
-        else:
-            return [value]
-    else:
         return [value]
+    return [value]
 
 
 def load_sweep_config(config_path: Union[str, Path]) -> SweepConfig:

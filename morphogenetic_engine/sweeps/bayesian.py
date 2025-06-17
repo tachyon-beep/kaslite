@@ -56,13 +56,12 @@ class BayesianSearchRunner:
 
         if sampler_name == "TPE":
             return optuna.samplers.TPESampler()
-        elif sampler_name == "CmaEs":
+        if sampler_name == "CmaEs":
             return optuna.samplers.CmaEsSampler()
-        elif sampler_name == "Random":
+        if sampler_name == "Random":
             return optuna.samplers.RandomSampler()
-        else:
-            self.console.print(f"[yellow]Unknown sampler {sampler_name}, using TPE[/yellow]")
-            return optuna.samplers.TPESampler()
+        self.console.print(f"[yellow]Unknown sampler {sampler_name}, using TPE[/yellow]")
+        return optuna.samplers.TPESampler()
 
     def _create_pruner(self):
         """Create the Optuna pruner based on configuration."""

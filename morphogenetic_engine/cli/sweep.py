@@ -214,7 +214,8 @@ class SweepCLI:
             random.shuffle(combinations)
             combinations = combinations[: args.trials]
             self.console.print(
-                f"[yellow]Limiting to {args.trials} trials (sampled from {len(config.get_grid_combinations())} possible combinations)[/yellow]"
+                f"[yellow]Limiting to {args.trials} trials (sampled from "
+                f"{len(config.get_grid_combinations())} possible combinations)[/yellow]"
             )
         # Create a modified config with limited combinations
         # This is a simplified approach - in a full implementation we'd need better sampling

@@ -272,8 +272,7 @@ async def reload_production_model():
                 "status": "success",
                 "message": f"Reloaded model version {current_model_version}",
             }
-        else:
-            raise HTTPException(status_code=503, detail="Failed to reload model")
+        raise HTTPException(status_code=503, detail="Failed to reload model")
     except HTTPException:
         raise  # Re-raise HTTPExceptions as-is
     except Exception as e:

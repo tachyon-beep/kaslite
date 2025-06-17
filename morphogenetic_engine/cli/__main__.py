@@ -10,6 +10,9 @@ This module allows the CLI to be run as:
 import sys
 from typing import List, Optional
 
+from .reports import ReportsCLI
+from .sweep import SweepCLI
+
 
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI package."""
@@ -27,13 +30,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = argv[1:]
 
     if command == "sweep":
-        from .sweep import SweepCLI
-
         cli = SweepCLI()
         return cli.main(args)
     elif command == "reports":
-        from .reports import ReportsCLI
-
         cli = ReportsCLI()
         return cli.main(args)
     else:

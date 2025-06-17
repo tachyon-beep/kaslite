@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
+from morphogenetic_engine.training import clear_seed_report_cache
+
 
 def is_testing_mode() -> bool:
     """Check if we're in testing mode."""
@@ -56,8 +58,6 @@ def create_experiment_config(args, device) -> Dict[str, Any]:
 
 def write_experiment_log_header(log_f, config: Dict[str, Any], args) -> None:
     """Write the detailed configuration header to the log file."""
-    from morphogenetic_engine.training import clear_seed_report_cache
-
     clear_seed_report_cache()
 
     # Write comprehensive configuration header

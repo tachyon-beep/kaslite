@@ -185,7 +185,7 @@ def log_mlflow_metrics_and_artifacts(
             model_copy = type(model)(model.input_dim, model.hidden_dim, model.output_dim)
             model_copy.load_state_dict(model.state_dict())
             model_copy.eval()
-            
+
             mlflow_pytorch.log_model(model_copy, "model")
 
             # Register model in Model Registry if validation accuracy meets threshold

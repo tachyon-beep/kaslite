@@ -48,12 +48,11 @@ class SeedState:
         """Get a styled representation of the seed's status."""
         if self.state == "dormant":
             return Text(f"{self.seed_id}: {self.state}", style="dim white")
-        elif self.state == "blending":
+        if self.state == "blending":
             return Text(f"{self.seed_id}: {self.state} α={self.alpha:.3f}", style="yellow")
-        elif self.state == "active":
+        if self.state == "active":
             return Text(f"{self.seed_id}: {self.state} α={self.alpha:.3f}", style="green bold")
-        else:
-            return Text(f"{self.seed_id}: {self.state}", style="cyan")
+        return Text(f"{self.seed_id}: {self.state}", style="red")
 
 
 class RichDashboard:

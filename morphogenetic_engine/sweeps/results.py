@@ -177,8 +177,7 @@ class SweepResults:
 
         if direction == "maximize":
             return max(metric_results, key=lambda x: x[metric])
-        else:
-            return min(metric_results, key=lambda x: x[metric])
+        return min(metric_results, key=lambda x: x[metric])
 
     def get_parameter_analysis(self) -> Dict[str, Any]:
         """Analyze parameter importance and correlations."""

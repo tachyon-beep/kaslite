@@ -25,13 +25,10 @@ def parse_value_list(value: Union[str, List, int, float]) -> List[Any]:
         # Handle comma-separated strings
         if "," in value:
             return [item.strip() for item in value.split(",")]
-        else:
-            return [value]
-    elif isinstance(value, list):
-        return value
-    else:
-        # Single numeric or other value
         return [value]
+    if isinstance(value, list):
+        return value
+    return [value]
 
 
 def validate_sweep_config(sweep_config: Dict[str, Any], valid_args: set) -> None:
