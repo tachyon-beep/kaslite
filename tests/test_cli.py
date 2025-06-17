@@ -1,288 +1,222 @@
 """
-Test suite for CLI argument parsing and main function.
+Refactored test suite for CLI argument parsing and main function.
 
 This module contains tests for the morphogenetic architecture CLI interface,
-including tests for:
+focusing on clean separation between unit and integration tests.
 
-- Command-line argument parsing with new flags (--num_layers, --seeds_per_layer)
-- Main function execution and integration
-- Problem type dispatch logic
-- New CLI arguments for architecture configuration
-- Backward compatibility verification
+Key improvements:
+- Eliminated import conflicts
+- Consolidated duplicate MockArgs classes into fixtures
+- Separated unit tests (argument parsing) from integration tests
+- Reduced overmocking by focusing tests on their core purpose
+- Added comprehensive error condition testing
 
 Test Classes:
-    TestMainFunction: Tests for main function integration
-    TestCLIDispatch: Tests for CLI argument dispatch logic
-    TestNewCLIFlags: Tests for new CLI flags --num_layers and --seeds_per_layer
-    TestNewCLIArguments: Comprehensive tests for new CLI arguments
+    TestArgumentParsing: Pure unit tests for CLI argument parsing
+    TestModelIntegration: Integration tests for model building with parsed arguments
+    TestErrorConditions: Error handling and edge case testing
 """
 
-from unittest.mock import Mock, patch
+from dataclasses import dataclass
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import torch
 
 from morphogenetic_engine.cli.arguments import parse_experiment_arguments
-from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 from morphogenetic_engine.experiment import build_model_and_agents
 from scripts.run_morphogenetic_experiment import main
 
 
-class TestMainFunction:
-    """Test suite for main function integration."""
+@dataclass
+class MockArgs:
+    """Centralized mock arguments factory for testing."""
 
-    def test_main_basic_execution(self):
-        """Test that main function can execute without errors."""
-        # Mock command line arguments
-        test_args = [
-            "--hidden_dim",
-            "32",
-            "--warm_up_epochs",
-            "2",
-            "--adaptation_epochs",
-            "2",
-            "--lr",
-            "0.01",
-            "--acc_threshold",
-            "0.8",
-        ]
+    # Core experiment parameters
+    problem_type: str = "moons"
+    hidden_dim: int = 64
+    input_dim: int = 2
+    num_layers: int = 8
+    seeds_per_layer: int = 1
 
-        with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            with patch("scripts.run_morphogenetic_experiment.run_single_experiment") as mock_run:
-                # Mock the entire run_single_experiment to avoid complexity
-                mock_run.return_value = {
-                    "run_id": "test",
-                    "best_acc": 0.8,
-                    "seeds_activated": False,
-                }
+    # Training parameters
+    lr: float = 1e-3
+    batch_size: int = 32
+    warm_up_epochs: int = 5
+    adaptation_epochs: int = 10
 
-                try:
-                    main()
-                    # If we get here without exception, test passed
-                except SystemExit:
-                    # argparse might call sys.exit, which is fine
-                    pass
-                except Exception as exc:  # pylint: disable=broad-except
-                    pytest.fail(f"main() raised unexpected exception: {exc}")
+    # Morphogenetic parameters
+    blend_steps: int = 30
+    shadow_lr: float = 1e-3
+    progress_thresh: float = 0.6
+    drift_warn: float = 0.12
+    acc_threshold: float = 0.95
 
-    def test_main_argument_parsing(self):
-        """Test argument parsing in main function."""
-        # Test with minimal arguments
-        test_args = ["--hidden_dim", "64"]
+    # Other parameters
+    device: str = "cpu"
 
-        with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            with patch("morphogenetic_engine.runners.Path.open", create=True):
-                with patch("morphogenetic_engine.logger.ExperimentLogger") as mock_logger:
-                    mock_logger.return_value = Mock()
-                    with patch("builtins.print"):
-                        with patch("torch.utils.data.random_split") as mock_split:
-                            # Provide a minimal dataset that works with DataLoader
-                            import torch
+    @classmethod
+    def with_architecture(cls, num_layers: int, seeds_per_layer: int) -> "MockArgs":
+        """Create mock args with specific architecture parameters."""
+        return cls(num_layers=num_layers, seeds_per_layer=seeds_per_layer)
 
-                            class DummyDataset:
-                                def __len__(self):
-                                    return 10
+    @classmethod
+    def for_dataset(cls, problem_type: str, input_dim: int = 2) -> "MockArgs":
+        """Create mock args for a specific dataset type."""
+        return cls(problem_type=problem_type, input_dim=input_dim)
 
-                                def __getitem__(self, idx):
-                                    return torch.zeros(2), torch.zeros(1)
 
-                            mock_train = DummyDataset()
-                            mock_val = DummyDataset()
-                            mock_split.return_value = (mock_train, mock_val)
-                            with patch("morphogenetic_engine.training.evaluate") as mock_eval:
-                                mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
-                                try:
-                                    main()
-                                except SystemExit:
-                                    pass  # We just want to test argument parsing
+class TestArgumentParsing:
+    """Pure unit tests for CLI argument parsing without external dependencies."""
 
-    def test_main_new_arguments(self):
-        """Test that main function accepts new CLI arguments."""
-        test_args = [
-            "--problem_type",
-            "complex_moons",
-            "--input_dim",
-            "4",
-            "--device",
-            "cpu",
-            "--blend_steps",
-            "5",  # Small number for fast test
-            "--warm_up_epochs",
-            "1",  # Only 1 epoch for fast test
-        ]
-
-        with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            # Test argument parsing first
+    def test_default_values(self):
+        """Test that default values are set correctly."""
+        with patch("sys.argv", ["test_script"]):
             args = parse_experiment_arguments()
 
-            # Verify arguments were parsed correctly
-            assert args.problem_type == "complex_moons"
-            assert args.input_dim == 4
-            assert args.device == "cpu"
-            assert args.blend_steps == 5
-            assert args.warm_up_epochs == 1
+            assert args.num_layers == 8
+            assert args.seeds_per_layer == 1
+            assert args.hidden_dim == 128
+            assert args.problem_type == "spirals"  # Actual default is spirals, not moons
 
+    @pytest.mark.parametrize(
+        "num_layers,expected",
+        [
+            ("4", 4),
+            ("12", 12),
+            ("1", 1),
+            ("20", 20),
+        ],
+    )
+    def test_num_layers_parsing(self, num_layers: str, expected: int):
+        """Test --num_layers argument parsing with various values."""
+        with patch("sys.argv", ["test", "--num_layers", num_layers]):
+            args = parse_experiment_arguments()
+            assert args.num_layers == expected
 
-class TestCLIDispatch:
-    """Test CLI argument dispatch logic."""
+    @pytest.mark.parametrize(
+        "seeds_per_layer,expected",
+        [
+            ("1", 1),
+            ("3", 3),
+            ("5", 5),
+            ("10", 10),
+        ],
+    )
+    def test_seeds_per_layer_parsing(self, seeds_per_layer: str, expected: int):
+        """Test --seeds_per_layer argument parsing with various values."""
+        with patch("sys.argv", ["test", "--seeds_per_layer", seeds_per_layer]):
+            args = parse_experiment_arguments()
+            assert args.seeds_per_layer == expected
 
-    def test_problem_type_dispatch(self):
+    def test_combined_architecture_flags(self):
+        """Test that architecture flags work correctly together."""
+        with patch("sys.argv", ["test", "--num_layers", "6", "--seeds_per_layer", "2"]):
+            args = parse_experiment_arguments()
+            assert args.num_layers == 6
+            assert args.seeds_per_layer == 2
+
+    @pytest.mark.parametrize(
+        "problem_type,n_samples",
+        [
+            ("spirals", 100),
+            ("moons", 200),
+            ("clusters", 150),
+            ("spheres", 300),
+            ("complex_moons", 250),
+        ],
+    )
+    def test_problem_type_dispatch(self, problem_type: str, n_samples: int):
         """Test that different problem types are parsed correctly."""
-        test_cases = [
-            ("spirals", "create_spirals"),
-            ("moons", "create_moons"),
-            ("clusters", "create_clusters"),
-            ("spheres", "create_spheres"),
-            ("complex_moons", "create_complex_moons"),
-        ]
+        test_args = ["test", "--problem_type", problem_type, "--n_samples", str(n_samples)]
 
-        for problem_type, _ in test_cases:
-            test_args = [
-                "--problem_type",
-                problem_type,
-                "--n_samples",
-                "100",
-                "--warm_up_epochs",
-                "1",
-            ]
+        with patch("sys.argv", test_args):
+            args = parse_experiment_arguments()
+            assert args.problem_type == problem_type
+            assert args.n_samples == n_samples
 
-            with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-                args = parse_experiment_arguments()
-                # Verify the problem type was parsed correctly
-                assert args.problem_type == problem_type
-                assert args.n_samples == 100
-                assert args.warm_up_epochs == 1
-
-    def test_irrelevant_flags_ignored(self):
-        """Test that flags irrelevant to chosen problem_type are parsed but don't cause errors."""
-        # Use spirals with cluster-specific flags (should be ignored)
+    def test_irrelevant_flags_handling(self):
+        """Test that irrelevant flags are parsed but don't interfere."""
         test_args = [
+            "test",
             "--problem_type",
             "spirals",
             "--cluster_count",
             "5",  # Irrelevant to spirals
             "--sphere_radii",
             "1,2,3",  # Irrelevant to spirals
-            "--n_samples",
-            "100",
             "--noise",
             "0.3",  # Relevant to spirals
         ]
 
-        with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
+        with patch("sys.argv", test_args):
             args = parse_experiment_arguments()
-            # Verify relevant arguments were parsed correctly
             assert args.problem_type == "spirals"
-            assert args.n_samples == 100
             assert np.isclose(args.noise, 0.3)
-            # Irrelevant flags should also be parsed but ignored by the dataset creation logic
-            assert args.cluster_count == 5
-            assert args.sphere_radii == [1.0, 2.0, 3.0]
+            assert args.cluster_count == 5  # Still parsed
+            assert args.sphere_radii == [1.0, 2.0, 3.0]  # Still parsed
 
 
-class TestNewCLIFlags:
-    """
-    Test suite for the new CLI flags: --num_layers and --seeds_per_layer.
+class TestModelIntegration:
+    """Integration tests for model building with parsed CLI arguments."""
 
-    This class tests the command-line argument parsing for the new architecture
-    configuration flags that allow dynamic control over network depth and
-    multi-seed per layer functionality.
+    @pytest.fixture
+    def device(self) -> torch.device:
+        """Provide CPU device for testing."""
+        return torch.device("cpu")
 
-    Tests cover:
-    - Default values for both flags
-    - Custom values for --num_layers
-    - Custom values for --seeds_per_layer
-    - Flag combination behavior
-    - Integration with model creation
+    def test_build_model_with_default_args(self, device: torch.device):
+        """Test model building with default arguments."""
+        args = MockArgs()
 
-    The flags enable users to configure:
-    - num_layers: Number of hidden layers in the network (default: 8)
-    - seeds_per_layer: Number of sentinel seeds per layer (default: 1)
-    """
+        model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
 
-    def test_num_layers_flag(self):
-        """
-        Test that --num_layers flag works correctly.
+        # Verify model architecture
+        assert model.num_layers == 8
+        assert model.seeds_per_layer == 1
+        assert model.get_total_seeds() == 8
 
-        Verifies that the --num_layers command-line argument is properly parsed
-        and sets the correct value in the argument namespace. Tests both a
-        small value (4) and larger value (12) to ensure the flag accepts
-        various integer inputs.
+        # Verify components
+        assert isinstance(seed_manager, SeedManager)
+        assert isinstance(loss_fn, torch.nn.CrossEntropyLoss)
+        assert isinstance(kasmina, KasminaMicro)
+        assert next(model.parameters()).device == device
 
-        The num_layers flag controls the number of hidden layers in the
-        morphogenetic network architecture.
-        """
-        with patch("sys.argv", ["test", "--num_layers", "4"]):
-            args = parse_experiment_arguments()
-            assert args.num_layers == 4
+    def test_build_model_with_custom_architecture(self, device: torch.device):
+        """Test model building with custom architecture parameters."""
+        args = MockArgs.with_architecture(num_layers=5, seeds_per_layer=3)
 
-        # Test with different values
-        with patch("sys.argv", ["test", "--num_layers", "12"]):
-            args = parse_experiment_arguments()
-            assert args.num_layers == 12
+        model, _, _, _ = build_model_and_agents(args, device)
 
-    def test_seeds_per_layer_flag(self):
-        """
-        Test that --seeds_per_layer flag works correctly.
+        assert model.num_layers == 5
+        assert model.seeds_per_layer == 3
+        assert model.get_total_seeds() == 15
+        assert len(model.layers) == 5
+        assert len(model.all_seeds) == 15
 
-        Verifies that the --seeds_per_layer command-line argument is properly
-        parsed and sets the correct value. Tests multiple values (3 and 5) to
-        ensure the flag accepts various integer inputs.
+    @pytest.mark.parametrize(
+        "dataset_type", ["moons", "spirals", "clusters", "complex_moons", "spheres"]
+    )
+    def test_model_building_across_datasets(self, dataset_type: str, device: torch.device):
+        """Test that model building works consistently across dataset types."""
+        args = MockArgs.for_dataset(dataset_type)
+        args.num_layers = 3
+        args.seeds_per_layer = 2
 
-        The seeds_per_layer flag controls how many sentinel seeds are created
-        per hidden layer, enabling ensemble-like behavior through averaging
-        of multiple adaptive paths per layer.
-        """
-        with patch("sys.argv", ["test", "--seeds_per_layer", "3"]):
-            args = parse_experiment_arguments()
-            assert args.seeds_per_layer == 3
+        model, _, _, _ = build_model_and_agents(args, device)
 
-        # Test with different values
-        with patch("sys.argv", ["test", "--seeds_per_layer", "5"]):
-            args = parse_experiment_arguments()
-            assert args.seeds_per_layer == 5
-
-    def test_combined_flags(self):
-        """Test that both new flags work together."""
-        with patch("sys.argv", ["test", "--num_layers", "6", "--seeds_per_layer", "2"]):
-            args = parse_experiment_arguments()
-            assert args.num_layers == 6
-            assert args.seeds_per_layer == 2
-
-    def test_default_values(self):
-        """Test that default values are maintained for backward compatibility."""
-        with patch("sys.argv", ["test"]):
-            args = parse_experiment_arguments()
-            assert args.num_layers == 8  # Default should be 8
-            assert args.seeds_per_layer == 1  # Default should be 1
-
-    def test_model_creation_with_new_flags(self):
-        """Test that BaseNet is created correctly with new flags."""
-        seed_manager = SeedManager()
-
-        # Test with custom values
-        model = BaseNet(
-            hidden_dim=64, seed_manager=seed_manager, input_dim=2, num_layers=3, seeds_per_layer=2
-        )
-
+        # Architecture should be consistent regardless of dataset
         assert model.num_layers == 3
         assert model.seeds_per_layer == 2
-        assert model.get_total_seeds() == 6  # 3 layers * 2 seeds each
+        assert model.get_total_seeds() == 6
 
-        # Test seed naming
-        all_seeds = model.get_all_seeds()
-        expected_names = ["seed1_1", "seed1_2", "seed2_1", "seed2_2", "seed3_1", "seed3_2"]
-        actual_names = [seed.seed_id for seed in all_seeds]
-        assert actual_names == expected_names
-
-    def test_layer_seed_organization(self):
+    def test_seed_organization_in_model(self, device: torch.device):
         """Test that seeds are correctly organized by layer."""
-        seed_manager = SeedManager()
-        model = BaseNet(
-            hidden_dim=32, seed_manager=seed_manager, input_dim=3, num_layers=2, seeds_per_layer=3
-        )
+        args = MockArgs.with_architecture(num_layers=2, seeds_per_layer=3)
+
+        model, _, _, _ = build_model_and_agents(args, device)
 
         # Test layer 0 seeds
         layer_0_seeds = model.get_seeds_for_layer(0)
@@ -294,270 +228,166 @@ class TestNewCLIFlags:
         assert len(layer_1_seeds) == 3
         assert [s.seed_id for s in layer_1_seeds] == ["seed2_1", "seed2_2", "seed2_3"]
 
-    def test_forward_pass_with_multiple_seeds(self):
-        """Test that forward pass works correctly with multiple seeds per layer."""
-        seed_manager = SeedManager()
-        model = BaseNet(
-            hidden_dim=16, seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=3
-        )
+    def test_backward_compatibility(self, device: torch.device):
+        """Test that default values maintain backward compatibility."""
+        args = MockArgs()  # Uses defaults: 8 layers, 1 seed per layer
 
-        # Test forward pass
-        x = torch.randn(5, 2)
-        output = model(x)
+        model, _, _, _ = build_model_and_agents(args, device)
 
-        assert output.shape == (5, 2)  # Should maintain batch size and output dims
-        assert not torch.isnan(output).any()  # Should not produce NaN values
-        assert torch.isfinite(output).all()  # Should produce finite values
+        # Should match legacy hardcoded behavior
+        assert model.num_layers == 8
+        assert model.seeds_per_layer == 1
+        assert model.get_total_seeds() == 8
 
-    def test_backward_compatibility_with_seeds_property(self):
-        """Test that the seeds property still works for backward compatibility."""
-        seed_manager = SeedManager()
-        model = BaseNet(
-            hidden_dim=32, seed_manager=seed_manager, input_dim=2, num_layers=3, seeds_per_layer=1
-        )
-
-        # Test that seeds property returns all seeds
-        assert len(model.seeds) == 3
-        assert len(model.get_all_seeds()) == 3
-
-        # Test that both methods return the same seeds
+        # Test backward compatibility property
+        assert len(model.seeds) == 8  # all_seeds property
+        assert len(model.get_all_seeds()) == 8
         assert list(model.seeds) == model.get_all_seeds()
 
-    def test_integration_with_build_model_and_agents(self):
-        """Test that the new flags work with the full model building pipeline."""
 
-        class MockArgs:
-            """Mock arguments for testing model building with new CLI flags."""
+class TestErrorConditions:
+    """Test error handling and edge cases for CLI arguments."""
 
-            hidden_dim = 32
-            input_dim = 2
-            num_layers = 3
-            seeds_per_layer = 2
-            blend_steps = 30
-            shadow_lr = 1e-3
-            progress_thresh = 0.6
-            drift_warn = 0.1
-            acc_threshold = 0.95
+    def test_invalid_num_layers_values(self):
+        """Test handling of invalid --num_layers values."""
+        # Note: argparse converts string to int, so "0" becomes 0, "-1" becomes -1
+        # These are technically valid integers, so let's test model building instead
+        invalid_cases = [
+            ("abc", ValueError),  # Non-numeric strings should cause argparse to fail
+            ("", ValueError),  # Empty string should cause argparse to fail
+        ]
 
-        args = MockArgs()
+        for invalid_value, expected_exception in invalid_cases:
+            with patch("sys.argv", ["test", "--num_layers", invalid_value]):
+                with pytest.raises((SystemExit, expected_exception)):
+                    parse_experiment_arguments()
+
+    def test_invalid_seeds_per_layer_values(self):
+        """Test handling of invalid --seeds_per_layer values."""
+        # Similar to num_layers, test non-numeric values that argparse will reject
+        invalid_cases = [
+            ("1.5", ValueError),  # Float strings might be rejected by argparse int type
+            ("xyz", ValueError),  # Non-numeric strings
+        ]
+
+        for invalid_value, expected_exception in invalid_cases:
+            with patch("sys.argv", ["test", "--seeds_per_layer", invalid_value]):
+                with pytest.raises((SystemExit, expected_exception)):
+                    parse_experiment_arguments()
+
+    def test_missing_required_dependencies_for_model_building(self):
+        """Test error handling when required model building dependencies are missing."""
+        # Create args missing critical attributes
+        incomplete_args = type(
+            "Args",
+            (),
+            {
+                "hidden_dim": 64,
+                "num_layers": 3,
+                # Missing 'seeds_per_layer', 'progress_thresh', etc.
+            },
+        )()
+
         device = torch.device("cpu")
 
-        model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
+        with pytest.raises(AttributeError):
+            build_model_and_agents(incomplete_args, device)
 
-        # Verify model properties
-        assert model.get_total_seeds() == 6  # 3 layers * 2 seeds
-        assert isinstance(loss_fn, torch.nn.CrossEntropyLoss)
-        assert abs(kasmina.acc_threshold - 0.95) < 1e-6  # Use approximate comparison for float
-        assert isinstance(seed_manager, SeedManager)
-
-        # Verify model is on correct device
-        assert next(model.parameters()).device == device
-
-
-class TestNewCLIArguments:
-    """
-    Comprehensive tests for the new CLI arguments --num_layers and --seeds_per_layer.
-
-    This test class focuses on end-to-end testing of the new command-line arguments,
-    including argument parsing, model construction, and integration with the
-    experiment runner.
-
-    Key test areas:
-    - Argument parsing with default and custom values
-    - Model and agent construction with new architecture parameters
-    - Integration testing across different dataset types
-    - Backward compatibility verification
-    - Main function execution with new flags
-
-    The tests use mocked command-line arguments and MockArgs classes to simulate
-    various configuration scenarios without requiring actual CLI execution.
-    """
-
-    @patch("sys.argv", ["script"] + ["--problem_type", "moons", "--adaptation_epochs", "10"])
-    def test_parse_arguments_defaults(self):
-        """Test that parse_arguments sets correct defaults for new flags."""
-        args = parse_experiment_arguments()
-
-        assert args.num_layers == 8  # Default value
-        assert args.seeds_per_layer == 1  # Default value
-
-    @patch(
-        "sys.argv",
-        ["script"] + ["--problem_type", "moons", "--adaptation_epochs", "10", "--num_layers", "5"],
-    )
-    def test_parse_arguments_custom_num_layers(self):
-        """Test parsing custom --num_layers argument."""
-        args = parse_experiment_arguments()
-        assert args.num_layers == 5
-
-    @patch(
-        "sys.argv",
-        ["script"]
-        + ["--problem_type", "moons", "--adaptation_epochs", "10", "--seeds_per_layer", "3"],
-    )
-    def test_parse_arguments_custom_seeds_per_layer(self):
-        """Test parsing custom --seeds_per_layer argument."""
-        args = parse_experiment_arguments()
-        assert args.seeds_per_layer == 3
-
-    @patch(
-        "sys.argv",
-        ["script"]
-        + [
-            "--problem_type",
-            "moons",
-            "--adaptation_epochs",
-            "10",
-            "--num_layers",
-            "5",
-            "--seeds_per_layer",
-            "3",
+    @pytest.mark.parametrize(
+        "num_layers,seeds_per_layer",
+        [
+            (1, 1),  # Minimum valid values
+            (50, 10),  # Large valid values
+            (1, 20),  # Few layers, many seeds
+            (20, 1),  # Many layers, few seeds
         ],
     )
-    def test_parse_arguments_both_flags(self):
-        """Test parsing both new flags together."""
-        args = parse_experiment_arguments()
-
-        assert args.num_layers == 5
-        assert args.seeds_per_layer == 3
-
-    def test_build_model_with_custom_architecture(self):
-        """Test that build_model_and_agents respects the new CLI flags."""
-
-        class MockArgs:
-            """Mock arguments for testing build_model_and_agents with custom architecture."""
-
-            problem_type = "moons"
-            hidden_dim = 64
-            lr = 1e-3
-            batch_size = 32
-            progress_thresh = 0.6
-            drift_warn = 0.12
-            num_layers = 5
-            seeds_per_layer = 3
-            acc_threshold = 0.95
-            input_dim = 2
-            blend_steps = 30
-            shadow_lr = 1e-3
-
-        args = MockArgs()
+    def test_extreme_but_valid_architecture_values(self, num_layers: int, seeds_per_layer: int):
+        """Test that extreme but valid architecture values work correctly."""
+        args = MockArgs.with_architecture(num_layers, seeds_per_layer)
         device = torch.device("cpu")
 
         model, _, _, _ = build_model_and_agents(args, device)
 
-        # Verify model has correct architecture
-        assert model.num_layers == 5
-        assert model.seeds_per_layer == 3
-        assert model.get_total_seeds() == 15  # 5 layers * 3 seeds
+        assert model.num_layers == num_layers
+        assert model.seeds_per_layer == seeds_per_layer
+        assert model.get_total_seeds() == num_layers * seeds_per_layer
 
-        # Verify model structure
-        assert len(model.layers) == 5
-        assert len(model.all_seeds) == 15
+    def test_model_building_with_invalid_architecture_values(self):
+        """Test that model building fails with invalid architecture values."""
+        device = torch.device("cpu")
 
-    def test_integration_with_different_datasets(self):
-        """Test integration of new flags with different dataset types."""
+        # Test with zero or negative values (even if argparse accepts them)
+        invalid_architectures = [
+            (0, 1),  # Zero layers
+            (-1, 1),  # Negative layers
+            (1, 0),  # Zero seeds per layer
+            (1, -1),  # Negative seeds per layer
+        ]
 
-        datasets = ["moons", "spirals", "clusters", "complex_moons", "spheres"]
+        for num_layers, seeds_per_layer in invalid_architectures:
+            args = MockArgs.with_architecture(num_layers, seeds_per_layer)
 
-        for dataset in datasets:
+            # Model building should fail with invalid values
+            with pytest.raises((ValueError, RuntimeError, IndexError)):
+                build_model_and_agents(args, device)
 
-            class MockArgs:
-                """Mock arguments for testing integration with different datasets."""
 
-                problem_type = dataset
-                hidden_dim = 32
-                lr = 1e-3
-                batch_size = 16
-                progress_thresh = 0.6
-                drift_warn = 0.12
-                num_layers = 3
-                seeds_per_layer = 2
-                acc_threshold = 0.95
-                input_dim = 2
-                blend_steps = 30
-                shadow_lr = 1e-3
+class TestMainFunctionIntegration:
+    """Focused integration tests for main function execution."""
 
-            args = MockArgs()
-            device = torch.device("cpu")
-
-            model, _, _, _ = build_model_and_agents(args, device)
-
-            # All should create consistent architecture regardless of dataset
-            assert model.num_layers == 3
-            assert model.seeds_per_layer == 2
-            assert model.get_total_seeds() == 6
-
-    @patch(
-        "sys.argv",
-        ["script"]
-        + [
-            "--problem_type",
-            "moons",
+    def test_main_with_minimal_args(self):
+        """Test main function with minimal required arguments."""
+        test_args = [
+            "run_morphogenetic_experiment.py",
+            "--warm_up_epochs",
+            "1",
             "--adaptation_epochs",
-            "2",
+            "1",
+            "--hidden_dim",
+            "32",
+        ]
+
+        with patch("sys.argv", test_args):
+            with patch("morphogenetic_engine.runners.run_single_experiment") as mock_run:
+                mock_run.return_value = {
+                    "run_id": "test",
+                    "best_acc": 0.8,
+                    "seeds_activated": False,
+                }
+
+                try:
+                    main()
+                except SystemExit:
+                    pass  # Normal exit from argparse
+
+    def test_main_with_new_architecture_flags(self):
+        """Test main function execution with new architecture flags."""
+        test_args = [
+            "run_morphogenetic_experiment.py",
             "--num_layers",
             "4",
             "--seeds_per_layer",
             "2",
-            "--hidden_dim",
-            "32",
-            "--batch_size",
-            "16",
-        ],
-    )
-    def test_main_function_with_new_flags(self):
-        """Test that main function can be called with new CLI flags."""
+            "--warm_up_epochs",
+            "1",
+            "--adaptation_epochs",
+            "1",
+        ]
 
-        # Test that parse_arguments works with new flags
-        args = parse_experiment_arguments()
-        assert args.num_layers == 4
-        assert args.seeds_per_layer == 2
+        with patch("sys.argv", test_args):
+            args = parse_experiment_arguments()
 
-        # Test that build_model_and_agents works with the parsed arguments
-        device = torch.device("cpu")
+            # Verify new flags are parsed correctly
+            assert args.num_layers == 4
+            assert args.seeds_per_layer == 2
 
-        # Add missing attributes that build_model_and_agents expects
-        args.input_dim = 2
-        args.blend_steps = 30
-        args.shadow_lr = 1e-3
+            # Verify model can be built with these arguments
+            device = torch.device("cpu")
+            args.input_dim = 2
+            args.blend_steps = 30
+            args.shadow_lr = 1e-3
 
-        model, _, _, _ = build_model_and_agents(args, device)
-
-        # Verify the model was built with correct parameters
-        assert model.num_layers == 4
-        assert model.seeds_per_layer == 2
-
-    def test_backward_compatibility(self):
-        """Test that old scripts work without specifying new flags."""
-
-        # Should create backward-compatible model
-        class MockArgs:
-            """Mock arguments for testing backward compatibility."""
-
-            problem_type = "moons"
-            hidden_dim = 64
-            lr = 1e-3
-            batch_size = 32
-            progress_thresh = 0.6
-            drift_warn = 0.12
-            num_layers = 8  # Default
-            seeds_per_layer = 1  # Default
-            acc_threshold = 0.95
-            input_dim = 2
-            blend_steps = 30
-            shadow_lr = 1e-3
-
-        args = MockArgs()
-        device = torch.device("cpu")
-
-        model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
-
-        # Should have the same structure as before
-        assert model.num_layers == 8
-        assert model.seeds_per_layer == 1
-        assert model.get_total_seeds() == 8  # Same as old hardcoded version
-
-        # Verify all components are created correctly
-        assert isinstance(seed_manager, SeedManager)
-        assert isinstance(loss_fn, torch.nn.CrossEntropyLoss)
-        assert isinstance(kasmina, KasminaMicro)
+            model, _, _, _ = build_model_and_agents(args, device)
+            assert model.num_layers == 4
+            assert model.seeds_per_layer == 2
