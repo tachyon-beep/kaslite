@@ -14,16 +14,18 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from scripts.run_morphogenetic_experiment import (
+from morphogenetic_engine.sweeps.runner import (
     expand_grid,
     generate_run_slug,
-    get_valid_argument_names,
     load_sweep_configs,
     merge_args_with_combo,
-    parse_arguments,
     parse_value_list,
     run_parameter_sweep,
     validate_sweep_config,
+)
+from morphogenetic_engine.cli.arguments import (
+    get_valid_argument_names,
+    parse_experiment_arguments as parse_arguments,
 )
 
 
@@ -366,9 +368,9 @@ class TestCLISweepIntegration:
 class TestSweepExecution:
     """Test the actual sweep execution functionality."""
 
-    @patch("scripts.run_morphogenetic_experiment.run_single_experiment")
-    @patch("scripts.run_morphogenetic_experiment.load_sweep_configs")
-    @patch("scripts.run_morphogenetic_experiment.create_sweep_results_summary")
+    @patch("morphogenetic_engine.runners.run_single_experiment")
+    @patch("morphogenetic_engine.sweeps.runner.load_sweep_configs")
+    @patch("morphogenetic_engine.sweeps.runner.create_sweep_results_summary")
     def test_run_parameter_sweep_basic(self, mock_summary, mock_load, mock_run):
         """Test basic parameter sweep execution."""
         # Setup mocks
@@ -392,7 +394,7 @@ class TestSweepExecution:
         assert mock_run.call_count == 4  # 2×2 grid
         assert mock_summary.called
 
-    @patch("scripts.run_morphogenetic_experiment.load_sweep_configs")
+    @patch("morphogenetic_engine.sweeps.runner.load_sweep_configs")
     def test_run_parameter_sweep_validation_error(self, mock_load):
         """Test sweep execution with validation errors."""
         # Setup mock to return invalid config
@@ -408,7 +410,7 @@ class TestSweepExecution:
         print_calls = [call[0][0] for call in mock_print.call_args_list]
         assert any("Error in sweep config" in call for call in print_calls)
 
-    @patch("scripts.run_morphogenetic_experiment.load_sweep_configs")
+    @patch("morphogenetic_engine.sweeps.runner.load_sweep_configs")
     def test_run_parameter_sweep_load_error(self, mock_load):
         """Test sweep execution with config loading errors."""
         # Setup mock to raise a FileNotFoundError (more specific exception)

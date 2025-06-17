@@ -8,7 +8,7 @@ import pytest
 
 from morphogenetic_engine.core import SeedManager
 from morphogenetic_engine.training import clear_seed_report_cache, log_seed_updates
-from scripts.run_morphogenetic_experiment import setup_experiment_for_tests as setup_experiment
+from morphogenetic_engine.runners import setup_experiment
 
 
 class TestTensorBoardIntegration:
@@ -38,23 +38,23 @@ class TestTensorBoardIntegration:
         args.acc_threshold = 0.95
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with patch("scripts.run_morphogenetic_experiment.Path") as mock_path:
+            with patch("morphogenetic_engine.runners.Path") as mock_path:
                 # Mock the project root to use our temp directory
                 mock_project_root = Path(temp_dir)
                 mock_path.return_value.parent.parent = mock_project_root
                 mock_path.__file__ = temp_dir + "/scripts/run_morphogenetic_experiment.py"
 
                 # Mock ExperimentLogger to avoid file operations
-                with patch("scripts.run_morphogenetic_experiment.ExperimentLogger") as mock_logger:
-                    with patch("scripts.run_morphogenetic_experiment.SummaryWriter") as mock_writer:
+                with patch("morphogenetic_engine.runners.ExperimentLogger") as mock_logger:
+                    with patch("morphogenetic_engine.runners.SummaryWriter") as mock_writer:
                         mock_logger.return_value = Mock()
                         mock_writer.return_value = Mock()
 
                         result = setup_experiment(args)
 
-                        # Should return 5 items: logger, tb_writer, log_f, device, config
-                        assert len(result) == 5
-                        _, tb_writer, _, _, _ = result
+                        # Should return 7 items: logger, tb_writer, log_f, device, config, slug, project_root
+                        assert len(result) == 7
+                        _, tb_writer, _, _, _, _, _ = result
 
                         # Verify TensorBoard writer was created
                         mock_writer.assert_called_once()

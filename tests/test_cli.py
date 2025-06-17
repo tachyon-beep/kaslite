@@ -26,7 +26,8 @@ import torch
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 from morphogenetic_engine.experiment import build_model_and_agents
-from scripts.run_morphogenetic_experiment import main, parse_arguments
+from morphogenetic_engine.cli.arguments import parse_experiment_arguments
+from scripts.run_morphogenetic_experiment import main
 
 
 class TestMainFunction:
@@ -49,8 +50,8 @@ class TestMainFunction:
         ]
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            with patch("scripts.run_morphogenetic_experiment.Path.open", create=True):
-                with patch("scripts.run_morphogenetic_experiment.ExperimentLogger") as mock_logger:
+            with patch("morphogenetic_engine.runners.Path.open", create=True):
+                with patch("morphogenetic_engine.logger.ExperimentLogger") as mock_logger:
                     # Mock the file operations to avoid creating actual files
                     mock_logger.return_value = Mock()
                     with patch("builtins.print"):  # Suppress print output
@@ -70,8 +71,8 @@ class TestMainFunction:
         test_args = ["--hidden_dim", "64"]
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            with patch("scripts.run_morphogenetic_experiment.Path.open", create=True):
-                with patch("scripts.run_morphogenetic_experiment.ExperimentLogger") as mock_logger:
+            with patch("morphogenetic_engine.runners.Path.open", create=True):
+                with patch("morphogenetic_engine.logger.ExperimentLogger") as mock_logger:
                     mock_logger.return_value = Mock()
                     with patch("builtins.print"):
                         with patch("torch.utils.data.random_split") as mock_split:
@@ -102,7 +103,7 @@ class TestMainFunction:
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch(
-                "scripts.run_morphogenetic_experiment.datasets.create_complex_moons"
+                "morphogenetic_engine.datasets.create_complex_moons"
             ) as mock_create, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
                 "torch.optim.Adam"
             ) as mock_optim, patch(
@@ -149,7 +150,7 @@ class TestCLIDispatch:
 
             with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
                 with patch(
-                    f"scripts.run_morphogenetic_experiment.datasets.{expected_function}"
+                    f"morphogenetic_engine.datasets.{expected_function}"
                 ) as mock_func, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
                     "torch.optim.Adam"
                 ) as mock_optim, patch(
@@ -195,7 +196,7 @@ class TestCLIDispatch:
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch(
-                "scripts.run_morphogenetic_experiment.datasets.create_spirals"
+                "morphogenetic_engine.datasets.create_spirals"
             ) as mock_spirals, patch("morphogenetic_engine.components.BaseNet") as mock_net, patch(
                 "torch.optim.Adam"
             ) as mock_optim, patch(
@@ -257,12 +258,12 @@ class TestNewCLIFlags:
         morphogenetic network architecture.
         """
         with patch("sys.argv", ["test", "--num_layers", "4"]):
-            args = parse_arguments()
+            args = parse_experiment_arguments()
             assert args.num_layers == 4
 
         # Test with different values
         with patch("sys.argv", ["test", "--num_layers", "12"]):
-            args = parse_arguments()
+            args = parse_experiment_arguments()
             assert args.num_layers == 12
 
     def test_seeds_per_layer_flag(self):
@@ -278,25 +279,25 @@ class TestNewCLIFlags:
         of multiple adaptive paths per layer.
         """
         with patch("sys.argv", ["test", "--seeds_per_layer", "3"]):
-            args = parse_arguments()
+            args = parse_experiment_arguments()
             assert args.seeds_per_layer == 3
 
         # Test with different values
         with patch("sys.argv", ["test", "--seeds_per_layer", "5"]):
-            args = parse_arguments()
+            args = parse_experiment_arguments()
             assert args.seeds_per_layer == 5
 
     def test_combined_flags(self):
         """Test that both new flags work together."""
         with patch("sys.argv", ["test", "--num_layers", "6", "--seeds_per_layer", "2"]):
-            args = parse_arguments()
+            args = parse_experiment_arguments()
             assert args.num_layers == 6
             assert args.seeds_per_layer == 2
 
     def test_default_values(self):
         """Test that default values are maintained for backward compatibility."""
         with patch("sys.argv", ["test"]):
-            args = parse_arguments()
+            args = parse_experiment_arguments()
             assert args.num_layers == 8  # Default should be 8
             assert args.seeds_per_layer == 1  # Default should be 1
 
@@ -418,7 +419,7 @@ class TestNewCLIArguments:
     @patch("sys.argv", ["script"] + ["--problem_type", "moons", "--adaptation_epochs", "10"])
     def test_parse_arguments_defaults(self):
         """Test that parse_arguments sets correct defaults for new flags."""
-        args = parse_arguments()
+        args = parse_experiment_arguments()
 
         assert args.num_layers == 8  # Default value
         assert args.seeds_per_layer == 1  # Default value
@@ -429,7 +430,7 @@ class TestNewCLIArguments:
     )
     def test_parse_arguments_custom_num_layers(self):
         """Test parsing custom --num_layers argument."""
-        args = parse_arguments()
+        args = parse_experiment_arguments()
         assert args.num_layers == 5
 
     @patch(
@@ -439,7 +440,7 @@ class TestNewCLIArguments:
     )
     def test_parse_arguments_custom_seeds_per_layer(self):
         """Test parsing custom --seeds_per_layer argument."""
-        args = parse_arguments()
+        args = parse_experiment_arguments()
         assert args.seeds_per_layer == 3
 
     @patch(
@@ -458,7 +459,7 @@ class TestNewCLIArguments:
     )
     def test_parse_arguments_both_flags(self):
         """Test parsing both new flags together."""
-        args = parse_arguments()
+        args = parse_experiment_arguments()
 
         assert args.num_layers == 5
         assert args.seeds_per_layer == 3
@@ -551,7 +552,7 @@ class TestNewCLIArguments:
         """Test that main function can be called with new CLI flags."""
 
         # Test that parse_arguments works with new flags
-        args = parse_arguments()
+        args = parse_experiment_arguments()
         assert args.num_layers == 4
         assert args.seeds_per_layer == 2
 

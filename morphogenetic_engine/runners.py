@@ -373,9 +373,3 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
         dashboard.stop()  # Ensure dashboard is stopped even on error
         print(f"Experiment failed: {e}")
         return {"run_id": run_id, "error": str(e), "best_acc": 0.0, "seeds_activated": False}
-
-
-def setup_experiment_for_tests(args):
-    """Backward-compatible setup_experiment for tests that expect 5 return values."""
-    logger, tb_writer, log_f, device, config, _, _ = setup_experiment(args)
-    return logger, tb_writer, log_f, device, config
