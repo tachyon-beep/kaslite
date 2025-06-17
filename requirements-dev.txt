@@ -1,4 +1,15 @@
-pytest
-pytest-asyncio
-black
-ruff
+# Testing
+pytest>=6.0.0
+pytest-cov>=3.0.0
+pytest-asyncio>=0.21.0
+
+# Code formatting and linting
+black>=22.0.0
+ruff>=0.1.0
+mypy>=1.0.0
+
+# Pre-commit hooks
+pre-commit>=2.20.0
+
+# Optional: Hyperparameter optimization for sweeps
+optuna>=3.0.0

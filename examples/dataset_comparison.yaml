@@ -1,23 +1,39 @@
 # Dataset Comparison Configuration
 # Compare performance across different datasets and dimensions
 
-# Dataset variations
-problem_type: ["spirals", "moons", "clusters", "spheres", "complex_moons"]
-input_dim: [2, 3, 4, 5, 6]
-n_samples: [500, 1000, 2000, 4000]
+sweep_type: "grid"
 
-# Dataset-specific parameters that apply when relevant
-noise: [0.1, 0.2, 0.3] # For spirals and spheres
-moon_noise: [0.05, 0.1, 0.15] # For moons datasets
-cluster_count: [2, 3, 4, 5] # For clusters
-sphere_count: [2, 3, 4] # For spheres
+# Fixed experiment parameters
+experiment:
+  batch_size: 64
+  train_frac: 0.8
+  device: "cpu"
 
-# Keep model architecture fixed
-num_layers: 8
-seeds_per_layer: 1
-hidden_dim: 128
-lr: 0.001
+# Parameter grid to explore
+parameters:
+  # Dataset variations
+  problem_type: ["spirals", "moons", "clusters", "spheres", "complex_moons"]
+  input_dim: [2, 3, 4, 5, 6]
+  n_samples: [500, 1000, 2000, 4000]
 
-# Training consistency
-batch_size: 64
-train_frac: 0.8
+  # Dataset-specific parameters that apply when relevant
+  noise: [0.1, 0.2, 0.3] # For spirals and spheres
+  moon_noise: [0.05, 0.1, 0.15] # For moons datasets
+  cluster_count: [2, 3, 4, 5] # For clusters
+  sphere_count: [2, 3, 4] # For spheres
+
+  # Keep model architecture fixed
+  num_layers: 8
+  seeds_per_layer: 1
+  hidden_dim: 128
+  lr: 0.001
+
+# Execution configuration
+execution:
+  max_parallel: 2
+  timeout_per_trial: 1800
+
+# Optimization settings
+optimization:
+  target_metric: "val_acc"
+  direction: "maximize"

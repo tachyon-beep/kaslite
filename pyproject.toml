@@ -4,12 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "morphogenetic-engine"
-description = "A morphogenetic neural network architecture with adaptive seed germination"
+description = "A morphogenetic neural network architecture with adaptive seed germination and complete MLOps pipeline"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "John", email = "john@foundryside.dev"},
+]
+keywords = ["machine-learning", "neural-networks", "morphogenetic", "mlops", "experimentation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dynamic = ["version"]
 dependencies = [
@@ -18,25 +31,86 @@ dependencies = [
     "scikit-learn>=1.0.0",
     "rich>=10.0.0",
     "pyyaml>=5.0.0",
+    "tensorboard>=2.0.0",
+    "mlflow>=2.0.0",
+    "dvc[all]>=3.0.0",
+    "prometheus_client>=0.15.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.0.0",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=6.0",
-    "pytest-cov",
-    "black",
-    "pylint",
-    "mypy",
+    "pytest-cov>=3.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pre-commit>=2.20.0",
+]
+sweep = [
+    "optuna>=3.0.0",
+]
+monitoring = [
+    "prometheus_client>=0.15.0",
+]
+inference = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
 ]
 
 [project.scripts]
 morphogenetic-sweep = "morphogenetic_engine.cli.sweep:main"
 morphogenetic-reports = "morphogenetic_engine.cli.reports:main"
+morphogenetic-registry = "morphogenetic_engine.cli.model_registry_cli:main"
 
-# Pylint configuration for ML projects
+[project.urls]
+Homepage = "https://github.com/john/kaslite"
+Documentation = "https://github.com/john/kaslite/blob/main/README.md"
+Repository = "https://github.com/john/kaslite"
+Issues = "https://github.com/john/kaslite/issues"
+
+# Ruff configuration (faster alternative to pylint)
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C4", # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "build",
+    "dist",
+    "env",
+]
+
+[tool.ruff.per-file-ignores]
+"tests/**/*.py" = ["E402"]  # Allow imports not at top of file in tests
+
+# Pylint configuration for ML projects (legacy - prefer ruff)
 [tool.pylint.messages_control]
 disable = [
     "invalid-name",           # Allow X, y, etc. (ML convention)
+    "too-many-arguments",     # ML functions often need many parameters
+    "too-many-locals",        # ML functions often have many variables
+    "duplicate-code",         # Some duplication is acceptable in ML
 ]
 
 [tool.pylint.format]
@@ -55,7 +129,7 @@ good-names = ["X", "y", "i", "j", "k", "n", "x", "z", "lr", "w", "b"]
 # Black code formatting
 [tool.black]
 line-length = 100
-target-version = ['py38']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -64,11 +138,13 @@ extend-exclude = '''
   | \.git
   | \.mypy_cache
   | \.pytest_cache
+  | \.ruff_cache
   | \.vscode
   | __pycache__
   | build
   | dist
   | env
+  | .dvc
 )/
 '''
 
@@ -122,6 +198,11 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
+exclude = [
+    "tests/",
+    "scripts/",
+    "examples/",
+]
 
 [[tool.mypy.overrides]]
 module = [
@@ -129,6 +210,10 @@ module = [
     "sklearn.*",
     "numpy.*",
     "matplotlib.*",
+    "mlflow.*",
+    "optuna.*",
+    "prometheus_client.*",
+    "rich.*",
 ]
 ignore_missing_imports = true
 

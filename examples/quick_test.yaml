@@ -1,13 +1,29 @@
 # Quick Test Sweep
 # Minimal configuration for fast testing
 
-num_layers: [4, 8]
-seeds_per_layer: 1,2
-lr: [0.001, 0.003]
+sweep_type: "grid"
 
-# Fast execution settings
-problem_type: spirals
-n_samples: 500
-warm_up_epochs: 10
-adaptation_epochs: 20
-batch_size: 32
+# Fixed experiment parameters
+experiment:
+  problem_type: "spirals"
+  n_samples: 500
+  warm_up_epochs: 10
+  adaptation_epochs: 20
+  batch_size: 32
+  device: "cpu"
+
+# Parameter grid to explore
+parameters:
+  num_layers: [4, 8]
+  seeds_per_layer: [1, 2]
+  lr: [0.001, 0.003]
+
+# Execution configuration
+execution:
+  max_parallel: 2
+  timeout_per_trial: 900 # 15 minutes
+
+# Optimization settings
+optimization:
+  target_metric: "val_acc"
+  direction: "maximize"
