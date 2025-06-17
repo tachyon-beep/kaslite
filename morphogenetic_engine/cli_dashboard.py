@@ -83,8 +83,10 @@ class RichDashboard:
         }
 
         # Layout for the dashboard
-        self.layout = Layout()
-        self.live = Live(self.layout, console=self.console, refresh_per_second=4)
+        self.layout: Optional[Layout] = None
+
+        # Live display instance
+        self.live: Optional[Live] = None
 
     def _create_metrics_table(self) -> Table:
         """Create the metrics table showing current experiment progress."""
@@ -120,11 +122,16 @@ class RichDashboard:
 
     def _setup_layout(self):
         """Set up the dashboard layout."""
+        self.layout = Layout()
         self.layout.split_column(
             Layout(self.progress, name="progress", size=3),
             Layout(self._create_metrics_table(), name="metrics", size=12),
             Layout(self._create_seeds_panel(), name="seeds"),
         )
+
+        # Create the Live object with the layout (if not already set for testing)
+        if self.live is None:
+            self.live = Live(self.layout, console=self.console, refresh_per_second=10)
 
     def start_phase(self, phase_name: str, total_epochs: int, description: str = ""):
         """Start a new training phase with a progress bar."""
@@ -163,8 +170,9 @@ class RichDashboard:
             self.progress.update(self.current_task, completed=epoch)
 
         # Update layout with new metrics
-        self.layout["metrics"].update(self._create_metrics_table())
-        self.layout["seeds"].update(self._create_seeds_panel())
+        if self.layout is not None:
+            self.layout["metrics"].update(self._create_metrics_table())
+            self.layout["seeds"].update(self._create_seeds_panel())
 
     def update_seed(self, seed_id: str, state: str, alpha: float = 0.0):
         """Update a seed's state and alpha value."""
@@ -174,7 +182,8 @@ class RichDashboard:
             self.seeds[seed_id].update(state, alpha)
 
         # Update seeds panel
-        self.layout["seeds"].update(self._create_seeds_panel())
+        if self.layout is not None:
+            self.layout["seeds"].update(self._create_seeds_panel())
 
     def show_phase_transition(self, to_phase: str, epoch: int):
         """Display a highlighted phase transition banner."""
@@ -212,7 +221,8 @@ class RichDashboard:
     def __enter__(self):
         """Enter the live display context."""
         self._setup_layout()
-        self.live.start()
+        if self.live is not None:
+            self.live.start()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -221,18 +231,21 @@ class RichDashboard:
         if self.current_task is not None:
             self.progress.stop_task(self.current_task)
 
-        self.live.stop()
+        if self.live is not None:
+            self.live.stop()
 
     def start(self):
         """Start the live dashboard."""
         self._setup_layout()
-        self.live.start()
+        if self.live is not None:
+            self.live.start()
 
     def stop(self):
         """Stop the live dashboard."""
         if self.current_task is not None:
             self.progress.stop_task(self.current_task)
-        self.live.stop()
+        if self.live is not None:
+            self.live.stop()
 
 
 def demo_dashboard():

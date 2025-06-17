@@ -436,6 +436,7 @@ class TestMultiSeedBaseNet:
         with pytest.raises(IndexError):
             net.get_seeds_for_layer(num_layers + 10)
 
+
 class TestSeedAveraging:
     """Test suite for seed averaging behavior (not parameterized)."""
 
@@ -660,13 +661,15 @@ class TestBaseNetIntegration:
 )
 class TestMultiSeedBaseNetGradientFlow:
     """Test gradient flow behavior for BaseNet with multiple seeds per layer.
-    
+
     Uses smaller configurations to avoid vanishing gradient issues that make
     gradient flow tests unreliable in very large networks.
     """
 
     @pytest.fixture
-    def multi_seed_net(self, seed_manager: SeedManager, num_layers: int, seeds_per_layer: int) -> BaseNet:
+    def multi_seed_net(
+        self, seed_manager: SeedManager, num_layers: int, seeds_per_layer: int
+    ) -> BaseNet:
         """Fixture for BaseNet with varying multi-seed configurations for gradient flow testing."""
         return BaseNet(
             hidden_dim=32,  # Smaller hidden_dim for gradient flow testing

@@ -52,7 +52,11 @@ class TestMainFunction:
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             with patch("scripts.run_morphogenetic_experiment.run_single_experiment") as mock_run:
                 # Mock the entire run_single_experiment to avoid complexity
-                mock_run.return_value = {"run_id": "test", "best_acc": 0.8, "seeds_activated": False}
+                mock_run.return_value = {
+                    "run_id": "test",
+                    "best_acc": 0.8,
+                    "seeds_activated": False,
+                }
 
                 try:
                     main()
@@ -76,11 +80,14 @@ class TestMainFunction:
                         with patch("torch.utils.data.random_split") as mock_split:
                             # Provide a minimal dataset that works with DataLoader
                             import torch
+
                             class DummyDataset:
                                 def __len__(self):
                                     return 10
+
                                 def __getitem__(self, idx):
                                     return torch.zeros(2), torch.zeros(1)
+
                             mock_train = DummyDataset()
                             mock_val = DummyDataset()
                             mock_split.return_value = (mock_train, mock_val)
@@ -132,7 +139,14 @@ class TestCLIDispatch:
         ]
 
         for problem_type, _ in test_cases:
-            test_args = ["--problem_type", problem_type, "--n_samples", "100", "--warm_up_epochs", "1"]
+            test_args = [
+                "--problem_type",
+                problem_type,
+                "--n_samples",
+                "100",
+                "--warm_up_epochs",
+                "1",
+            ]
 
             with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
                 args = parse_experiment_arguments()

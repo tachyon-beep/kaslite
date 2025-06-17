@@ -4,6 +4,7 @@ Unit tests for the FastAPI Inference Server.
 Tests the inference server endpoints, model loading, health checks,
 and monitoring functionality.
 """
+
 from unittest.mock import Mock, patch
 
 import pytest

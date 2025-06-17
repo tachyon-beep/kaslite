@@ -6,7 +6,7 @@ morphogenetic architecture experiments with various datasets and parameters.
 """
 
 import argparse
-from typing import Optional, List
+from typing import List, Optional
 
 
 def parse_float_list(value: str) -> List[float]:
