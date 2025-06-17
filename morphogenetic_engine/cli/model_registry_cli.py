@@ -11,6 +11,7 @@ import datetime
 import logging
 import sys
 
+from mlflow.tracking import MlflowClient
 from morphogenetic_engine.model_registry import ModelRegistry
 
 # Configure logging
@@ -116,8 +117,6 @@ def get_best_model(args):
 
         # Get the metric value from the run
         try:
-            from mlflow.tracking import MlflowClient
-
             client = MlflowClient()
             if best_version.run_id:
                 run = client.get_run(best_version.run_id)

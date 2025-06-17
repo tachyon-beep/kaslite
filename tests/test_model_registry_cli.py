@@ -238,7 +238,7 @@ class TestModelRegistryCLI:
         mock_registry.list_model_versions.assert_called_once_with(stage="Production")
 
     @patch("morphogenetic_engine.cli.model_registry_cli.ModelRegistry")
-    @patch("mlflow.tracking.MlflowClient")
+    @patch("morphogenetic_engine.cli.model_registry_cli.MlflowClient")
     def test_get_best_model_success(self, mock_client_class, mock_registry_class):
         """Test successful best model retrieval via CLI."""
         # Setup mocks

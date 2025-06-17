@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 import torch
 import uvicorn
+import mlflow.pytorch as mlflow_pytorch
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -131,11 +132,9 @@ async def load_production_model() -> bool:
                 return False
 
             # Extract version from URI
-            model_version = model_uri.split("/")[-1]
+            model_version = model_uri.rsplit("/", maxsplit=1)[-1]
 
             # Load model using MLflow
-            import mlflow.pytorch as mlflow_pytorch
-
             model = mlflow_pytorch.load_model(model_uri)
             model.eval()
 
@@ -159,8 +158,6 @@ async def load_specific_model(version: str) -> bool:
 
         with MODEL_LOAD_TIME.time():
             model_uri = f"models:/KasminaModel/{version}"
-
-            import mlflow.pytorch as mlflow_pytorch
 
             model = mlflow_pytorch.load_model(model_uri)
             model.eval()

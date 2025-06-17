@@ -12,7 +12,11 @@ import pytest
 import torch
 from fastapi.testclient import TestClient
 
-from morphogenetic_engine.inference_server import app
+from morphogenetic_engine.inference_server import (
+    app,
+    load_production_model,
+    load_specific_model,
+)
 
 
 class TestInferenceServer:
@@ -298,8 +302,6 @@ class TestInferenceServerLifecycle:
     @patch("mlflow.pytorch.load_model")
     async def test_load_production_model_success(self, mock_load_model, mock_registry_class):
         """Test successful production model loading."""
-        from morphogenetic_engine.inference_server import load_production_model
-
         # Setup mocks
         mock_registry = Mock()
         mock_registry_class.return_value = mock_registry
@@ -324,8 +326,6 @@ class TestInferenceServerLifecycle:
     @patch("morphogenetic_engine.inference_server.ModelRegistry")
     async def test_load_production_model_no_model(self, mock_registry_class):
         """Test production model loading when no model exists."""
-        from morphogenetic_engine.inference_server import load_production_model
-
         # Setup mock to return None (no production model)
         mock_registry = Mock()
         mock_registry_class.return_value = mock_registry
@@ -339,8 +339,6 @@ class TestInferenceServerLifecycle:
     @patch("morphogenetic_engine.inference_server.ModelRegistry")
     async def test_load_production_model_exception(self, mock_registry_class):
         """Test production model loading with exception."""
-        from morphogenetic_engine.inference_server import load_production_model
-
         # Setup mock to raise exception
         mock_registry = Mock()
         mock_registry_class.return_value = mock_registry
@@ -354,8 +352,6 @@ class TestInferenceServerLifecycle:
     @patch("mlflow.pytorch.load_model")
     async def test_load_specific_model_success(self, mock_load_model):
         """Test successful specific model loading."""
-        from morphogenetic_engine.inference_server import load_specific_model
-
         # Setup mocks
         mock_model = Mock()
         mock_model.eval.return_value = mock_model
@@ -375,8 +371,6 @@ class TestInferenceServerLifecycle:
 
     async def test_load_specific_model_already_cached(self):
         """Test loading specific model that's already cached."""
-        from morphogenetic_engine.inference_server import load_specific_model
-
         # Test with cached model
         with patch("morphogenetic_engine.inference_server.model_cache") as mock_cache:
             mock_cache.__contains__.return_value = True  # Already in cache
@@ -388,8 +382,6 @@ class TestInferenceServerLifecycle:
     @patch("mlflow.pytorch.load_model")
     async def test_load_specific_model_exception(self, mock_load_model):
         """Test specific model loading with exception."""
-        from morphogenetic_engine.inference_server import load_specific_model
-
         # Setup mock to raise exception
         mock_load_model.side_effect = Exception("Loading error")
 
