@@ -86,3 +86,6 @@ results/
 # Temporary files
 *.tmp
 *.temp
+
+# Misc
+.github/copilot-instructions.md

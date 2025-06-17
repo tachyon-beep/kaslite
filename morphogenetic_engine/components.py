@@ -180,6 +180,16 @@ class BaseNet(nn.Module):
     ):
         super().__init__()
 
+        # Parameter validation - fail fast with clear error messages
+        if num_layers <= 0:
+            raise ValueError("num_layers must be positive")
+        if input_dim <= 0:
+            raise ValueError("input_dim must be positive")
+        if hidden_dim <= 0:
+            raise ValueError("hidden_dim must be positive")
+        if seeds_per_layer <= 0:
+            raise ValueError("seeds_per_layer must be positive")
+
         self.num_layers = num_layers
         self.seeds_per_layer = seeds_per_layer
         self.hidden_dim = hidden_dim
@@ -236,6 +246,9 @@ class BaseNet(nn.Module):
 
     def get_seeds_for_layer(self, layer_idx: int) -> list:
         """Get all seeds for a specific layer."""
+        if layer_idx < 0 or layer_idx >= self.num_layers:
+            raise IndexError(f"Layer index {layer_idx} out of range [0, {self.num_layers})")
+
         start_idx = layer_idx * self.seeds_per_layer
         end_idx = start_idx + self.seeds_per_layer
         return list(self.all_seeds[start_idx:end_idx])
