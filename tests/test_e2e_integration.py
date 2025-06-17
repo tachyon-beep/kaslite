@@ -5,16 +5,13 @@ This test validates the entire workflow from experiment configuration through
 model training, registration, deployment, and inference serving.
 """
 
-import json
 import os
 import shutil
 import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict
 
-import pytest
 import requests
 import yaml
 
@@ -33,6 +30,7 @@ class E2EIntegrationTest:
         self.original_cwd = Path.cwd()
         self.inference_process = None
         self.inference_port = 8901  # Use different port to avoid conflicts
+        self.config_path = None  # Initialize config_path attribute
 
     def setup(self):
         """Set up test environment and directories."""
@@ -89,7 +87,7 @@ class E2EIntegrationTest:
         }
 
         config_path = self.test_dir / "configs" / "e2e_test.yaml"
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             yaml.dump(config, f, default_flow_style=False)
 
         self.config_path = config_path
@@ -116,7 +114,6 @@ class E2EIntegrationTest:
         print("🧪 Testing experiment execution...")
 
         # Run experiment using the script directly
-        import subprocess
         import sys
 
         script_path = self.original_cwd / "scripts" / "run_morphogenetic_experiment.py"
@@ -128,6 +125,7 @@ class E2EIntegrationTest:
             capture_output=True,
             text=True,
             timeout=180,  # 3 minute timeout for minimal config
+            check=False,  # Don't raise exception on non-zero return code
         )
 
         print(f"Return code: {result.returncode}")
@@ -191,7 +189,7 @@ class E2EIntegrationTest:
                         registry.promote_model("Production", latest_version.version)
                         print("✅ Model promoted to Production")
 
-        except Exception as e:
+        except (FileNotFoundError, ValueError, RuntimeError) as e:
             print(f"⚠️  Model registry test skipped: {e}")
 
         print("✅ Model registry integration tested")
@@ -230,7 +228,6 @@ class E2EIntegrationTest:
 
     def _start_inference_server(self):
         """Start the inference server in background."""
-        import subprocess
         import sys
 
         cmd = [
@@ -314,7 +311,7 @@ class E2EIntegrationTest:
 
         except requests.exceptions.RequestException as e:
             print(f"⚠️  Inference server test skipped: {e}")
-        except Exception as e:
+        except (ValueError, RuntimeError, ConnectionError) as e:
             print(f"⚠️  Inference server test error: {e}")
 
         print("✅ Inference server deployment tested")
@@ -350,7 +347,7 @@ class E2EIntegrationTest:
             else:
                 print("⚠️  Inference server not running, skipping metrics test")
 
-        except Exception as e:
+        except (requests.exceptions.RequestException, ValueError, RuntimeError) as e:
             print(f"⚠️  Monitoring metrics test error: {e}")
 
         print("✅ Monitoring metrics tested")
@@ -376,7 +373,7 @@ class E2EIntegrationTest:
             print("🎉 All E2E integration tests completed successfully!")
             return True
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError, subprocess.TimeoutExpired) as e:
             print(f"❌ E2E test failed: {e}")
             import traceback
 
@@ -389,13 +386,13 @@ class E2EIntegrationTest:
 
 def test_e2e_integration():
     """Pytest entry point for E2E integration test."""
-    test_suite = E2EIntegrationTest()
-    success = test_suite.run_all_tests()
-    assert success, "E2E integration test failed"
+    e2e_test_suite = E2EIntegrationTest()
+    test_success = e2e_test_suite.run_all_tests()
+    assert test_success, "E2E integration test failed"
 
 
 if __name__ == "__main__":
     # Allow running as standalone script
-    test_suite = E2EIntegrationTest()
-    success = test_suite.run_all_tests()
-    exit(0 if success else 1)
+    main_test_suite = E2EIntegrationTest()
+    main_success = main_test_suite.run_all_tests()
+    exit(0 if main_success else 1)

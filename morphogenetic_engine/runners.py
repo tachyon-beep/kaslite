@@ -10,6 +10,8 @@ import random
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import mlflow
+import mlflow.pytorch as mlflow_pytorch
 import numpy as np
 import torch
 from sklearn.preprocessing import StandardScaler
@@ -20,36 +22,16 @@ from morphogenetic_engine import datasets
 from morphogenetic_engine.cli_dashboard import RichDashboard
 from morphogenetic_engine.experiment import build_model_and_agents
 from morphogenetic_engine.logger import ExperimentLogger
+from morphogenetic_engine.model_registry import ModelRegistry
+from morphogenetic_engine.monitoring import cleanup_monitoring, initialize_monitoring
 from morphogenetic_engine.training import execute_phase_1, execute_phase_2
 from morphogenetic_engine.utils import (
     create_experiment_config,
     export_metrics_for_dvc,
     generate_experiment_slug,
-    is_testing_mode,
     write_experiment_log_footer,
     write_experiment_log_header,
 )
-
-# MLflow integration - conditional import
-TESTING_MODE = is_testing_mode()
-MLFLOW_AVAILABLE = not TESTING_MODE
-
-# Initialize MLflow variables
-mlflow = None
-mlflow_pytorch = None
-ModelRegistry = None
-
-if MLFLOW_AVAILABLE:
-    try:
-        import mlflow
-        import mlflow.pytorch as mlflow_pytorch
-
-        from morphogenetic_engine.model_registry import ModelRegistry
-    except ImportError:
-        MLFLOW_AVAILABLE = False
-        mlflow = None
-        mlflow_pytorch = None
-        ModelRegistry = None
 
 
 def setup_experiment(args):
@@ -66,19 +48,16 @@ def setup_experiment(args):
     slug = generate_experiment_slug(args)
 
     # Initialize Prometheus monitoring
-    from morphogenetic_engine.monitoring import initialize_monitoring
-
     initialize_monitoring(experiment_id=slug, port=8000)
 
     # Determine log location and initialise logger
     project_root = Path(__file__).parent.parent
 
-    # Configure MLflow if available
-    if MLFLOW_AVAILABLE and mlflow is not None:
-        mlruns_dir = project_root / "mlruns"
-        mlruns_dir.mkdir(exist_ok=True)
-        mlflow.set_tracking_uri(config.get("mlflow_uri", "file://" + str(mlruns_dir)))
-        mlflow.set_experiment(config.get("experiment_name", args.problem_type))
+    # Configure MLflow
+    mlruns_dir = project_root / "mlruns"
+    mlruns_dir.mkdir(exist_ok=True)
+    mlflow.set_tracking_uri(config.get("mlflow_uri", "file://" + str(mlruns_dir)))
+    mlflow.set_experiment(config.get("experiment_name", args.problem_type))
 
     log_dir = project_root / "results"
     log_dir.mkdir(exist_ok=True)
@@ -160,9 +139,6 @@ def log_final_summary(logger, final_stats, seed_manager, log_f):
 
 def setup_mlflow_logging(config: Dict[str, Any], slug: str) -> None:
     """Setup MLflow run and log parameters."""
-    if not MLFLOW_AVAILABLE or mlflow is None:
-        return
-
     try:
         # End any existing run first to avoid conflicts
         if mlflow.active_run() is not None:
@@ -177,9 +153,6 @@ def log_mlflow_metrics_and_artifacts(
     final_stats: Dict[str, Any], model, seed_manager, project_root: Path, slug: str, args
 ) -> None:
     """Log metrics, artifacts, and model to MLflow."""
-    if not MLFLOW_AVAILABLE or mlflow is None or mlflow_pytorch is None:
-        return
-
     try:
         # Log metrics
         mlflow.log_metric("final_best_acc", final_stats["best_acc"])
@@ -240,7 +213,7 @@ def log_mlflow_metrics_and_artifacts(
                                 )
                                 print(f"🚀 Model promoted to Staging: v{model_version.version}")
 
-                except Exception as e:
+                except (ImportError, RuntimeError, ValueError, OSError, AttributeError) as e:
                     print(f"Warning: Model registration failed: {e}")
 
         except (ImportError, RuntimeError, ValueError, OSError) as e:
@@ -287,11 +260,10 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
             dashboard.show_phase_transition("phase_1", 0)
 
             # Log phase transition to MLflow
-            if MLFLOW_AVAILABLE and mlflow is not None:
-                try:
-                    mlflow.set_tag("phase", "phase_1")
-                except (ImportError, AttributeError, RuntimeError):
-                    pass
+            try:
+                mlflow.set_tag("phase", "phase_1")
+            except (ImportError, AttributeError, RuntimeError):
+                pass
 
             best_acc_phase1 = execute_phase_1(
                 config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f, dashboard
@@ -307,11 +279,10 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
             dashboard.show_phase_transition("phase_2", config["warm_up_epochs"])
 
             # Log phase transition to MLflow
-            if MLFLOW_AVAILABLE and mlflow is not None:
-                try:
-                    mlflow.set_tag("phase", "phase_2")
-                except (ImportError, AttributeError, RuntimeError):
-                    pass
+            try:
+                mlflow.set_tag("phase", "phase_2")
+            except (ImportError, AttributeError, RuntimeError):
+                pass
 
             final_stats = execute_phase_2(
                 config,
@@ -342,15 +313,12 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
             tb_writer.close()
 
             # End MLflow run
-            if MLFLOW_AVAILABLE and mlflow is not None:
-                try:
-                    mlflow.end_run()
-                except (ImportError, AttributeError, RuntimeError):
-                    pass
+            try:
+                mlflow.end_run()
+            except (ImportError, AttributeError, RuntimeError):
+                pass
 
             # Cleanup monitoring
-            from morphogenetic_engine.monitoring import cleanup_monitoring
-
             cleanup_monitoring()
 
             # Return results for sweep summary
@@ -368,16 +336,13 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
 
     except (RuntimeError, ValueError, KeyError, torch.cuda.OutOfMemoryError) as e:
         # Cleanup monitoring on error
-        from morphogenetic_engine.monitoring import cleanup_monitoring
-
         cleanup_monitoring()
 
         # End MLflow run on error
-        if MLFLOW_AVAILABLE and mlflow is not None:
-            try:
-                mlflow.end_run(status="FAILED")
-            except (ImportError, AttributeError, RuntimeError):
-                pass
+        try:
+            mlflow.end_run(status="FAILED")
+        except (ImportError, AttributeError, RuntimeError):
+            pass
         tb_writer.close()  # Ensure writer is closed even on error
         dashboard.stop()  # Ensure dashboard is stopped even on error
         print(f"Experiment failed: {e}")
