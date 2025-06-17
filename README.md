@@ -2,21 +2,47 @@
 
 This repo demonstrates a morphogenetic architecture with "soft-landing" seeds. Each sentinel seed now awakens gradually: it shadow-trains as an auto-encoder, blends its output into the trunk using a ramped alpha parameter, then becomes fully active.
 
-## 🏗️ Complete MLOps Pipeline
+## � Project Status: Production Ready ✅
+
+The Kaslite morphogenetic engine has undergone comprehensive cleanup and modernization:
+
+### **Recent Updates (June 2025)**
+- ✅ **Dependencies Cleaned**: Removed legacy dependencies (ClearML), updated all requirements
+- ✅ **Configuration Modernized**: Updated `pyproject.toml`, requirements files, and development tools
+- ✅ **Code Quality**: Added pre-commit hooks, updated `.gitignore`, improved packaging
+- ✅ **Examples Fixed**: All 8 example configurations validated and working
+- ✅ **CLI Improved**: Streamlined command-line interfaces with proper module structure
+- ✅ **Testing Validated**: Full test suite passing with comprehensive coverage
+
+### **Architecture Excellence**
+- ✅ **Feature Complete**: All core features implemented and production-ready
+- ✅ **Type Safety**: Comprehensive type hints throughout codebase
+- ✅ **Documentation**: Clear docstrings and comprehensive guides
+- ✅ **Error Handling**: Robust error handling and logging
+- ✅ **Modularity**: Clean separation of concerns across components
+
+### **MLOps Integration**
+- ✅ **Experiment Tracking**: MLflow with automatic run logging
+- ✅ **Model Registry**: Automatic versioning and lifecycle management
+- ✅ **Monitoring**: Prometheus metrics with Grafana dashboards
+- ✅ **CI/CD**: GitHub Actions for automated testing and deployment
+- ✅ **Data Management**: DVC for reproducible data and model versioning
+
+## �🏗️ Complete MLOps Pipeline
 
 The morphogenetic engine now includes a **complete MLOps pipeline** from research to production:
 
-### Phase 1-3: Core Architecture & Experimentation ✅
+### Core Architecture & Experimentation ✅
 - **Morphogenetic Neural Networks** - Adaptive architecture with seed-based expansion
 - **Hyperparameter Sweeps** - Grid and Bayesian optimization with parallel execution
 - **Experiment Tracking** - MLflow integration with comprehensive metrics logging
 
-### Phase 4-5: Monitoring & Observability ✅  
+### Monitoring & Observability ✅  
 - **Real-time Monitoring** - Prometheus metrics with Grafana dashboards
 - **Automated Alerting** - Critical issue detection and notifications
 - **Live CLI Dashboard** - Beautiful Rich-powered training visualization
 
-### Phase 6: Model Registry & Production Deployment ✅
+### Model Registry & Production Deployment ✅
 - **🏛️ MLflow Model Registry** - Automatic model versioning and lifecycle management
 - **🚀 FastAPI Inference Server** - Production-ready REST API with monitoring
 - **🔧 Model Management CLI** - Command-line tools for model operations
@@ -30,7 +56,7 @@ The morphogenetic engine now includes a **complete MLOps pipeline** from researc
 pip install -r requirements.txt
 
 # 2. Train a model (auto-registers if accuracy >= 70%)
-python scripts/run_morphogenetic_experiment.py --problem spirals --device cpu
+python -m morphogenetic_engine.experiment examples/quick_test.yaml
 
 # 3. Deploy inference server with full monitoring stack
 docker compose -f docker-compose.deploy.yml up -d
@@ -129,7 +155,7 @@ All experiments are automatically tracked with MLflow:
 - **Parameters**: All CLI flags and configuration values are logged
 - **Metrics**: Training/validation loss, accuracy, seed alpha values, and more
 - **Artifacts**: Model weights, TensorBoard logs, experiment logs
-- **Phase Transitions**: Tagged with phase_1/phase_2 for easy filtering
+- **Experiment Stages**: Tagged for easy filtering and comparison
 - **Seed Tracking**: Individual seed states and alpha blending values
 
 ### DVC Pipeline
@@ -168,6 +194,10 @@ dvc init
 # Run a complete reproducible experiment
 dvc repro
 
+# Or run experiments directly with YAML configs
+python -m morphogenetic_engine.experiment examples/quick_test.yaml
+python -m morphogenetic_engine.cli.sweep examples/basic_sweep.yaml
+
 # View results in different UIs
 tensorboard --logdir runs/          # TensorBoard metrics
 mlflow ui                          # MLflow experiment tracking
@@ -181,125 +211,92 @@ mlflow ui                          # MLflow experiment tracking
 
 ### Single Experiment Mode
 
-Run the training script with various configuration options for different dataset types:
+Run experiments using YAML configuration files for better reproducibility:
 
 ```bash
-# Basic spirals dataset (2D, default)
-python scripts/run_morphogenetic_experiment.py
+# Basic spirals experiment with quick test config
+python -m morphogenetic_engine.experiment examples/quick_test.yaml
 
-# Two moons dataset with custom parameters
-python scripts/run_morphogenetic_experiment.py --problem_type moons --n_samples 800 --noise 0.15
+# Architecture search experiment
+python -m morphogenetic_engine.experiment examples/architecture_search.yaml
 
-# Gaussian clusters dataset
-python scripts/run_morphogenetic_experiment.py --problem_type clusters --n_samples 600 --n_centers 3 --cluster_std 1.2
+# Dataset comparison experiment
+python -m morphogenetic_engine.experiment examples/dataset_comparison.yaml
 
-# Spherical shell dataset in higher dimensions
-python scripts/run_morphogenetic_experiment.py --problem_type spheres --input_dim 4 --n_samples 1000 --noise 0.1
-
-# Legacy complex_moons dataset with higher dimensions
-python scripts/run_morphogenetic_experiment.py --problem_type complex_moons --input_dim 5
-
-# Use CUDA if available
-python scripts/run_morphogenetic_experiment.py --device cuda --problem_type clusters
-
-# Full configuration example with custom training parameters
-python scripts/run_morphogenetic_experiment.py --problem_type moons --input_dim 3 --device cuda --blend_steps 200 --shadow_lr 0.002 --batch_size 64 --train_frac 0.8
+# Learning rate optimization
+python -m morphogenetic_engine.experiment examples/learning_rate_sweep.yaml
 ```
 
 All experiments are automatically tracked in MLflow with full parameter and metric logging.
 
 ### Parameter Sweep Mode
 
-Run hyperparameter sweeps using YAML configuration files to automatically test multiple parameter combinations:
+Run hyperparameter sweeps using the dedicated CLI:
 
 ```bash
 # Run a basic hyperparameter sweep
-python scripts/run_morphogenetic_experiment.py --sweep_config examples/basic_sweep.yaml
+python -m morphogenetic_engine.cli.sweep examples/basic_sweep.yaml
 
-# Using short flag
-python scripts/run_morphogenetic_experiment.py -s examples/architecture_search.yaml
+# Bayesian optimization sweep
+python -m morphogenetic_engine.cli.sweep examples/bayesian_sweep.yaml
 
-# Run sweep from a directory of YAML files
-python scripts/run_morphogenetic_experiment.py --sweep_config examples/
+# Enhanced sweep with custom configuration
+python -m morphogenetic_engine.cli.sweep examples/enhanced_sweep.yaml
 
-# Combine CLI flags with sweep config (CLI flags become defaults)
-python scripts/run_morphogenetic_experiment.py -s examples/quick_test.yaml --device cuda --batch_size 128
+# Quick sweep for development
+python -m morphogenetic_engine.cli.sweep examples/quick_sweep.yaml
 ```
 
-#### Sweep Configuration Format
+#### Modern Configuration Format
 
-YAML sweep configs support multiple value formats:
+All experiments now use YAML configuration files for better reproducibility and version control:
 
+**Single Experiment Config:**
 ```yaml
-# YAML arrays
-num_layers: [4, 8, 16]
-seeds_per_layer: [1, 2, 4, 12, 16]
-
-# Comma-separated strings
-lr: "0.001,0.003,0.01"
-problem_type: "moons,spirals,clusters"
-
-# Single values (no sweep)
-device: cuda
-batch_size: 64
-
-# Mixed formats work together
-hidden_dim: [64, 128]        # Array format
-shadow_lr: 1e-4,5e-4,1e-3    # Comma-separated
-n_samples: 2000              # Single value
+sweep_type: grid
+experiment:
+  problem_type: spirals
+  device: cpu
+  batch_size: 32
+parameters:
+  learning_rate: [0.001]
+  hidden_dim: [128]
+execution:
+  max_time_minutes: 30
+optimization:
+  objective: val_acc
+  direction: maximize
 ```
 
-#### Grid Expansion
-
-The system creates a Cartesian product of all parameters with multiple values:
-
-- `num_layers: [4, 8]` and `lr: [0.001, 0.003]` → 4 experiments
-- `num_layers: [4, 8, 16]`, `seeds_per_layer: [1, 2]`, `lr: [0.001, 0.003]` → 12 experiments
-
-#### CLI Override Behavior
-
-- CLI flags provide default values for all experiments
-- YAML parameters override CLI defaults
-- Example: `--lr 0.001 -s config.yaml` where config has `lr: [0.003, 0.01]` will test lr=0.003 and lr=0.01
-
-#### Results Organization
-
-Sweep results are organized under `results/sweeps/YYYYMMDD_HHMMSS/`:
-
-```text
-results/sweeps/20250616_143022/
-├── run_001_a1b2c3d4/
-│   └── results_*.log
-├── run_002_e5f6g7h8/
-│   └── results_*.log
-├── ...
-└── sweep_summary.csv
+**Sweep Configuration:**
+```yaml
+sweep_type: grid
+experiment:
+  problem_type: spirals
+  device: cpu
+parameters:
+  learning_rate: [0.001, 0.003, 0.01]
+  hidden_dim: [64, 128, 256]
+  batch_size: [16, 32, 64]
+execution:
+  max_parallel: 4
+  max_time_minutes: 60
+optimization:
+  objective: val_acc
+  direction: maximize
 ```
 
-The `sweep_summary.csv` contains all parameters and results for easy analysis.
+#### Example Configurations
 
-### CLI Arguments
-
-#### General Configuration
-
-- `--problem_type`: Dataset type (`spirals`, `moons`, `clusters`, `spheres`, or `complex_moons`, default: `spirals`)
-- `--input_dim`: Input dimensionality (default: `2`)
-- `--device`: Device for computation (`cpu` or `cuda`, default: `cpu`)
-- `--batch_size`: Training batch size (default: `32`)
-- `--train_frac`: Fraction of data used for training (default: `0.7`)
-
-#### Model Training Parameters
-
-- `--blend_steps`: Blend duration for soft-landing (default: `100`)
-- `--shadow_lr`: Shadow learning rate (default: `0.001`)
-- `--progress_thresh`: Training progress threshold (default: `0.6`)
-
-#### Dataset-Specific Parameters
-
-- `--n_samples`: Number of samples to generate (default: `500`)
-- `--noise`: Noise level for moons/spheres datasets (default: `0.1`)
-- `--n_centers`: Number of cluster centers for clusters dataset (default: `2`)
-- `--cluster_std`: Standard deviation for clusters dataset (default: `1.0`)
+The `examples/` directory contains validated configuration files:
+- `quick_test.yaml` - Fast single experiment for testing
+- `basic_sweep.yaml` - Simple grid search example  
+- `quick_sweep.yaml` - Fast grid search for development
+- `architecture_search.yaml` - Network architecture optimization
+- `dataset_comparison.yaml` - Multi-dataset evaluation
+- `learning_rate_sweep.yaml` - Learning rate optimization
+- `bayesian_sweep.yaml` - Bayesian optimization example
+- `enhanced_sweep.yaml` - Advanced multi-parameter optimization
 
 ## Monitoring & Visualization
 
@@ -307,10 +304,10 @@ The `sweep_summary.csv` contains all parameters and results for easy analysis.
 
 The experiment runner includes a beautiful live CLI dashboard powered by Rich that displays:
 
-- **Progress bars**: Live progress for warm-up and adaptation phases
+- **Progress bars**: Live progress for training stages
 - **Metrics table**: Real-time training/validation loss, accuracy, and best accuracy
 - **Seed states panel**: Color-coded status of each seed (dormant/blending/active) with α values
-- **Phase transitions**: Highlighted banners when transitioning between experiment phases
+- **Stage transitions**: Highlighted banners when transitioning between experiment stages
 - **Germination events**: Special notifications when seeds become active
 
 Example output during training:
@@ -323,7 +320,7 @@ Example output during training:
 ┃ Metric        ┃ Value   ┃
 ┡━━━━━━━━━━━━━━━╇━━━━━━━━━┩
 │ Epoch         │ 2       │
-│ Phase         │ phase_1 │
+│ Stage         │ warmup  │
 │ Train Loss    │ 0.3456  │
 │ Val Loss      │ 0.2891  │
 │ Val Accuracy  │ 0.8320  │
@@ -350,7 +347,7 @@ All experiments automatically log comprehensive metrics to TensorBoard:
 
 **Text Summaries:**
 
-- `phase/transitions`: Phase transition events with timestamps
+- `training/transitions`: Training stage transition events with timestamps
 - `seed/{id}/events`: Seed state transition events
 
 **Launch TensorBoard:**
@@ -365,10 +362,10 @@ tensorboard --logdir=runs/spirals_dim3_cpu_h128_bs30_lr0.001_pt0.6_dw0.12
 
 TensorBoard will be available at `http://localhost:6006` showing detailed curves for:
 
-- Loss convergence during both phases
+- Loss convergence during training stages
 - Accuracy improvements over time  
 - Seed activation patterns and alpha ramping
-- Phase transition timing
+- Training stage transition timing
 
 ### Live Monitoring & Dashboards
 
@@ -379,7 +376,7 @@ The morphogenetic engine includes comprehensive **Prometheus metrics** and **Gra
 All experiments automatically expose detailed metrics at `http://localhost:8000/metrics`:
 
 **Training Metrics:**
-- `kaslite_epochs_total`: Number of epochs completed by phase
+- `kaslite_epochs_total`: Number of epochs completed by training stage
 - `kaslite_validation_loss` / `kaslite_validation_accuracy`: Real-time performance
 - `kaslite_best_accuracy`: Best accuracy achieved
 - `kaslite_germinations_total`: Total seed germinations
@@ -416,7 +413,7 @@ docker compose up -d prometheus grafana alertmanager
 
 The included dashboard provides:
 
-- **Validation Accuracy Trends**: Real-time accuracy curves by phase
+- **Validation Accuracy Trends**: Real-time accuracy curves by training stage
 - **Training/Validation Loss**: Loss convergence visualization
 - **Seed Status Table**: Live view of all seed states, alpha values, and drift
 - **Seed Alpha Blending**: Time-series view of alpha ramping
@@ -435,9 +432,9 @@ Alertmanager monitors key thresholds and sends notifications for:
 - Experiment stalled (no progress)
 
 **Warning Alerts:**
-- Validation accuracy drops below 85% in phase 2
+- Validation accuracy drops below 85% during adaptation stage
 - High seed drift (>15%)
-- No germinations during phase 2 with low accuracy
+- No germinations during adaptation stage with low accuracy
 - Kasmina plateau counter approaching threshold
 
 Configure Slack webhooks in `monitoring/alertmanager.yml` to receive real-time notifications.
@@ -518,7 +515,7 @@ git push                     # Share with team
 ### Morphogenetic Architecture
 - **Sentinel Seeds**: Adaptive architecture expansion
 - **Soft Landing**: Gradual seed activation with alpha blending
-- **Phase-based Training**: Warm-up → adaptation phases
+- **Adaptive Training**: Warm-up → adaptation stages
 
 ## 📚 Documentation
 
@@ -526,10 +523,10 @@ git push                     # Share with team
 - **[Model Registry & Deployment Guide](docs/MODEL_REGISTRY_DEPLOYMENT.md)** - Complete deployment documentation
 - **[Step 6 Implementation Summary](docs/STEP6_COMPLETION_SUMMARY.md)** - Technical implementation details
 - **[Step 5 Monitoring Summary](docs/STEP5_COMPLETION_SUMMARY.md)** - Monitoring system documentation
-- **[Phase 3 Final Validation](docs/phase3_final_validation.md)** - Sweep system validation results
+- **[System Validation](docs/phase3_final_validation.md)** - Sweep system validation results
 
 ### Testing & Validation
-- **[test_deployment.py](test_deployment.py)** - Complete test suite for all components
+- **[E2E Integration Testing](docs/E2E_INTEGRATION_TESTING.md)** - Complete pipeline validation (8-10 seconds)
 - **Unit Tests** - Located in `tests/` directory with comprehensive coverage
 - **Integration Tests** - End-to-end workflow validation
 
@@ -585,6 +582,15 @@ The test suite includes:
 
 ## Changelog
 
+### v6.1.0 - Project Modernization & Cleanup ✅
+- **Dependencies**: Removed legacy ClearML integration, cleaned up requirements
+- **Configuration**: Modernized `pyproject.toml` with best practices, optional dependencies
+- **Development**: Added pre-commit hooks, updated `.gitignore`, improved packaging
+- **Examples**: Fixed and validated all 8 example configuration files
+- **CLI**: Streamlined command-line interfaces with proper module organization
+- **Testing**: Full test suite validation, comprehensive coverage maintained
+- **Documentation**: Updated README and project status documentation
+
 ### v6.0.0 - Model Registry & Production Deployment
 - Added MLflow Model Registry with automatic versioning
 - Implemented FastAPI inference server with monitoring
@@ -625,5 +631,5 @@ The test suite includes:
 - Initial morphogenetic neural network implementation
 - Sentinel seed soft-landing mechanism
 - Alpha blending and gradual activation
-- Phase-based training (warm-up → adaptation)
+- Adaptive training (warm-up → adaptation)
 - Basic experiment runner and logging
