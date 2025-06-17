@@ -60,9 +60,8 @@ class TestMainFunction:
                 except SystemExit:
                     # argparse might call sys.exit, which is fine
                     pass
-                except Exception:
-                    # Any other exception is a test failure
-                    pytest.fail("main() raised unexpected exception")
+                except Exception as exc:  # pylint: disable=broad-except
+                    pytest.fail(f"main() raised unexpected exception: {exc}")
 
     def test_main_argument_parsing(self):
         """Test argument parsing in main function."""
@@ -75,16 +74,21 @@ class TestMainFunction:
                     mock_logger.return_value = Mock()
                     with patch("builtins.print"):
                         with patch("torch.utils.data.random_split") as mock_split:
-                            # Mock the data splitting to avoid actual computation
-                            mock_split.return_value = (Mock(), Mock())
+                            # Provide a minimal dataset that works with DataLoader
+                            import torch
+                            class DummyDataset:
+                                def __len__(self):
+                                    return 10
+                                def __getitem__(self, idx):
+                                    return torch.zeros(2), torch.zeros(1)
+                            mock_train = DummyDataset()
+                            mock_val = DummyDataset()
+                            mock_split.return_value = (mock_train, mock_val)
                             with patch("morphogenetic_engine.training.evaluate") as mock_eval:
                                 mock_eval.return_value = (0.5, 0.8)  # loss, accuracy
                                 try:
                                     main()
-                                except (  # pylint: disable=broad-except  # nosec # noqa: S110
-                                    SystemExit,
-                                    Exception,
-                                ):
+                                except SystemExit:
                                     pass  # We just want to test argument parsing
 
     def test_main_new_arguments(self):
@@ -104,9 +108,8 @@ class TestMainFunction:
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
             # Test argument parsing first
-            from morphogenetic_engine.cli.arguments import parse_experiment_arguments
             args = parse_experiment_arguments()
-            
+
             # Verify arguments were parsed correctly
             assert args.problem_type == "complex_moons"
             assert args.input_dim == 4
@@ -128,14 +131,11 @@ class TestCLIDispatch:
             ("complex_moons", "create_complex_moons"),
         ]
 
-        for problem_type, expected_function in test_cases:
+        for problem_type, _ in test_cases:
             test_args = ["--problem_type", problem_type, "--n_samples", "100", "--warm_up_epochs", "1"]
 
             with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-                # Test argument parsing
-                from morphogenetic_engine.cli.arguments import parse_experiment_arguments
                 args = parse_experiment_arguments()
-                
                 # Verify the problem type was parsed correctly
                 assert args.problem_type == problem_type
                 assert args.n_samples == 100
@@ -158,10 +158,7 @@ class TestCLIDispatch:
         ]
 
         with patch("sys.argv", ["run_morphogenetic_experiment.py"] + test_args):
-            # Test argument parsing
-            from morphogenetic_engine.cli.arguments import parse_experiment_arguments
             args = parse_experiment_arguments()
-            
             # Verify relevant arguments were parsed correctly
             assert args.problem_type == "spirals"
             assert args.n_samples == 100
