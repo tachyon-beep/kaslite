@@ -1,4 +1,4 @@
-# Kasmina Curriculum & System Specification v1.0
+# Tamiyo Curriculum & System Specification v1.0
 
 ## 1. Introduction
 

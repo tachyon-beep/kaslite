@@ -49,6 +49,8 @@ import mlflow
 import mlflow.exceptions
 import mlflow.pytorch as mlflow_pytorch
 
+from morphogenetic_engine.model_registry import ModelRegistry
+
 MLFLOW_AVAILABLE = not TESTING_MODE  # Disable MLflow during testing
 
 # ---------- MAIN -------------------------------------------------------------
@@ -720,6 +722,46 @@ def run_single_experiment(args: argparse.Namespace, run_id: Optional[str] = None
                     # Log model
                     try:
                         mlflow_pytorch.log_model(model, "model")
+
+                        # Register model in Model Registry if validation accuracy meets threshold
+                        if (
+                            final_stats.get("val_acc", 0) >= 0.7
+                        ):  # Register models with >70% accuracy
+                            try:
+                                registry = ModelRegistry()
+                                active_run = mlflow.active_run()
+                                if active_run and active_run.info.run_id:
+                                    run_id = active_run.info.run_id
+                                    model_version = registry.register_best_model(
+                                        run_id=run_id,
+                                        metrics=final_stats,
+                                        description=f"Morphogenetic model trained on {args.problem_type}",
+                                        tags={
+                                            "problem_type": args.problem_type,
+                                            "device": str(args.device),
+                                            "seeds_activated": str(
+                                                final_stats.get("seeds_activated", False)
+                                            ),
+                                            "training_mode": "single_experiment",
+                                        },
+                                    )
+                                    if model_version:
+                                        print(
+                                            f"✅ Model registered: v{model_version.version} (Val Acc: {final_stats.get('val_acc', 0):.4f})"
+                                        )
+
+                                        # Auto-promote to Staging if very good accuracy
+                                        if final_stats.get("val_acc", 0) >= 0.9:
+                                            registry.promote_model(
+                                                version=model_version.version, stage="Staging"
+                                            )
+                                            print(
+                                                f"🚀 Model promoted to Staging: v{model_version.version}"
+                                            )
+
+                            except Exception as e:
+                                print(f"Warning: Model registration failed: {e}")
+
                     except (ImportError, RuntimeError, ValueError, OSError) as e:
                         print(f"Warning: Could not log model to MLflow: {e}")
                 except (ImportError, AttributeError, RuntimeError, ValueError, OSError) as e:

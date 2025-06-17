@@ -1,4 +1,4 @@
-# Kasmina Implementation Guide v1.0
+# Tamiyo Implementation Guide v1.0
 
 **Objective:** Deliver a production-ready Kasmina system—an adaptive “neural architect” that monitors a base model and injects seed modules on demand—through a phased, risk-aware development plan.
 

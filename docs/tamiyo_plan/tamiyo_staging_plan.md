@@ -1,4 +1,4 @@
-# Kasmina Implementation Staging Plan v1.0
+# Tamiyo Implementation Staging Plan v1.0
 
 ## Overview
 

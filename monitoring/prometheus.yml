@@ -18,6 +18,12 @@ scrape_configs:
     scrape_interval: 10s
     metrics_path: "/metrics"
 
+  - job_name: "inference-server"
+    static_configs:
+      - targets: ["inference:8080"]
+    scrape_interval: 5s # More frequent for inference monitoring
+    metrics_path: "/metrics"
+
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]
