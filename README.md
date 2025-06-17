@@ -205,6 +205,88 @@ mlflow ui                          # MLflow experiment tracking
 # Experiment tracking URLs
 # TensorBoard: http://localhost:6006
 # MLflow: http://localhost:5000
+
+# Complete monitoring stack (all services)
+./scripts/monitoring.sh            # Interactive menu
+./scripts/start_monitoring.sh      # Start all services
+./scripts/stop_monitoring.sh       # Stop all services
+./scripts/status_monitoring.sh     # Check service status
+```
+
+## 🖥️ Monitoring Stack
+
+The project includes a complete monitoring infrastructure with automated scripts:
+
+### Quick Start Monitoring
+
+```bash
+# Interactive monitoring control center
+./scripts/monitoring.sh
+
+# Or use individual scripts
+./scripts/start_monitoring.sh      # Start all services
+./scripts/stop_monitoring.sh       # Stop all services  
+./scripts/status_monitoring.sh     # Check status
+```
+
+### Services Included
+
+**Core Monitoring Services:**
+- **Prometheus** (http://localhost:9090) - Metrics collection and storage
+- **Grafana** (http://localhost:3000) - Dashboards and visualization (admin/kaslite)
+- **Alertmanager** (http://localhost:9093) - Alert management and notifications
+- **TensorBoard** (http://localhost:6006) - ML training visualization
+- **Kaslite App** (http://localhost:8000) - Application with metrics endpoint
+
+**What Gets Monitored:**
+- Training metrics (loss, accuracy, convergence)
+- System resources (CPU, memory, GPU usage)
+- Model performance and inference times
+- Experiment parameters and hyperparameters
+- Data pipeline health and processing times
+
+### Using the Interactive Menu
+
+The `./scripts/monitoring.sh` script provides a user-friendly menu:
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║                    Kaslite Monitoring Control Center                 ║
+║                                                                      ║
+║  Complete monitoring stack: Prometheus, Grafana, Alertmanager,      ║
+║  TensorBoard, and application metrics                                ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+What would you like to do?
+
+  1) 🚀 Start monitoring stack
+  2) 🛑 Stop monitoring stack  
+  3) 📊 Check status of all services
+  4) 🔄 Restart monitoring stack
+  5) 🌐 Show service URLs
+  6) 🧪 Run a quick test experiment
+  7) 📋 Show logs from Docker services
+  8) 🗑️  Clean up all monitoring data
+  9) ❓ Help and documentation
+  q) Quit
+```
+
+### Automated Alerts
+
+The monitoring stack includes intelligent alerting:
+
+- **Critical Alerts**: Service failures, high error rates, resource exhaustion
+- **Warning Alerts**: Performance degradation, unusual patterns, slow responses
+- **Slack Integration**: Configure webhook in `monitoring/alertmanager.yml`
+- **Email Notifications**: Configure SMTP settings for email alerts
+
+### Data Retention & Storage
+
+- **Prometheus**: 7-day metric retention (configurable)
+- **Grafana**: Persistent dashboards and user settings
+- **TensorBoard**: Logs stored in `./runs/` directory
+- **Application Logs**: Container logs via Docker Compose
+
 ```
 
 ## Usage
