@@ -681,14 +681,14 @@ class TestMultiSeedBaseNetGradientFlow:
         multi_seed_net: BaseNet,
         num_layers: int,
         seeds_per_layer: int,
-        _expected_total_seeds: int,
+        expected_total_seeds: int,
         expected_ids_pattern: list[str],
     ):
         """Test gradient flow with seeds in dormant state."""
         # Arrange
         net = multi_seed_net
         # Consume parameters for pytest compatibility
-        _ = num_layers, expected_ids_pattern
+        _ = num_layers, expected_total_seeds, expected_ids_pattern
 
         if seeds_per_layer == 0:
             pytest.skip("Test not applicable for zero seeds per layer")

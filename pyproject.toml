@@ -46,6 +46,10 @@ dev = [
     "pytest>=6.0",
     "pytest-cov>=3.0.0",
     "pytest-asyncio>=0.21.0",
+    "pytest-mock>=3.10.0",
+    "hypothesis>=6.0.0",
+    "pytest-benchmark>=4.0.0",
+    "pytest-snapshot>=0.9.0",
     "black>=22.0.0",
     "ruff>=0.1.0",
     "mypy>=1.0.0",
@@ -171,18 +175,46 @@ markers = [
 source = ["morphogenetic_engine"]
 omit = [
     "*/tests/*",
-    "*/test_*.py",
+    "*/test_*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/env/*",
     "setup.py",
+    "*/site-packages/*",
+    # Exclude demo and CLI entry points (trivial/external)
+    "*/demo_*",
+    "*/cli_dashboard.py:demo_dashboard",  # Demo function
+    "*/__main__.py",
 ]
 
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
-    "raise AssertionError",
+    "def __str__",
+    "raise AssertionError", 
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstract",
+    "except ImportError:",
+    # Exclude demo and CLI-specific code
+    "def demo_",
+    "if __name__ == '__main__':",
 ]
+
+# Smart coverage - exclude trivial code patterns
+skip_covered = false
+show_missing = true
+precision = 2
+
+# Coverage reporting
+[tool.coverage.html]
+directory = "htmlcov"
+title = "Morphogenetic Engine Test Coverage"
+
+[tool.coverage.xml]
+output = "coverage.xml"
 
 # mypy configuration
 [tool.mypy]
