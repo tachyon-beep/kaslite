@@ -112,7 +112,15 @@ def evaluate(
 
 def should_log_seed_update(mod, prev):
     """Determine if a seed update should be logged."""
-    tag = f"{mod.state}:{mod.alpha:.2f}" if mod.state == "blending" else mod.state
+    if mod.state == "blending":
+        try:
+            alpha_formatted = f"{float(mod.alpha):.3f}"
+            tag = f"{mod.state}:{alpha_formatted}"
+        except (TypeError, ValueError):
+            # Handle invalid alpha values
+            tag = f"{mod.state}:{mod.alpha}"
+    else:
+        tag = mod.state
 
     if prev != tag:
         return True, tag
@@ -154,9 +162,14 @@ def _log_seed_state_change(epoch, sid, mod, prev, logger, tb_writer):
             mlflow.log_metric(f"seed/{sid}/alpha", mod.alpha, step=epoch)
     else:
         prev_state = prev.split(":")[0] if prev and ":" in prev else (prev or "unknown")
+        if prev and ":" in prev:
+            # If previous state was blending, show it with alpha value
+            prev_display = prev
+        else:
+            prev_display = prev_state
         logger.log_seed_event(epoch, sid, prev_state, mod.state)
         tb_writer.add_text(
-            f"seed/{sid}/events", f"Epoch {epoch}: {prev_state} → {mod.state}", epoch
+            f"seed/{sid}/events", f"Epoch {epoch}: {prev_display} → {mod.state}", epoch
         )
 
         # Log seed state transitions to MLflow
