@@ -70,7 +70,6 @@ class TestBaseNet:
         # Arrange
         mock_seed_manager = mocker.MagicMock(spec=SeedManager)
         custom_params = {
-            "hidden_dim": 128,
             "input_dim": 2,
             "blend_steps": 20,
             "shadow_lr": 5e-4,
@@ -79,7 +78,7 @@ class TestBaseNet:
         }
 
         # Act
-        net = BaseNet(seed_manager=mock_seed_manager, **custom_params)
+        net = BaseNet(128, seed_manager=mock_seed_manager, **custom_params)  # type: ignore[arg-type]
 
         # Assert
         assert net.hidden_dim == 128
@@ -313,7 +312,7 @@ class TestBaseNetInitializationEdgeCases:
         """Test BaseNet instantiation without a SeedManager (should be TypeError)."""
         # Arrange & Act & Assert
         with pytest.raises(TypeError):  # Due to missing required keyword argument
-            BaseNet(input_dim=2)  # pylint: disable=missing-kwoa # type: ignore[call-arg]
+            BaseNet(input_dim=2)  # type: ignore[call-arg] # pylint: disable=missing-kwoa
 
 
 # Parametrization for comprehensive tests (including large configs for architectural testing)

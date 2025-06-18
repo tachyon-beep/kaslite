@@ -19,6 +19,7 @@ Test Classes:
 # Pytest fixtures are expected to be redefined in test method parameters
 
 import time
+from typing import Callable
 
 import numpy as np
 import pytest
@@ -46,7 +47,7 @@ LARGE_DATASET_SIZE = 50000
 
 
 @pytest.fixture
-def dataset_shape_validator() -> callable:
+def dataset_shape_validator() -> Callable:
     """Helper function to validate dataset shapes and types."""
 
     def _validate(X: np.ndarray, y: np.ndarray, expected_samples: int, expected_dims: int) -> None:
@@ -64,7 +65,7 @@ def dataset_shape_validator() -> callable:
 
 
 @pytest.fixture
-def binary_classification_validator() -> callable:
+def binary_classification_validator() -> Callable:
     """Helper function to validate binary classification labels."""
 
     def _validate(y: np.ndarray) -> None:
@@ -75,7 +76,7 @@ def binary_classification_validator() -> callable:
 
 
 @pytest.fixture
-def classification_validator() -> callable:
+def classification_validator() -> Callable:
     """Helper function to validate classification labels (binary or single-class)."""
 
     def _validate(y: np.ndarray, allow_single_class: bool = False) -> None:
@@ -853,7 +854,7 @@ class TestDocumentationExamples:
 
     def test_robust_functions_always_binary(self):
         """Test that spirals, moons, and complex_moons always produce binary classification."""
-        functions_to_test = [
+        functions_to_test: list[tuple[Callable, dict[str, int]]] = [
             (create_spirals, {"n_samples": 50, "input_dim": 2}),
             (create_moons, {"n_samples": 50, "input_dim": 2}),
             (create_complex_moons, {"n_samples": 50, "input_dim": 2}),

@@ -1,24 +1,24 @@
 """
-Comprehensive tests for the core module.
+Comprehensive integration and advanced tests for the core module.
 
-This module provides thorough testing coverage for the core morphogenetic engine
-components including SeedManager (singleton seed orchestrator) and KasminaMicro
-(germination controller). Tests are organized by component and follow modern
-Python 3.12+ practices with proper isolation and integration testing.
+This module provides testing coverage for integration scenarios between core
+morphogenetic engine components, performance benchmarking, property-based
+testing, and edge case scenarios. Component-specific unit tests are in
+dedicated test files (test_seed_manager.py, test_kasmina_micro.py).
 
 Test Categories:
-- Unit tests: Isolated component behavior with mocking
-- Integration tests: Component collaboration scenarios
-- Thread safety: Concurrent operation validation
-- Edge cases: Boundary conditions and error scenarios
+- Integration tests: Component collaboration scenarios  
+- Performance tests: Benchmarking and stress testing
+- Property-based tests: Hypothesis-driven boundary testing
+- Edge cases: Boundary conditions and stress scenarios
+- Contract tests: Interface compliance verification
 """
 
 # pylint: disable=protected-access,redefined-outer-name
 
 import threading
 import time
-from collections import deque
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 import torch
@@ -83,488 +83,6 @@ def mock_logger():
 def sample_tensor():
     """Provide a sample tensor for buffer testing."""
     return torch.randn(4, 8)
-
-
-class TestSeedManager:
-    """Test suite for SeedManager singleton class."""
-
-    def test_singleton_pattern(self, clean_seed_manager) -> None:
-        """Test that SeedManager follows singleton pattern."""
-        manager1 = SeedManager()
-        manager2 = SeedManager()
-        assert manager1 is manager2
-        assert manager1 is clean_seed_manager
-
-    def test_thread_safety(self) -> None:
-        """Test thread safety of singleton initialization."""
-        # Reset to ensure clean state
-        SeedManager.reset_singleton()
-        managers = []
-
-        def create_manager():
-            managers.append(SeedManager())
-
-        threads = [threading.Thread(target=create_manager) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        # All should be the same instance
-        assert all(m is managers[0] for m in managers)
-        # Cleanup
-        SeedManager.reset_singleton()
-
-    def test_register_seed(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test seed registration functionality."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-
-        manager.register_seed(mock_seed, "test_seed")
-
-        assert "test_seed" in manager.seeds
-        seed_info = manager.seeds["test_seed"]
-        assert seed_info["module"] is mock_seed
-        assert seed_info["status"] == "dormant"
-        assert seed_info["state"] == "dormant"
-        assert seed_info["alpha"] == pytest.approx(0.0)
-        assert len(seed_info["buffer"]) == 0
-        assert isinstance(seed_info["buffer"], deque)
-        assert seed_info["buffer"].maxlen == TestConstants.BUFFER_MAXLEN
-        assert seed_info["telemetry"]["drift"] == pytest.approx(0.0)
-        assert seed_info["telemetry"]["variance"] == pytest.approx(0.0)
-
-    def test_append_to_buffer(self, clean_seed_manager, mock_seed_factory, sample_tensor) -> None:
-        """Test buffer append functionality."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-
-        # Test appending tensors
-        tensor1 = sample_tensor
-        tensor2 = torch.randn(4, 8)
-
-        manager.append_to_buffer("test_seed", tensor1)
-        manager.append_to_buffer("test_seed", tensor2)
-
-        buffer = manager.seeds["test_seed"]["buffer"]
-        assert len(buffer) == 2
-        assert torch.equal(buffer[0], tensor1.detach())
-        assert torch.equal(buffer[1], tensor2.detach())
-
-    def test_append_to_nonexistent_seed(self, clean_seed_manager, sample_tensor) -> None:
-        """Test appending to non-existent seed doesn't crash."""
-        manager = clean_seed_manager
-
-        # Should not raise an exception
-        manager.append_to_buffer("nonexistent", sample_tensor)
-
-    def test_buffer_overflow_behavior(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test buffer behavior when exceeding maxlen capacity."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-
-        # Add more tensors than buffer capacity
-        for i in range(TestConstants.BUFFER_MAXLEN + 10):
-            tensor = torch.full((2, 3), float(i))
-            manager.append_to_buffer("test_seed", tensor)
-
-        buffer = manager.seeds["test_seed"]["buffer"]
-        assert len(buffer) == TestConstants.BUFFER_MAXLEN
-
-        # First tensor should be evicted, last should be preserved
-        assert torch.equal(
-            buffer[-1], torch.full((2, 3), float(TestConstants.BUFFER_MAXLEN + 9)).detach()
-        )
-        assert torch.equal(buffer[0], torch.full((2, 3), float(10)).detach())
-
-    def test_request_germination_success(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test successful germination request."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-
-        result = manager.request_germination("test_seed")
-
-        assert result is True
-        mock_seed.initialize_child.assert_called_once()
-        assert manager.seeds["test_seed"]["status"] == "active"
-        assert len(manager.germination_log) == 1
-        log_entry = manager.germination_log[0]
-        assert log_entry["success"] is True
-        assert log_entry["event_type"] == "germination_attempt"
-        assert log_entry["seed_id"] == "test_seed"
-
-    def test_request_germination_already_active(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
-        """Test germination request on already active seed."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-        manager.seeds["test_seed"]["status"] = "active"
-
-        result = manager.request_germination("test_seed")
-
-        assert result is False
-        mock_seed.initialize_child.assert_not_called()
-
-    def test_request_germination_nonexistent_seed(self, clean_seed_manager) -> None:
-        """Test germination request on non-existent seed."""
-        manager = clean_seed_manager
-
-        result = manager.request_germination("nonexistent")
-
-        assert result is False
-
-    def test_request_germination_exception_handling(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
-        """Test germination request with initialization failure."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        mock_seed.initialize_child = Mock(side_effect=RuntimeError("Init failed"))
-        manager.register_seed(mock_seed, "test_seed")
-
-        result = manager.request_germination("test_seed")
-
-        assert result is False
-        assert manager.seeds["test_seed"]["status"] == "failed"
-        assert len(manager.germination_log) == 1
-        log_entry = manager.germination_log[0]
-        assert log_entry["success"] is False
-        assert log_entry["event_type"] == "germination_attempt"
-
-    def test_record_transition(self, clean_seed_manager) -> None:
-        """Test state transition recording."""
-        manager = clean_seed_manager
-
-        before_time = time.time()
-        manager.record_transition("test_seed", "dormant", "training")
-        after_time = time.time()
-
-        assert len(manager.germination_log) == 1
-        log_entry = manager.germination_log[0]
-        assert log_entry["seed_id"] == "test_seed"
-        assert log_entry["from"] == "dormant"
-        assert log_entry["to"] == "training"
-        assert log_entry["event_type"] == "state_transition"
-        assert before_time <= log_entry["timestamp"] <= after_time
-
-    def test_logger_integration_on_germination(self, mock_seed_factory, mock_logger) -> None:
-        """Ensure ExperimentLogger.log_germination is invoked."""
-        manager = SeedManager(logger=mock_logger)
-        manager.seeds.clear()
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-
-        result = manager.request_germination("test_seed", epoch=5)
-
-        assert result is True
-        mock_logger.log_germination.assert_called_once_with(5, "test_seed")
-
-    def test_logger_integration_on_transition(self, mock_logger) -> None:
-        """Ensure ExperimentLogger.log_seed_event is invoked."""
-        manager = SeedManager(logger=mock_logger)
-        manager.germination_log.clear()
-
-        manager.record_transition("seedX", "dormant", "training", epoch=7)
-
-        mock_logger.log_seed_event.assert_called_once_with(7, "seedX", "dormant", "training")
-
-    def test_record_drift(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test drift recording functionality."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-
-        manager.record_drift("test_seed", 0.123)
-
-        assert manager.seeds["test_seed"]["telemetry"]["drift"] == pytest.approx(0.123)
-
-    def test_record_drift_nonexistent_seed(self, clean_seed_manager) -> None:
-        """Test drift recording for non-existent seed."""
-        manager = clean_seed_manager
-
-        # Should not raise an exception
-        manager.record_drift("nonexistent", 0.123)
-
-    def test_telemetry_variance_recording(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test that variance telemetry can be recorded and accessed."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-
-        # Directly modify variance (since there's no dedicated method in production code)
-        manager.seeds["test_seed"]["telemetry"]["variance"] = 0.456
-
-        assert manager.seeds["test_seed"]["telemetry"]["variance"] == pytest.approx(0.456)
-
-    def test_reset_methods(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test reset() and reset_singleton() methods."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory()
-        manager.register_seed(mock_seed, "test_seed")
-        manager.record_transition("test_seed", "dormant", "active")
-
-        # Verify state before reset
-        assert len(manager.seeds) == 1
-        assert len(manager.germination_log) == 1
-
-        # Test instance reset
-        manager.reset()
-        assert len(manager.seeds) == 0
-        assert len(manager.germination_log) == 0
-
-        # Add data again and test singleton reset
-        manager.register_seed(mock_seed, "test_seed2")
-        assert len(manager.seeds) == 1
-
-        SeedManager.reset_singleton()
-        new_manager = SeedManager()
-        assert new_manager is not manager  # New instance
-        assert len(new_manager.seeds) == 0
-
-    def test_concurrent_germination_requests(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test thread safety under concurrent germination requests."""
-        manager = clean_seed_manager
-        results = []
-
-        # Register multiple seeds
-        for i in range(5):
-            mock_seed = mock_seed_factory()
-            manager.register_seed(mock_seed, f"seed_{i}")
-
-        def attempt_germination(seed_id: str):
-            result = manager.request_germination(seed_id)
-            results.append((seed_id, result))
-
-        # Attempt concurrent germinations
-        threads = [
-            threading.Thread(target=attempt_germination, args=(f"seed_{i}",)) for i in range(5)
-        ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        # All should succeed since they're different seeds
-        assert len(results) == 5
-        assert all(result for _, result in results)
-
-        # All should be marked as active
-        for i in range(5):
-            assert manager.seeds[f"seed_{i}"]["status"] == "active"
-
-
-class TestKasminaMicro:
-    """Test suite for KasminaMicro germination controller."""
-
-    def test_initialization(self, clean_seed_manager) -> None:
-        """Test KasminaMicro initialization."""
-        manager = clean_seed_manager
-        km = KasminaMicro(
-            manager,
-            patience=TestConstants.PATIENCE_LONG,
-            delta=TestConstants.PLATEAU_THRESHOLD,
-            acc_threshold=TestConstants.HIGH_ACCURACY,
-        )
-
-        assert km.seed_manager is manager
-        assert km.patience == TestConstants.PATIENCE_LONG
-        assert km.delta == pytest.approx(TestConstants.PLATEAU_THRESHOLD)
-        assert km.acc_threshold == pytest.approx(TestConstants.HIGH_ACCURACY)
-        assert km.plateau == 0
-        assert km.prev_loss == float("inf")
-
-    def test_step_loss_improvement_resets_plateau(self, clean_seed_manager) -> None:
-        """Test step with improving loss resets plateau counter."""
-        manager = clean_seed_manager
-        km = KasminaMicro(
-            manager, patience=TestConstants.PATIENCE_SHORT, delta=TestConstants.PLATEAU_THRESHOLD
-        )
-
-        # First step should not trigger germination
-        result = km.step(1.0, TestConstants.LOW_ACCURACY)
-        assert result is False
-        assert km.plateau == 0
-        assert km.prev_loss == pytest.approx(1.0)
-
-        # Small improvement should reset plateau
-        result = km.step(1.0 + TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-        assert result is False
-        assert km.plateau == 1  # No improvement, plateau increases
-
-        # Significant improvement should reset plateau
-        result = km.step(0.8, TestConstants.LOW_ACCURACY)
-        assert result is False
-        assert km.plateau == 0  # Reset due to improvement
-        assert km.prev_loss == pytest.approx(0.8)
-
-    def test_plateau_detection_high_accuracy_blocks_germination(self, clean_seed_manager) -> None:
-        """Test plateau detection with high accuracy blocks germination."""
-        manager = clean_seed_manager
-        km = KasminaMicro(
-            manager,
-            patience=TestConstants.PATIENCE_SHORT,
-            delta=TestConstants.PLATEAU_THRESHOLD,
-            acc_threshold=TestConstants.HIGH_ACCURACY,
-        )
-
-        # Set initial loss
-        km.step(1.0, TestConstants.HIGH_ACCURACY)
-
-        # Create plateau with high accuracy (shouldn't germinate)
-        for _ in range(TestConstants.PATIENCE_SHORT + 2):
-            result = km.step(1.0 + TestConstants.SMALL_LOSS_DELTA, TestConstants.HIGH_ACCURACY)
-            assert result is False  # No germination due to high accuracy
-
-    def test_germination_triggered_by_plateau_and_low_accuracy(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
-        """Test germination triggering under correct conditions."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory(health_signal=TestConstants.LOW_HEALTH_SIGNAL)
-        manager.register_seed(mock_seed, "test_seed")
-
-        km = KasminaMicro(
-            manager,
-            patience=TestConstants.PATIENCE_SHORT,
-            delta=TestConstants.PLATEAU_THRESHOLD,
-            acc_threshold=TestConstants.HIGH_ACCURACY,
-        )
-
-        # Set initial loss with low accuracy
-        result1 = km.step(1.0, TestConstants.LOW_ACCURACY)
-        assert result1 is False
-        assert km.plateau == 0
-
-        # Create plateau with low accuracy
-        result2 = km.step(1.0 + TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-        assert result2 is False
-        assert km.plateau == 1
-
-        with patch.object(manager, "request_germination", return_value=True) as mock_germ:
-            result3 = km.step(1.0 + 2 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-            assert result3 is True  # Should trigger germination
-            mock_germ.assert_called_once_with("test_seed")
-
-    def test_germination_resets_plateau_counter(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
-        """Test that successful germination resets plateau counter."""
-        manager = clean_seed_manager
-        mock_seed = mock_seed_factory(health_signal=TestConstants.LOW_HEALTH_SIGNAL)
-        manager.register_seed(mock_seed, "test_seed")
-
-        km = KasminaMicro(
-            manager, patience=TestConstants.PATIENCE_SHORT, delta=TestConstants.PLATEAU_THRESHOLD
-        )
-
-        # Build up plateau
-        km.step(1.0, TestConstants.LOW_ACCURACY)
-        km.step(1.0 + TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-        assert km.plateau == 1
-
-        # Trigger germination
-        with patch.object(manager, "request_germination", return_value=True):
-            result = km.step(1.0 + 2 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-            assert result is True
-            assert km.plateau == 0  # Reset after germination
-
-    def test_select_seed_no_dormant_seeds(self, clean_seed_manager) -> None:
-        """Test seed selection when no dormant seeds available."""
-        manager = clean_seed_manager
-        km = KasminaMicro(manager)
-
-        result = km._select_seed()
-        assert result is None
-
-    def test_select_seed_chooses_worst_health(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test seed selection chooses seed with worst health signal."""
-        manager = clean_seed_manager
-
-        # Create mock seeds with different health signals
-        mock_seed1 = mock_seed_factory(health_signal=TestConstants.MEDIUM_HEALTH_SIGNAL)
-        mock_seed2 = mock_seed_factory(health_signal=TestConstants.LOW_HEALTH_SIGNAL)  # Worst
-        mock_seed3 = mock_seed_factory(health_signal=0.3)
-
-        manager.register_seed(mock_seed1, "seed1")
-        manager.register_seed(mock_seed2, "seed2")
-        manager.register_seed(mock_seed3, "seed3")
-
-        km = KasminaMicro(manager)
-        result = km._select_seed()
-
-        assert result == "seed2"  # Should select seed with lowest health signal
-
-    def test_select_seed_ignores_non_dormant(self, clean_seed_manager, mock_seed_factory) -> None:
-        """Test seed selection ignores non-dormant seeds."""
-        manager = clean_seed_manager
-
-        mock_seed1 = mock_seed_factory(health_signal=TestConstants.LOW_HEALTH_SIGNAL)
-        mock_seed2 = mock_seed_factory(health_signal=0.2)
-
-        manager.register_seed(mock_seed1, "seed1")
-        manager.register_seed(mock_seed2, "seed2")
-
-        # Make seed1 non-dormant (should be ignored despite better health signal)
-        manager.seeds["seed1"]["status"] = "active"
-
-        km = KasminaMicro(manager)
-        result = km._select_seed()
-
-        assert result == "seed2"  # Should select the dormant seed
-
-    @given(accuracy=st.floats(min_value=0.85, max_value=1.0))
-    @pytest.mark.property
-    def test_accuracy_threshold_boundary_conditions(self, accuracy: float) -> None:
-        """Test accuracy threshold boundary conditions with property-based testing."""
-        # Create manager directly to avoid fixture issues with Hypothesis
-        SeedManager.reset_singleton()
-        manager = SeedManager()
-        manager.seeds.clear()
-        km = KasminaMicro(manager, patience=1, acc_threshold=0.8)
-
-        # High accuracy should prevent germination regardless of plateau
-        km.step(1.0, accuracy)
-        result = km.step(1.0 + TestConstants.SMALL_LOSS_DELTA, accuracy)
-
-        if accuracy >= 0.8:
-            assert result is False  # No germination due to high accuracy
-        # Note: For accuracy < 0.8, we'd need seeds registered to test germination
-
-        # Cleanup
-        SeedManager.reset_singleton()
-
-    def test_monitoring_integration(self, clean_seed_manager) -> None:
-        """Test integration with monitoring system."""
-        manager = clean_seed_manager
-        km = KasminaMicro(manager, patience=TestConstants.PATIENCE_SHORT)
-
-        # Mock the monitoring module's get_monitor function
-        with patch("morphogenetic_engine.monitoring.get_monitor") as mock_get_monitor:
-            mock_monitor = Mock()
-            mock_get_monitor.return_value = mock_monitor
-
-            # Test that monitoring methods are called
-            km.step(1.0, TestConstants.LOW_ACCURACY)
-
-            mock_monitor.update_kasmina_metrics.assert_called_once_with(
-                0, TestConstants.PATIENCE_SHORT
-            )
-
-            # Test germination recording
-            mock_seed = Mock()
-            mock_seed.get_health_signal = Mock(return_value=TestConstants.LOW_HEALTH_SIGNAL)
-            manager.register_seed(mock_seed, "test_seed")
-
-            # Build up plateau and trigger germination
-            km.step(1.0 + TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-            km.step(1.0 + 2 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-
-            mock_monitor.record_germination.assert_called_once()
 
 
 class TestSeedManagerKasminaMicroIntegration:
@@ -748,7 +266,7 @@ class TestPerformanceBenchmarking:
         assert duration < 10.0, f"Concurrent germination too slow: {duration}s"
         # Verify no corruption of shared state
         assert len(manager.seeds) > 0
-        assert all(isinstance(seed_id, str) for seed_id in manager.seeds.keys())
+        assert all(isinstance(seed_id, str) for seed_id in manager.seeds)
 
     def test_plateau_detection_performance(self, mock_seed_factory) -> None:
         """Test that plateau detection remains performant with many steps."""
@@ -857,7 +375,7 @@ class TestAdvancedPropertyBased:
         assert len(manager.seeds) > 0  # At least some seeds should be registered
 
         # All registered seeds should have valid IDs
-        for seed_id in manager.seeds.keys():
+        for seed_id in manager.seeds:
             assert isinstance(seed_id, str)
             assert len(seed_id) > 0
 
@@ -939,7 +457,7 @@ class TestAdvancedPropertyBased:
         assert len(manager.seeds) <= num_threads * 5  # At most this many seeds
 
         # All seed IDs should be unique and valid
-        seed_ids = list(manager.seeds.keys())
+        seed_ids = list(manager.seeds)
         assert len(seed_ids) == len(set(seed_ids)), "Duplicate seed IDs found"
         assert all(isinstance(sid, str) and len(sid) > 0 for sid in seed_ids)
 
