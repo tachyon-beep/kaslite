@@ -186,9 +186,9 @@ class KasminaMicro:
         # 1. Accuracy is below threshold (problem not solved)
         # 2. Loss plateau persists beyond patience
         if val_acc < self.acc_threshold and self.plateau >= self.patience:
-            self.plateau = 0  # Reset plateau counter
             seed_id = self._select_seed()
             if seed_id and self.seed_manager.request_germination(seed_id):
+                self.plateau = 0  # Reset plateau counter only on successful germination
                 # Record germination in monitoring
                 if monitor:
                     monitor.record_germination()
