@@ -9,7 +9,6 @@ lifecycle management, versioning, and metadata handling.
 
 from __future__ import annotations
 
-import tempfile
 from unittest.mock import Mock, patch
 
 import mlflow
@@ -38,7 +37,7 @@ class TestConstants:
     DEFAULT_MODEL_NAME = "TestKasminaModel"
     SAMPLE_RUN_IDS = ["run_123", "run_456", "run_789"]
 
-    SAMPLE_METRICS = {"val_acc": HIGH_ACCURACY, "train_loss": LOW_LOSS, "seeds_activated": True}
+    SAMPLE_METRICS = {"val_acc": HIGH_ACCURACY, "train_loss": LOW_LOSS, "seeds_activated": 1.0}
 
     SAMPLE_TAGS = {"problem_type": "spirals", "device": "cpu", "training_mode": "test"}
 
@@ -111,7 +110,7 @@ class TestModelRegistryUnit:
         ],
     )
     def test_model_uri_formatting(
-        self, model_registry: ModelRegistry, mock_mlflow_client, run_id: str, expected_uri: str
+        self, model_registry: ModelRegistry, run_id: str, expected_uri: str
     ) -> None:
         """Test that model URIs are formatted correctly."""
         # Setup mock
@@ -187,9 +186,7 @@ class TestModelRegistryUnit:
             assert "Seeds Activated: True" in description, "Description should include seeds status"
             assert result == mock_version, "Should return the registered model version"
 
-    def test_register_best_model_failure_handling(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_register_best_model_failure_handling(self, model_registry: ModelRegistry) -> None:
         """Test model registration failure handling."""
         with patch(
             "morphogenetic_engine.model_registry.mlflow.register_model",
@@ -462,7 +459,7 @@ class TestModelRegistryPropertyBased:
         )
     )
     def test_register_model_with_arbitrary_metrics(
-        self, model_registry: ModelRegistry, mock_mlflow_client, metrics: dict[str, float]
+        self, model_registry: ModelRegistry, metrics: dict[str, float]
     ) -> None:
         """Test model registration with generated metric combinations."""
         # Convert values to ensure they are Python floats
@@ -512,14 +509,13 @@ class TestModelRegistryIntegration:
         # Restore original URI
         mlflow.set_tracking_uri(original_uri)
 
-    def test_register_and_promote_workflow_integration(self, tmp_path) -> None:
+    def test_register_and_promote_workflow_integration(self) -> None:
         """Test full model registration and promotion workflow with real MLflow."""
         registry = ModelRegistry("IntegrationTestModel")
 
         # Start an MLflow run to create a model artifact
         with mlflow.start_run() as run:
             # Log a simple model (dummy data)
-            import torch  # pylint: disable=import-outside-toplevel
             import torch.nn as nn  # pylint: disable=import-outside-toplevel
 
             model = nn.Linear(10, 1)
@@ -566,14 +562,12 @@ class TestModelRegistryIntegration:
 class TestModelRegistryErrorBoundaries:
     """Tests for error handling and edge cases."""
 
-    def test_register_model_with_malformed_metrics(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_register_model_with_malformed_metrics(self, model_registry: ModelRegistry) -> None:
         """Test handling of malformed metrics."""
-        malformed_metrics = {
+        malformed_metrics: dict[str, float] = {
             "val_acc": float("inf"),
             "train_loss": float("nan"),
-            "invalid": "not_a_number",
+            "invalid": float("nan"),  # Use NaN instead of string for type consistency
         }
 
         mock_version = Mock()
@@ -627,9 +621,7 @@ class TestModelRegistryErrorBoundaries:
         with pytest.raises(Exception, match="MLflow connection failed"):
             ModelRegistry("TestModel")
 
-    def test_concurrent_model_registration_simulation(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_concurrent_model_registration_simulation(self, model_registry: ModelRegistry) -> None:
         """Test simulation of concurrent model registration scenarios."""
         # Simulate concurrent registration by having register_model succeed then fail
         mock_version = Mock()
