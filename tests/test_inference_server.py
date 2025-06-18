@@ -145,7 +145,7 @@ def mock_simple_model() -> torch.nn.Module:
             Returns:
                 torch.Tensor: Output logits with shape (batch_size, 2).
             """
-            return self.linear(x)
+            return self.linear(x)  # type: ignore[no-any-return]
 
     model = SimpleTestModel()
     model.eval()
@@ -199,7 +199,7 @@ def sync_client() -> TestClient:
 
 
 @pytest.fixture
-async def async_client() -> httpx.AsyncClient:
+async def async_client() -> httpx.AsyncClient:  # type: ignore[misc]
     """
     Create asynchronous test client for FastAPI.
 
@@ -551,8 +551,8 @@ def test_predict_various_batch_sizes(
 # Model Reload Tests
 @pytest.mark.asyncio
 async def test_reload_model_success(
-    sync_client: TestClient, mocker, mock_model_registry
-) -> None:  # pylint: disable=unused-argument
+    sync_client: TestClient, mocker, mock_model_registry  # pylint: disable=unused-argument
+) -> None:
     """Test successful model reload."""
     mock_load = AsyncMock(return_value=True)
     mocker.patch("morphogenetic_engine.inference_server.load_production_model", mock_load)
@@ -835,7 +835,7 @@ def test_malformed_json_request(sync_client: TestClient, mocker) -> None:
 
     # Send malformed JSON
     response = sync_client.post(
-        "/predict", data="{ invalid json }", headers={"Content-Type": "application/json"}
+        "/predict", content="{ invalid json }", headers={"Content-Type": "application/json"}
     )
 
     assert response.status_code == 422
@@ -862,6 +862,8 @@ def validate_response_structure(response_data: dict[str, Any], response_type: st
         >>> validate_response_structure(data, "health")
         True
     """
+    # Pattern matching is fully supported in Python 3.12
+    # If mypy complains, ensure tool.mypy.python_version = "3.12" in pyproject.toml
     match response_type:
         case "health":
             return all(

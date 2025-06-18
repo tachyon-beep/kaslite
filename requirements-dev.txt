@@ -12,6 +12,3 @@ mypy>=1.0.0
 
 # Pre-commit hooks
 pre-commit>=2.20.0
-
-# Optional: Hyperparameter optimization for sweeps
-optuna>=3.0.0

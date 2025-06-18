@@ -24,6 +24,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+# mypy configuration  
+[tool.mypy]
+python_version = "3.8"
 ```
 
 **After:**
@@ -38,6 +42,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+# mypy configuration
+[tool.mypy]
+python_version = "3.12"
 ```
 
 ## Rationale
@@ -50,7 +58,9 @@ classifiers = [
 
 2. **Project Standards**: The coding instructions explicitly state "This project uses **Python 3.12**" and requires leveraging modern language features.
 
-3. **Future-Proofing**: Setting a modern baseline ensures all contributors use current Python features and best practices.
+3. **Type Checker Alignment**: Updated mypy configuration from `python_version = "3.8"` to `python_version = "3.12"` to prevent false warnings about pattern matching support.
+
+4. **Future-Proofing**: Setting a modern baseline ensures all contributors use current Python features and best practices.
 
 ## Validation
 
