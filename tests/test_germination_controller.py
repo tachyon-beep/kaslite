@@ -1,13 +1,16 @@
 """
-Comprehensive tests for the KasminaMicro component.
+Comprehensive tests for the Germination Controller component.
 
-This module provides thorough testing coverage for the KasminaMicro germination
-controller, focusing on plateau detection, germination triggering, and seed
-selection logic. Tests follow modern Python 3.12+ practices with proper
-isolation and edge case coverage.
+This module provides thorough testing coverage for the germination controller
+(currently implemented as KasminaMicro), which handles plateau detection,
+germination triggering, and seed selection logic. Tests follow modern
+Python 3.12+ practices with proper isolation and edge case coverage.
+
+Note: This component is planned to evolve into a neural network called "Tamiyo"
+in future versions of the system.
 
 Test Categories:
-- Unit tests: Isolated KasminaMicro behavior with mocking
+- Unit tests: Isolated germination controller behavior with mocking
 - Integration: Monitoring system integration
 - Property-based: Hypothesis-driven boundary testing
 - Edge cases: Boundary conditions and accuracy thresholds
@@ -63,8 +66,8 @@ def mock_seed_factory():
     return _create_mock_seed
 
 
-class TestKasminaMicro:
-    """Test suite for KasminaMicro germination controller."""
+class TestGerminationController:
+    """Test suite for the germination controller (KasminaMicro implementation)."""
 
     def test_initialization(self, clean_seed_manager) -> None:
         """Test KasminaMicro initialization."""
