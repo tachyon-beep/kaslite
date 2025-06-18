@@ -1,19 +1,19 @@
 """
-Test suite for integration and architecture scaling.
+End-to-end pipeline integration tests.
 
-This module contains tests for the morphogenetic architecture integration and scaling,
+This module contains tests for complete pipeline workflows and system integration,
 including tests for:
 
-- Complete pipeline integration testing
-- High-dimensional input integration
-- Architecture scaling and performance
-- Seed lifecycle testing
-- Memory efficiency and parameter scaling
+- Complete pipeline integration testing with real datasets
+- High-dimensional input processing and validation
+- Architecture scaling and performance under load
+- Seed lifecycle management in full workflows
+- Memory efficiency and parameter scaling validation
 
 Test Classes:
-    TestIntegration: Integration tests for the complete system
-    TestHighDimensionalIntegration: Test suite for high-dimensional input integration
-    TestArchitectureScaling: Test suite for architecture scaling and performance
+    TestPipelineIntegration: End-to-end pipeline testing with real datasets
+    TestHighDimensionalIntegration: High-dimensional input processing validation
+    TestArchitectureScaling: Performance and scaling under various configurations
 """
 
 import numpy as np
@@ -27,8 +27,8 @@ from morphogenetic_engine.experiment import build_model_and_agents
 from morphogenetic_engine.training import evaluate, train_epoch
 
 
-class TestIntegration:
-    """Integration tests for the complete system."""
+class TestPipelineIntegration:
+    """End-to-end pipeline testing with real datasets."""
 
     def test_full_pipeline_mini(self):
         """Test a minimal full pipeline execution."""

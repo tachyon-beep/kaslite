@@ -34,9 +34,9 @@ def register_model(args):
 
     # Prepare metrics (for description)
     metrics = {}
-    if args.val_acc:
+    if args.val_acc is not None:
         metrics["val_acc"] = args.val_acc
-    if args.train_loss:
+    if args.train_loss is not None:
         metrics["train_loss"] = args.train_loss
     if args.seeds_activated is not None:
         metrics["seeds_activated"] = args.seeds_activated

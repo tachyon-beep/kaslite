@@ -6,7 +6,8 @@ all test modules in the morphogenetic engine test suite.
 """
 
 import argparse
-from typing import Dict, Optional
+from io import StringIO
+from typing import Any, Dict, Optional
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -58,6 +59,19 @@ def mock_args():
         problem_type = "moons"
 
     return MockArgs()
+
+
+def assert_output_contains(output: str, expected_items: list[str]) -> None:
+    """Helper function to assert that output contains all expected items."""
+    for item in expected_items:
+        assert item in output, f"Expected '{item}' not found in output: {output}"
+
+
+def create_mock_run(metrics: Dict[str, float]) -> Mock:
+    """Create a mock MLflow run with specified metrics."""
+    mock_run = Mock()
+    mock_run.data.metrics = metrics
+    return mock_run
 
 
 @pytest.fixture
@@ -159,16 +173,3 @@ class MockModelVersion:
         mock_version.run_id = run_id
         mock_version.creation_timestamp = timestamp or 1609459200000
         return mock_version
-
-
-def assert_output_contains(output: str, expected_items: list[str]) -> None:
-    """Helper function to assert that output contains all expected items."""
-    for item in expected_items:
-        assert item in output, f"Expected '{item}' not found in output: {output}"
-
-
-def create_mock_run(metrics: Dict[str, float]) -> Mock:
-    """Create a mock MLflow run with specified metrics."""
-    mock_run = Mock()
-    mock_run.data.metrics = metrics
-    return mock_run

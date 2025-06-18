@@ -3,7 +3,7 @@
 ## Test File Renames Completed
 
 ### 1. Integration Test Clarification
-- **Before**: `test_integration.py` → **After**: `test_component_integration.py`
+- **Before**: `test_integration.py` → **After**: `test_pipeline_integration.py`
 - **Rationale**: Clarifies focus on internal component integration (BaseNet, SeedManager, Seeds)
 - **Scope**: Component-level integration testing, architecture scaling, memory efficiency
 
@@ -16,7 +16,8 @@
 
 ```
 tests/
-├── test_component_integration.py  # Internal component integration
+├── test_pipeline_integration.py     # End-to-end pipeline testing
+├── test_component_interactions.py  # Cross-component interaction testing
 ├── test_germination_controller.py # Germination controller (KasminaMicro → Tamiyo)
 ├── test_seed_manager.py           # SeedManager singleton tests
 ├── test_core.py                   # Integration, performance, edge cases

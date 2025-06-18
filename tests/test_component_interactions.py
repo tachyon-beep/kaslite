@@ -1,4 +1,24 @@
-"""Integration tests for cross-component interactions and system-level behavior."""
+"""
+Cross-component interaction and system behavior tests.
+
+This module contains tests for interactions between different components of the
+morphogenetic engine, focusing on:
+
+- Component state synchronization and consistency
+- Error propagation and handling across component boundaries
+- Thread safety and concurrent component access
+- Resource management and cleanup coordination
+- Edge cases in component interactions
+- Performance validation for multi-component operations
+
+Test Classes:
+    TestSystemIntegration: Component interaction and state consistency
+    TestErrorHandlingIntegration: Error propagation across components
+    TestThreadSafetyIntegration: Concurrent access and thread safety
+    TestResourceManagement: Resource cleanup and memory management
+    TestPerformanceIntegration: Multi-component performance validation
+    TestEdgeCasesIntegration: Edge cases and boundary conditions
+"""
 
 # pylint: disable=redefined-outer-name  # pytest fixtures intentionally shadow outer scope
 

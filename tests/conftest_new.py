@@ -6,7 +6,8 @@ all test modules in the morphogenetic engine test suite.
 """
 
 import argparse
-from typing import Dict, Optional
+from io import StringIO
+from typing import Any, Dict, Optional
 from unittest.mock import Mock, patch
 
 import numpy as np
