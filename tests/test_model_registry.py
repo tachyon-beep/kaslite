@@ -53,15 +53,15 @@ def model_registry(mock_mlflow_client) -> ModelRegistry:
 def mock_mlflow_client(mocker):
     """Centralized MLflow client mock that patches at the service boundary."""
     mock_client = mocker.Mock()
-    
+
     # Configure default behavior for search_model_versions to return empty list
     mock_client.search_model_versions.return_value = []
-    
+
     # Configure alias-based methods (new API)
     mock_client.set_registered_model_alias.return_value = None
     mock_client.delete_registered_model_alias.return_value = None
     mock_client.get_model_version_by_alias.return_value = None
-    
+
     mocker.patch("morphogenetic_engine.model_registry.MlflowClient", return_value=mock_client)
     return mock_client
 
@@ -326,19 +326,16 @@ class TestModelRegistryUnit:
         )
 
         assert result is True, "Promotion should succeed"
-        
+
         # Check that the new alias was set
         mock_mlflow_client.set_registered_model_alias.assert_called_with(
-            name=TestConstants.DEFAULT_MODEL_NAME,
-            alias="Production", 
-            version="3"
+            name=TestConstants.DEFAULT_MODEL_NAME, alias="Production", version="3"
         )
-        
+
         # Check archiving behavior using alias deletion
         if archive_existing:
             mock_mlflow_client.delete_registered_model_alias.assert_called_with(
-                name=TestConstants.DEFAULT_MODEL_NAME,
-                alias="Production"
+                name=TestConstants.DEFAULT_MODEL_NAME, alias="Production"
             )
         else:
             mock_mlflow_client.delete_registered_model_alias.assert_not_called()
@@ -346,8 +343,7 @@ class TestModelRegistryUnit:
         if archive_existing:
             # Should delete the existing alias
             mock_mlflow_client.delete_registered_model_alias.assert_called_with(
-                name=TestConstants.DEFAULT_MODEL_NAME,
-                alias="Production"
+                name=TestConstants.DEFAULT_MODEL_NAME, alias="Production"
             )
         else:
             mock_mlflow_client.delete_registered_model_alias.assert_not_called()
@@ -378,9 +374,7 @@ class TestModelRegistryUnit:
         self, model_registry: ModelRegistry, mock_mlflow_client
     ) -> None:
         """Test model promotion failure handling."""
-        mock_mlflow_client.set_registered_model_alias.side_effect = Exception(
-            "Promotion failed"
-        )
+        mock_mlflow_client.set_registered_model_alias.side_effect = Exception("Promotion failed")
 
         result = model_registry.promote_model(version="1", stage="Production")
 
@@ -428,15 +422,15 @@ class TestModelRegistryUnit:
         result = model_registry.list_model_versions(stage="Production")
 
         assert len(result) == 1, "Should return only Production models"
-        assert (
-            "Production" in result[0].aliases
-        ), "Returned model should have Production alias"
+        assert "Production" in result[0].aliases, "Returned model should have Production alias"
 
-    def test_get_production_model_uri_success(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
+    def test_get_production_model_uri_success(
+        self, model_registry: ModelRegistry, mock_mlflow_client
+    ) -> None:
         """Test getting production model URI when model exists."""
         mock_version = Mock()
         mock_version.version = "5"
-        
+
         # Mock the get_model_version_by_alias call
         mock_mlflow_client.get_model_version_by_alias.return_value = mock_version
 
@@ -448,10 +442,14 @@ class TestModelRegistryUnit:
             name=TestConstants.DEFAULT_MODEL_NAME, alias="Production"
         )
 
-    def test_get_production_model_uri_no_model(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
+    def test_get_production_model_uri_no_model(
+        self, model_registry: ModelRegistry, mock_mlflow_client
+    ) -> None:
         """Test getting production model URI when no production model exists."""
         # Mock get_model_version_by_alias to raise an exception (no model found)
-        mock_mlflow_client.get_model_version_by_alias.side_effect = mlflow.exceptions.MlflowException("No model found")
+        mock_mlflow_client.get_model_version_by_alias.side_effect = (
+            mlflow.exceptions.MlflowException("No model found")
+        )
 
         result = model_registry.get_production_model_uri()
 
@@ -487,9 +485,10 @@ class TestModelRegistryPropertyBased:
             mock_client = Mock()
             mock_client_class.return_value = mock_client
             mock_client.search_model_versions.return_value = []
-            
+
             with patch(
-                "morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version
+                "morphogenetic_engine.model_registry.mlflow.register_model",
+                return_value=mock_version,
             ):
                 model_registry = ModelRegistry(TestConstants.DEFAULT_MODEL_NAME)
                 result = model_registry.register_best_model(
@@ -532,43 +531,47 @@ class TestModelRegistryIntegration:
     def test_register_and_promote_workflow_integration(self) -> None:
         """Test full model registration and promotion workflow with real MLflow."""
         import tempfile
-        
+
         # Set up temporary MLflow tracking directory
         with tempfile.TemporaryDirectory() as temp_dir:
             # Set MLflow tracking URI to temporary directory
             original_tracking_uri = mlflow.get_tracking_uri()
             mlflow.set_tracking_uri(f"file://{temp_dir}")
-            
+
             try:
                 # Create experiment
                 experiment_id = mlflow.create_experiment("test_experiment")
                 mlflow.set_experiment(experiment_id=experiment_id)
-                
+
                 registry = ModelRegistry("IntegrationTestModel")
 
                 # Start an MLflow run to create a model artifact
                 with mlflow.start_run() as run:
                     # Log a simple model (dummy data)
-                    import torch.nn as nn  # pylint: disable=import-outside-toplevel
                     import torch  # pylint: disable=import-outside-toplevel
+                    import torch.nn as nn  # pylint: disable=import-outside-toplevel
 
                     model = nn.Linear(10, 1)
-                    
+
                     # Create sample input to avoid signature warning
                     import numpy as np  # pylint: disable=import-outside-toplevel
+
                     sample_input = torch.randn(1, 10)
                     sample_input_numpy = sample_input.numpy()  # Convert to numpy for MLflow
-                    
+
                     # Use 'model' instead of deprecated 'artifact_path'
                     mlflow.pytorch.log_model(
                         model,  # First positional argument is the model
                         "model",  # Second positional argument is the path
-                        input_example=sample_input_numpy
+                        input_example=sample_input_numpy,
                     )
 
                     # Log some metrics
                     mlflow.log_metrics(
-                        {"val_acc": TestConstants.HIGH_ACCURACY, "train_loss": TestConstants.LOW_LOSS}
+                        {
+                            "val_acc": TestConstants.HIGH_ACCURACY,
+                            "train_loss": TestConstants.LOW_LOSS,
+                        }
                     )
 
                     run_id = run.info.run_id
@@ -576,32 +579,38 @@ class TestModelRegistryIntegration:
                 # Test registration with basic MLflow API
                 model_uri = f"runs:/{run_id}/model"
                 version = mlflow.register_model(model_uri=model_uri, name="IntegrationTestModel")
-                
+
                 assert version is not None, "Model registration should succeed"
-                assert str(version.version) == "1", f"First registered model should be version 1, got: {version.version}"
+                assert (
+                    str(version.version) == "1"
+                ), f"First registered model should be version 1, got: {version.version}"
 
                 # Test our model registry methods for promotion and listing
-                promote_result = registry.promote_model(version=str(version.version), stage="Staging")
+                promote_result = registry.promote_model(
+                    version=str(version.version), stage="Staging"
+                )
                 assert promote_result is True, "Model promotion should succeed"
 
                 # Test listing - check for alias instead of deprecated stage
                 versions = registry.list_model_versions(stage="Staging")
                 assert len(versions) == 1, "Should have one staging model"
-                
+
                 # Check that the version has the Staging alias
                 staging_version = versions[0]
-                assert hasattr(staging_version, 'aliases'), "Version should have aliases attribute"
+                assert hasattr(staging_version, "aliases"), "Version should have aliases attribute"
                 assert "Staging" in staging_version.aliases, "Model should have Staging alias"
 
                 # Test production promotion
-                promote_result = registry.promote_model(version=str(version.version), stage="Production")
+                promote_result = registry.promote_model(
+                    version=str(version.version), stage="Production"
+                )
                 assert promote_result is True, "Production promotion should succeed"
 
                 # Test URI generation
                 production_uri = registry.get_production_model_uri()
                 expected_uri = "models:/IntegrationTestModel/1"
                 assert production_uri == expected_uri, f"Production URI should be {expected_uri}"
-                
+
             finally:
                 # Restore original tracking URI
                 mlflow.set_tracking_uri(original_tracking_uri)

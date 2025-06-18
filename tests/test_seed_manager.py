@@ -485,9 +485,9 @@ class TestKasminaMicroIntegration:
         # Simulate plateau condition that should trigger germination
         # Need to reach patience threshold with no improvement and low accuracy
         assert kasmina.step(1.0, 0.7) is False  # Below threshold, plateau = 1
-        assert kasmina.step(1.0, 0.7) is False  # Still below, plateau = 2 
+        assert kasmina.step(1.0, 0.7) is False  # Still below, plateau = 2
         result = kasmina.step(1.0, 0.7)  # plateau = 3, should trigger (patience=2)
-        
+
         assert result is True  # Germination should have occurred
 
         # The seed with worst health signal should be selected and activated
@@ -531,7 +531,7 @@ class TestKasminaMicroIntegration:
         kasmina.step(0.8, 0.7)
         kasmina.step(0.8, 0.7)
         kasmina.step(0.8, 0.7)  # Should trigger germination
-        
+
         seed.initialize_child.assert_called_once()
 
     def test_kasmina_no_dormant_seeds_available(self, clean_seed_manager, mock_seed_factory):
@@ -550,35 +550,37 @@ class TestKasminaMicroIntegration:
         assert result is False  # But no dormant seeds available
         seed.initialize_child.assert_not_called()
 
-    @patch('morphogenetic_engine.monitoring.get_monitor')
-    def test_kasmina_monitoring_integration_success(self, mock_get_monitor, clean_seed_manager, 
-                                                   mock_seed_factory, mock_monitor):
+    @patch("morphogenetic_engine.monitoring.get_monitor")
+    def test_kasmina_monitoring_integration_success(
+        self, mock_get_monitor, clean_seed_manager, mock_seed_factory, mock_monitor
+    ):
         """Test that successful germination records metrics in monitoring system."""
         mock_get_monitor.return_value = mock_monitor
-        
+
         manager = clean_seed_manager
         kasmina = KasminaMicro(manager, patience=1, acc_threshold=0.8)
-        
+
         seed = mock_seed_factory()
         manager.register_seed(seed, "test_seed")
 
         # Trigger germination by building up plateau
-        kasmina.step(1.0, 0.7)  # Below threshold, build plateau  
+        kasmina.step(1.0, 0.7)  # Below threshold, build plateau
         result = kasmina.step(1.0, 0.7)  # plateau >= patience, should trigger
-        
+
         assert result is True
         mock_monitor.update_kasmina_metrics.assert_called_with(1, 1)
         mock_monitor.record_germination.assert_called_once()
 
-    @patch('morphogenetic_engine.monitoring.get_monitor')
-    def test_kasmina_monitoring_integration_no_monitor(self, mock_get_monitor, clean_seed_manager, 
-                                                      mock_seed_factory):
+    @patch("morphogenetic_engine.monitoring.get_monitor")
+    def test_kasmina_monitoring_integration_no_monitor(
+        self, mock_get_monitor, clean_seed_manager, mock_seed_factory
+    ):
         """Test that KasminaMicro handles absence of monitoring gracefully."""
         mock_get_monitor.return_value = None
-        
+
         manager = clean_seed_manager
         kasmina = KasminaMicro(manager, patience=1, acc_threshold=0.8)
-        
+
         seed = mock_seed_factory()
         manager.register_seed(seed, "test_seed")
 
@@ -592,25 +594,26 @@ class TestKasminaMicroIntegration:
 class TestMonitoringIntegration:
     """Tests for monitoring system integration."""
 
-    @patch('morphogenetic_engine.monitoring.get_monitor')
+    @patch("morphogenetic_engine.monitoring.get_monitor")
     def test_circular_import_resilience(self, mock_get_monitor):
         """Test that monitoring import failures don't break core functionality."""
         # Simulate import failure
         mock_get_monitor.side_effect = ImportError("Circular import detected")
-        
+
         manager = SeedManager()
         manager.seeds.clear()
-        
+
         # Core functionality should still work
         mock_seed = Mock()
         mock_seed.initialize_child = Mock()
         manager.register_seed(mock_seed, "test_seed")
-        
+
         # Germination should work despite monitoring failure
         with pytest.raises(ImportError):
             from morphogenetic_engine.monitoring import get_monitor
+
             get_monitor()
-        
+
         # But direct SeedManager operations should be unaffected
         result = manager.request_germination("test_seed")
         assert result is True
@@ -619,12 +622,12 @@ class TestMonitoringIntegration:
     def test_monitoring_none_handling(self, clean_seed_manager, mock_seed_factory):
         """Test graceful handling when monitoring returns None."""
         manager = clean_seed_manager
-        
-        with patch('morphogenetic_engine.monitoring.get_monitor', return_value=None):
+
+        with patch("morphogenetic_engine.monitoring.get_monitor", return_value=None):
             kasmina = KasminaMicro(manager, patience=1, acc_threshold=0.8)
             seed = mock_seed_factory()
             manager.register_seed(seed, "test_seed")
-            
+
             # Should work fine with None monitor - build plateau first
             kasmina.step(1.0, 0.7)  # Build plateau
             result = kasmina.step(1.0, 0.7)  # Trigger germination
@@ -651,7 +654,7 @@ class TestEnhancedErrorScenarios:
             try:
                 result = manager.request_germination(seed_id)
                 results.append((seed_id, "success" if result else "failed", None))
-            except Exception as e:
+            except (RuntimeError, ValueError, AttributeError) as e:
                 results.append((seed_id, "exception", str(e)))
 
         # Attempt concurrent germinations
@@ -669,13 +672,15 @@ class TestEnhancedErrorScenarios:
         failed_count = sum(1 for _, status, _ in results if status == "failed")
 
         assert success_count == 3  # Non-failure seeds should succeed
-        assert failed_count == 2   # Failure seeds should fail gracefully
+        assert failed_count == 2  # Failure seeds should fail gracefully
 
         # Verify failed seeds have correct status
         for seed_id in failure_seeds:
             assert manager.seeds[seed_id]["status"] == "failed"
 
-    def test_memory_leak_detection_with_weak_references(self, clean_seed_manager, mock_seed_factory):
+    def test_memory_leak_detection_with_weak_references(
+        self, clean_seed_manager, mock_seed_factory
+    ):
         """Test for memory leaks using weak references to ensure proper cleanup."""
         manager = clean_seed_manager
         weak_refs = []
@@ -685,7 +690,7 @@ class TestEnhancedErrorScenarios:
             seed = mock_seed_factory()
             manager.register_seed(seed, f"leak_test_seed_{i}")
             weak_refs.append(weakref.ref(seed))
-            
+
             # Add some buffer data
             for _ in range(10):
                 tensor = torch.randn(50, 50)
@@ -697,6 +702,7 @@ class TestEnhancedErrorScenarios:
         # Reset and force garbage collection
         manager.reset()
         import gc
+
         gc.collect()
 
         # Check that we can still access manager state (no corruption)
@@ -706,12 +712,14 @@ class TestEnhancedErrorScenarios:
         # Note: Weak references may still be alive due to test framework holding references
         # The key test is that manager.reset() doesn't crash and clears state properly
 
-    def test_buffer_operations_under_stress_with_errors(self, clean_seed_manager, mock_seed_factory):
+    def test_buffer_operations_under_stress_with_errors(
+        self, clean_seed_manager, mock_seed_factory
+    ):
         """Test buffer operations when some operations encounter errors."""
         manager = clean_seed_manager
         seed = mock_seed_factory()
         manager.register_seed(seed, "stress_seed")
-        
+
         error_count = 0
         success_count = 0
 
@@ -724,7 +732,7 @@ class TestEnhancedErrorScenarios:
                 else:
                     manager.append_to_buffer("stress_seed", torch.randn(10, 10))
                 success_count += 1
-            except Exception:
+            except (RuntimeError, ValueError, MemoryError):
                 error_count += 1
 
         # Run operations concurrently
@@ -743,17 +751,21 @@ class TestEnhancedErrorScenarios:
         assert len(buffer) > 0
         assert len(buffer) <= TestConstants.BUFFER_MAXLEN
 
-    @pytest.mark.parametrize("maxlen_size,expected_behavior", [
-        (1, "single_item_only"),
-        (5, "small_buffer"),
-        (TestConstants.BUFFER_MAXLEN, "normal_operation"),
-    ])
-    def test_buffer_edge_cases_parametrized(self, clean_seed_manager, mock_seed_factory, 
-                                           maxlen_size, expected_behavior):
+    @pytest.mark.parametrize(
+        "maxlen_size,expected_behavior",
+        [
+            (1, "single_item_only"),
+            (5, "small_buffer"),
+            (TestConstants.BUFFER_MAXLEN, "normal_operation"),
+        ],
+    )
+    def test_buffer_edge_cases_parametrized(
+        self, clean_seed_manager, mock_seed_factory, maxlen_size, expected_behavior
+    ):
         """Test buffer operations under various edge conditions."""
         manager = clean_seed_manager
         seed = mock_seed_factory()
-        
+
         # Create custom buffer with specific maxlen before registering
         custom_buffer = deque(maxlen=maxlen_size)
         manager.register_seed(seed, "edge_test_seed")
@@ -763,7 +775,7 @@ class TestEnhancedErrorScenarios:
             # With maxlen=1, only the last item should remain
             for i in range(3):
                 manager.append_to_buffer("edge_test_seed", torch.full((2, 2), float(i)))
-            
+
             buffer = manager.seeds["edge_test_seed"]["buffer"]
             assert len(buffer) == 1
             assert torch.equal(buffer[0], torch.full((2, 2), 2.0))
@@ -772,11 +784,13 @@ class TestEnhancedErrorScenarios:
             # Fill beyond small buffer capacity
             for i in range(maxlen_size + 2):
                 manager.append_to_buffer("edge_test_seed", torch.full((2, 2), float(i)))
-            
+
             buffer = manager.seeds["edge_test_seed"]["buffer"]
             assert len(buffer) == maxlen_size
             # Should contain the last maxlen_size items
-            expected_start = 2  # Started from 0, added maxlen_size+2 items, so last should be from 2
+            expected_start = (
+                2  # Started from 0, added maxlen_size+2 items, so last should be from 2
+            )
             for i, tensor in enumerate(buffer):
                 assert torch.equal(tensor, torch.full((2, 2), float(expected_start + i)))
 
@@ -784,14 +798,16 @@ class TestEnhancedErrorScenarios:
             # Fill to capacity
             for i in range(maxlen_size):
                 manager.append_to_buffer("edge_test_seed", torch.randn(2, 2))
-            
+
             buffer = manager.seeds["edge_test_seed"]["buffer"]
             assert len(buffer) == maxlen_size
 
 
 # Property-based testing requires hypothesis
 try:
-    from hypothesis import given, strategies as st
+    from hypothesis import given
+    from hypothesis import strategies as st
+
     HYPOTHESIS_AVAILABLE = True
 except ImportError:
     HYPOTHESIS_AVAILABLE = False
@@ -815,10 +831,10 @@ class TestPropertyBasedScenarios:
             manager.register_seed(mock_seed, f"prop_seed_{i}")
 
         kasmina = KasminaMicro(manager, patience=1, acc_threshold=0.8)
-        
+
         # The selected seed should always have the lowest health signal
         selected_id = kasmina._select_seed()
-        
+
         if selected_id:  # Only test if a seed was selected
             min_signal = min(health_signals)
             selected_signal = manager.seeds[selected_id]["module"].get_health_signal()
@@ -830,7 +846,7 @@ class TestPropertyBasedScenarios:
         SeedManager.reset_singleton()
         manager = SeedManager()
         manager.seeds.clear()
-        
+
         mock_seed = Mock()
         mock_seed.get_health_signal = Mock(return_value=0.5)
         manager.register_seed(mock_seed, "prop_buffer_seed")
@@ -845,7 +861,7 @@ class TestPropertyBasedScenarios:
                 continue
 
         buffer = manager.seeds["prop_buffer_seed"]["buffer"]
-        
+
         # Properties that should always hold
         assert len(buffer) <= TestConstants.BUFFER_MAXLEN
         assert all(isinstance(item, torch.Tensor) for item in buffer)
@@ -867,7 +883,7 @@ class TestPropertyBasedScenarios:
                 mock_seed.get_health_signal = Mock(return_value=0.5)
                 manager.register_seed(mock_seed, f"concurrent_seed_{seed_idx}")
                 results.append(f"concurrent_seed_{seed_idx}")
-            except Exception as e:
+            except (RuntimeError, ValueError, AttributeError) as e:
                 results.append(f"error_{seed_idx}: {e}")
 
         # Run concurrent registrations
@@ -880,7 +896,7 @@ class TestPropertyBasedScenarios:
         # Properties that should hold
         assert len(results) == num_seeds
         assert len(manager.seeds) == num_seeds
-        
+
         # All seeds should be registered successfully
         for i in range(num_seeds):
             assert f"concurrent_seed_{i}" in manager.seeds
@@ -897,26 +913,28 @@ class TestPerformanceBenchmarks:
         # Register many seeds
         num_seeds = 1000
         start_time = time.time()
-        
+
         for i in range(num_seeds):
             seed = mock_seed_factory()
             manager.register_seed(seed, f"benchmark_seed_{i}")
-        
+
         registration_time = time.time() - start_time
-        
+
         # Registration should be reasonably fast (less than 5 seconds for 1000 seeds)
-        assert registration_time < 5.0, f"Registration took {registration_time:.2f}s, expected < 5.0s"
+        assert (
+            registration_time < 5.0
+        ), f"Registration took {registration_time:.2f}s, expected < 5.0s"
 
         # Test lookup performance
         start_time = time.time()
-        
+
         for i in range(0, num_seeds, 50):  # Sample every 50th seed
             seed_id = f"benchmark_seed_{i}"
             assert seed_id in manager.seeds
             assert manager.seeds[seed_id]["status"] == "dormant"
-        
+
         lookup_time = time.time() - start_time
-        
+
         # Lookups should be very fast (less than 0.1 seconds for 20 lookups)
         assert lookup_time < 0.1, f"Lookup took {lookup_time:.2f}s, expected < 0.1s"
 
@@ -942,14 +960,14 @@ class TestPerformanceBenchmarks:
             threading.Thread(target=attempt_germination, args=(f"perf_seed_{i}",))
             for i in range(num_seeds)
         ]
-        
+
         for t in threads:
             t.start()
         for t in threads:
             t.join()
 
         total_time = time.time() - start_time
-        
+
         # All germinations should complete in reasonable time
         assert total_time < 2.0, f"Germination took {total_time:.2f}s, expected < 2.0s"
         assert len(results) == num_seeds

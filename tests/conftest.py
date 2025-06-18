@@ -159,7 +159,7 @@ class MockModelVersion:
         mock_version.current_stage = stage
         mock_version.run_id = run_id
         mock_version.creation_timestamp = timestamp or 1609459200000
-        
+
         # Support both old stage-based and new alias-based API
         if aliases is None:
             # Convert stage to alias for modern API compatibility
@@ -168,7 +168,7 @@ class MockModelVersion:
             else:
                 aliases = []
         mock_version.aliases = aliases
-        
+
         return mock_version
 
 

@@ -338,7 +338,9 @@ class TestModelRegistryCLIIntegration:
         """Test model promotion with automatic archiving of existing production models."""
         # ARRANGE
         # Simulate existing production model with both stage and aliases for compatibility
-        existing_prod = MockModelVersion.create(version="1", stage="Production", aliases=["Production"])
+        existing_prod = MockModelVersion.create(
+            version="1", stage="Production", aliases=["Production"]
+        )
         mock_mlflow_environment["client"].search_model_versions.return_value = [existing_prod]
 
         # ACT
@@ -357,7 +359,7 @@ class TestModelRegistryCLIIntegration:
 
         # Should have set the new alias (modern API)
         client.set_registered_model_alias.assert_called()
-        
+
         # Should have deleted the existing alias for archiving
         client.delete_registered_model_alias.assert_called()
 
@@ -401,7 +403,9 @@ class TestModelRegistryCLIIntegration:
     def test_get_production_model_uri_retrieval(self, production_args, mock_mlflow_environment):
         """Test production model URI retrieval."""
         # ARRANGE
-        prod_version = MockModelVersion.create(version="2", stage="Production", aliases=["Production"])
+        prod_version = MockModelVersion.create(
+            version="2", stage="Production", aliases=["Production"]
+        )
         # Set up the get_model_version_by_alias call (modern API)
         mock_mlflow_environment["client"].get_model_version_by_alias.return_value = prod_version
 
@@ -461,8 +465,10 @@ class TestModelRegistryCLIEdgeCases:
     ):
         """Test promotion when concurrent modifications occur with alias-based API."""
         # ARRANGE - With alias-based API, we primarily use get_model_version_by_alias
-        initial_prod = MockModelVersion.create(version="1", stage="Production", aliases=["Production"])
-        
+        initial_prod = MockModelVersion.create(
+            version="1", stage="Production", aliases=["Production"]
+        )
+
         # Set up get_model_version_by_alias to return existing version
         mock_mlflow_environment["client"].get_model_version_by_alias.return_value = initial_prod
 

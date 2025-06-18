@@ -76,7 +76,7 @@ def list_models(args):
     registry = ModelRegistry(args.model_name)
 
     # Support both old 'stage' and new 'alias' argument names for backwards compatibility
-    stage_filter = getattr(args, 'alias', None) or getattr(args, 'stage', None)
+    stage_filter = getattr(args, "alias", None) or getattr(args, "stage", None)
     versions = registry.list_model_versions(stage=stage_filter)
 
     if not versions:
@@ -101,9 +101,7 @@ def list_models(args):
 
         aliases_str = _format_aliases(version)
 
-        print(
-            f"{version.version:<10} {aliases_str:<20} {version.run_id:<32} {created_str:<20}"
-        )
+        print(f"{version.version:<10} {aliases_str:<20} {version.run_id:<32} {created_str:<20}")
 
 
 def get_best_model(args):
@@ -111,17 +109,17 @@ def get_best_model(args):
     registry = ModelRegistry(args.model_name)
 
     # Support both old 'stage' and new 'alias' argument names for backwards compatibility
-    stage_filter = getattr(args, 'alias', None) or getattr(args, 'stage', None)
-    
+    stage_filter = getattr(args, "alias", None) or getattr(args, "stage", None)
+
     best_version = registry.get_best_model_version(
         stage=stage_filter, metric_name=args.metric, higher_is_better=args.higher_is_better
     )
 
     if best_version:
         print(f"✅ Best model version: {best_version.version}")
-        
+
         aliases_str = _format_aliases(best_version)
-        
+
         print(f"   Aliases: {aliases_str}")
         print(f"   Run ID: {best_version.run_id}")
         print(f"   Metric: {args.metric}")
@@ -156,17 +154,17 @@ def get_production_model(args):
 def _format_aliases(version) -> str:
     """Format model version aliases for display."""
     # Get aliases (modern approach) or fallback to current_stage for backwards compatibility
-    aliases = getattr(version, 'aliases', [])
-    if not aliases and hasattr(version, 'current_stage') and version.current_stage != 'None':
+    aliases = getattr(version, "aliases", [])
+    if not aliases and hasattr(version, "current_stage") and version.current_stage != "None":
         aliases = [version.current_stage]
-    
+
     # Ensure aliases is iterable
     if isinstance(aliases, str):
         aliases = [aliases]
-    elif not hasattr(aliases, '__iter__'):
+    elif not hasattr(aliases, "__iter__"):
         aliases = []
-        
-    return ', '.join(aliases) if aliases else 'None'
+
+    return ", ".join(aliases) if aliases else "None"
 
 
 def main():

@@ -4,6 +4,7 @@ Unit and integration tests for the monitoring functionality.
 This test suite validates the PrometheusMonitor class with both unit tests
 (using real Prometheus metrics) and integration tests (including HTTP server).
 """
+
 # pylint: disable=redefined-outer-name
 
 import os
@@ -12,10 +13,11 @@ import time
 from typing import Generator
 from unittest.mock import Mock, patch
 
+import prometheus_client
 import psutil  # type: ignore[import-untyped]
 import pytest
-from hypothesis import given, strategies as st
-import prometheus_client
+from hypothesis import given
+from hypothesis import strategies as st
 from prometheus_client import REGISTRY, generate_latest
 
 from morphogenetic_engine.monitoring import (
@@ -23,8 +25,8 @@ from morphogenetic_engine.monitoring import (
     EPOCHS_TOTAL,
     EXPERIMENT_DURATION,
     GERMINATIONS_TOTAL,
-    KASMINA_PLATEAU_COUNTER,
     KASMINA_PATIENCE,
+    KASMINA_PLATEAU_COUNTER,
     PHASE_TRANSITIONS_TOTAL,
     SEED_ALPHA,
     SEED_DRIFT,
@@ -116,15 +118,9 @@ class TestPrometheusMonitorUnit:
     def test_state_mapping_completeness(self) -> None:
         """Test seed state to numeric mapping covers all expected states."""
         monitor = PrometheusMonitor(experiment_id="test_state_mapping")
-        
-        expected_states = {
-            "dormant": 0,
-            "training": 1,
-            "blending": 2,
-            "active": 3,
-            "failed": -1
-        }
-        
+
+        expected_states = {"dormant": 0, "training": 1, "blending": 2, "active": 3, "failed": -1}
+
         assert monitor.state_map == expected_states
 
     @patch("morphogenetic_engine.monitoring.start_http_server")
@@ -186,11 +182,13 @@ class TestPrometheusMonitorRealMetrics:
 
         # Verify all metric values
         labels = {"phase": "phase_2", "experiment_id": "test_exp_123"}
-        
+
         train_loss = metric_validator.get_gauge_value(TRAINING_LOSS, labels)
         val_loss = metric_validator.get_gauge_value(VALIDATION_LOSS, labels)
         val_acc = metric_validator.get_gauge_value(VALIDATION_ACCURACY, labels)
-        best_acc = metric_validator.get_gauge_value(BEST_ACCURACY, {"experiment_id": "test_exp_123"})
+        best_acc = metric_validator.get_gauge_value(
+            BEST_ACCURACY, {"experiment_id": "test_exp_123"}
+        )
 
         assert train_loss is not None and abs(train_loss - 0.25) < 1e-10
         assert val_loss is not None and abs(val_loss - 0.30) < 1e-10
@@ -220,7 +218,7 @@ class TestPrometheusMonitorRealMetrics:
 
         transition_count = metric_validator.get_counter_value(
             PHASE_TRANSITIONS_TOTAL,
-            {"from_phase": "phase_1", "to_phase": "phase_2", "experiment_id": "test_exp_123"}
+            {"from_phase": "phase_1", "to_phase": "phase_2", "experiment_id": "test_exp_123"},
         )
         assert transition_count is not None and abs(transition_count - 1.0) < 1e-10
 
@@ -267,7 +265,10 @@ class TestPrometheusMonitorRealMetrics:
 
     @patch("time.time")
     def test_update_experiment_duration_real_prometheus(
-        self, mock_time: Mock, monitor_with_mocked_server: PrometheusMonitor, metric_validator: MetricValidator
+        self,
+        mock_time: Mock,
+        monitor_with_mocked_server: PrometheusMonitor,
+        metric_validator: MetricValidator,
     ) -> None:
         """Test experiment duration update with real Prometheus objects."""
         mock_time.return_value = 1000.0
@@ -284,40 +285,48 @@ class TestPrometheusMonitorRealMetrics:
 class TestPrometheusMonitorErrorHandling:
     """Tests for error scenarios and edge cases."""
 
-    @pytest.mark.parametrize("invalid_value", [
-        float('nan'),
-        float('inf'),
-        float('-inf'),
-    ])
+    @pytest.mark.parametrize(
+        "invalid_value",
+        [
+            float("nan"),
+            float("inf"),
+            float("-inf"),
+        ],
+    )
     def test_invalid_metric_values_handling(
         self, monitor_with_mocked_server: PrometheusMonitor, invalid_value: float
     ) -> None:
         """Test handling of invalid metric values (NaN, infinity)."""
         # This should not raise an exception but should handle gracefully
         try:
-            monitor_with_mocked_server.update_training_metrics("phase_1", invalid_value, 0.5, 0.8, 0.9)
+            monitor_with_mocked_server.update_training_metrics(
+                "phase_1", invalid_value, 0.5, 0.8, 0.9
+            )
             # Prometheus client should handle these values appropriately
         except (ValueError, TypeError) as e:
             # If exceptions are raised, they should be meaningful
             assert "invalid" in str(e).lower() or "nan" in str(e).lower() or "inf" in str(e).lower()
 
-    @pytest.mark.parametrize("malformed_id", [
-        "",  # Empty string
-        " ",  # Whitespace only
-        "test\nexp",  # Newline character
-        "test\texp",  # Tab character
-        "test exp",  # Space character
-        "test/exp",  # Forward slash
-        "test\\exp",  # Backslash
-        "test\"exp",  # Quote character
-        "a" * 1000,  # Very long string
-    ])
+    @pytest.mark.parametrize(
+        "malformed_id",
+        [
+            "",  # Empty string
+            " ",  # Whitespace only
+            "test\nexp",  # Newline character
+            "test\texp",  # Tab character
+            "test exp",  # Space character
+            "test/exp",  # Forward slash
+            "test\\exp",  # Backslash
+            'test"exp',  # Quote character
+            "a" * 1000,  # Very long string
+        ],
+    )
     def test_malformed_experiment_ids(self, malformed_id: str) -> None:
         """Test behavior with malformed experiment IDs."""
         # Monitor should be created but may have issues with metric labeling
         monitor = PrometheusMonitor(experiment_id=malformed_id)
         assert monitor.experiment_id == malformed_id
-        
+
         # Basic operations should not crash
         try:
             with patch("morphogenetic_engine.monitoring.start_http_server"):
@@ -325,37 +334,44 @@ class TestPrometheusMonitorErrorHandling:
                 monitor.record_germination()
         except (ValueError, TypeError, KeyError) as e:
             # If exceptions occur, they should be related to Prometheus label validation
-            assert any(word in str(e).lower() for word in ["label", "metric", "invalid", "character"])
+            assert any(
+                word in str(e).lower() for word in ["label", "metric", "invalid", "character"]
+            )
 
-    @pytest.mark.parametrize("malformed_seed_id", [
-        "",  # Empty string
-        " ",  # Whitespace only
-        "seed\nid",  # Newline character
-        "seed\"id",  # Quote character
-        "seed{id}",  # Curly braces
-        "seed[id]",  # Square brackets
-    ])
-    def test_malformed_seed_ids(self, monitor_with_mocked_server: PrometheusMonitor, malformed_seed_id: str) -> None:
+    @pytest.mark.parametrize(
+        "malformed_seed_id",
+        [
+            "",  # Empty string
+            " ",  # Whitespace only
+            "seed\nid",  # Newline character
+            'seed"id',  # Quote character
+            "seed{id}",  # Curly braces
+            "seed[id]",  # Square brackets
+        ],
+    )
+    def test_malformed_seed_ids(
+        self, monitor_with_mocked_server: PrometheusMonitor, malformed_seed_id: str
+    ) -> None:
         """Test behavior with malformed seed IDs."""
         # Operations should handle malformed seed IDs gracefully
         try:
             monitor_with_mocked_server.update_seed_metrics(
-                seed_id=malformed_seed_id,
-                state="active",
-                alpha=0.5
+                seed_id=malformed_seed_id, state="active", alpha=0.5
             )
         except (ValueError, TypeError, KeyError) as e:
             # If exceptions occur, they should be related to Prometheus label validation
-            assert any(word in str(e).lower() for word in ["label", "metric", "invalid", "character"])
+            assert any(
+                word in str(e).lower() for word in ["label", "metric", "invalid", "character"]
+            )
 
-    def test_unknown_seed_state_handling(self, monitor_with_mocked_server: PrometheusMonitor) -> None:
+    def test_unknown_seed_state_handling(
+        self, monitor_with_mocked_server: PrometheusMonitor
+    ) -> None:
         """Test behavior with unknown seed states."""
         monitor_with_mocked_server.update_seed_metrics(
-            seed_id="test_seed",
-            state="unknown_state",  # Not in state_map
-            alpha=0.5
+            seed_id="test_seed", state="unknown_state", alpha=0.5  # Not in state_map
         )
-        
+
         # Should default to -1 for unknown states
         validator = MetricValidator()
         state_value = validator.get_gauge_value(
@@ -363,11 +379,13 @@ class TestPrometheusMonitorErrorHandling:
         )
         assert state_value == -1.0
 
-    def test_negative_values_where_inappropriate(self, monitor_with_mocked_server: PrometheusMonitor) -> None:
+    def test_negative_values_where_inappropriate(
+        self, monitor_with_mocked_server: PrometheusMonitor
+    ) -> None:
         """Test handling of negative values where they shouldn't be allowed."""
         # Some metrics shouldn't have negative values in real scenarios
         monitor_with_mocked_server.update_training_metrics("phase_1", -0.5, -0.3, -0.1, -0.9)
-        
+
         # Prometheus itself doesn't prevent negative values, but we can verify they're recorded
         validator = MetricValidator()
         train_loss = validator.get_gauge_value(
@@ -379,7 +397,7 @@ class TestPrometheusMonitorErrorHandling:
         """Test handling of extremely large metric values."""
         large_value = 1e100
         monitor_with_mocked_server.update_training_metrics("phase_1", large_value, 0.5, 0.8, 0.9)
-        
+
         validator = MetricValidator()
         train_loss = validator.get_gauge_value(
             TRAINING_LOSS, {"phase": "phase_1", "experiment_id": "test_exp_123"}
@@ -393,31 +411,39 @@ class TestPrometheusMonitorPropertyBased:
     @given(
         experiment_id=st.text(min_size=1, max_size=100),
         phase=st.text(min_size=1, max_size=50),
-        train_loss=st.floats(min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False),
+        train_loss=st.floats(
+            min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False
+        ),
         val_loss=st.floats(min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False),
         val_acc=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
         best_acc=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
     )
     def test_training_metrics_property_based(
-        self, experiment_id: str, phase: str, train_loss: float, val_loss: float, val_acc: float, best_acc: float
+        self,
+        experiment_id: str,
+        phase: str,
+        train_loss: float,
+        val_loss: float,
+        val_acc: float,
+        best_acc: float,
     ) -> None:
         """Property-based test for training metrics with valid ranges."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id=experiment_id)
-            
+
             try:
                 monitor.update_training_metrics(phase, train_loss, val_loss, val_acc, best_acc)
-                
+
                 # Verify metrics can be retrieved
                 validator = MetricValidator()
                 recorded_loss = validator.get_gauge_value(
                     TRAINING_LOSS, {"phase": phase, "experiment_id": experiment_id}
                 )
-                
+
                 # If no exception was raised, the value should be recorded correctly
                 if recorded_loss is not None:
                     assert abs(recorded_loss - train_loss) < 1e-10
-                    
+
             except (ValueError, TypeError, KeyError) as e:
                 # If exceptions occur, they should be related to label validation
                 assert any(word in str(e).lower() for word in ["label", "metric", "invalid"])
@@ -434,25 +460,20 @@ class TestPrometheusMonitorPropertyBased:
         """Property-based test for seed metrics."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="prop_test")
-            
+
             try:
-                monitor.update_seed_metrics(
-                    seed_id=seed_id,
-                    state=state,
-                    alpha=alpha,
-                    drift=drift
-                )
-                
+                monitor.update_seed_metrics(seed_id=seed_id, state=state, alpha=alpha, drift=drift)
+
                 # Verify state mapping
                 expected_state_value = monitor.state_map.get(state, -1)
                 validator = MetricValidator()
                 recorded_state = validator.get_gauge_value(
                     SEED_STATE, {"seed_id": seed_id, "experiment_id": "prop_test"}
                 )
-                
+
                 if recorded_state is not None:
                     assert recorded_state == expected_state_value
-                    
+
             except (ValueError, TypeError, KeyError) as e:
                 # If exceptions occur, they should be related to label validation
                 assert any(word in str(e).lower() for word in ["label", "metric", "invalid"])
@@ -463,8 +484,9 @@ class TestMonitoringUtilities:
 
     def test_initialize_monitoring(self) -> None:
         """Test monitoring initialization utility."""
-        with patch("morphogenetic_engine.monitoring.PrometheusMonitor") as mock_monitor_class, \
-             patch("morphogenetic_engine.monitoring.start_http_server"):
+        with patch(
+            "morphogenetic_engine.monitoring.PrometheusMonitor"
+        ) as mock_monitor_class, patch("morphogenetic_engine.monitoring.start_http_server"):
 
             mock_monitor = Mock()
             mock_monitor_class.return_value = mock_monitor
@@ -504,10 +526,7 @@ class TestMonitoringIntegration:
                 monitor.update_training_metrics(f"phase_{worker_id}", 0.1 * i, 0.2 * i, 0.8, 0.9)
                 monitor.record_germination()
                 monitor.update_seed_metrics(
-                    seed_id=f"seed_{worker_id}_{i}",
-                    state="training",
-                    alpha=0.5,
-                    drift=0.1
+                    seed_id=f"seed_{worker_id}_{i}", state="training", alpha=0.5, drift=0.1
                 )
 
         # Run concurrent updates with more threads
@@ -527,11 +546,11 @@ class TestMonitoringIntegration:
         """Test actual metrics endpoint integration (simulated)."""
         monitor = PrometheusMonitor(experiment_id="test_endpoint", port=8000)
         monitor.start_metrics_server()
-        
+
         # Simulate some metric updates
         monitor.update_training_metrics("phase_1", 0.5, 0.4, 0.85, 0.90)
         monitor.record_germination()
-        
+
         # Verify server was started
         mock_start_server.assert_called_once_with(8000)
         assert monitor.server_started is True
@@ -540,15 +559,17 @@ class TestMonitoringIntegration:
         """Test that metric labels are consistent across operations."""
         # Update same metrics multiple times
         monitor_with_mocked_server.update_training_metrics("phase_1", 0.1, 0.2, 0.8, 0.9)
-        monitor_with_mocked_server.update_training_metrics("phase_1", 0.05, 0.15, 0.85, 0.95)  # Should overwrite
-        
+        monitor_with_mocked_server.update_training_metrics(
+            "phase_1", 0.05, 0.15, 0.85, 0.95
+        )  # Should overwrite
+
         validator = MetricValidator()
         labels = {"phase": "phase_1", "experiment_id": "test_exp_123"}
-        
+
         # Latest values should be present
         train_loss = validator.get_gauge_value(TRAINING_LOSS, labels)
         val_acc = validator.get_gauge_value(VALIDATION_ACCURACY, labels)
-        
+
         assert train_loss is not None and abs(train_loss - 0.05) < 1e-10  # Latest value
         assert val_acc is not None and abs(val_acc - 0.85) < 1e-10  # Latest value
 
@@ -556,22 +577,22 @@ class TestMonitoringIntegration:
         """Test that metrics persist correctly across multiple operations."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="persistence_test")
-            
+
             # Record multiple germinations
             for _ in range(10):
                 monitor.record_germination()
-            
+
             validator = MetricValidator()
             germination_count = validator.get_counter_value(
                 GERMINATIONS_TOTAL, {"experiment_id": "persistence_test"}
             )
-            
+
             assert germination_count is not None and abs(germination_count - 10.0) < 1e-10
-            
+
             # Add more germinations
             for _ in range(5):
                 monitor.record_germination()
-                
+
             # Count should be cumulative
             final_count = validator.get_counter_value(
                 GERMINATIONS_TOTAL, {"experiment_id": "persistence_test"}
@@ -586,21 +607,21 @@ class TestMonitoringPerformance:
         """Test high-frequency metric updates for performance."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="perf_test")
-            
+
             start_time = time.time()
-            
+
             # Perform many rapid updates
             for i in range(1000):
                 monitor.update_training_metrics("phase_1", 0.1, 0.2, 0.8, 0.9)
                 if i % 100 == 0:  # Occasional other operations
                     monitor.record_germination()
-                    
+
             end_time = time.time()
             duration = end_time - start_time
-            
+
             # Should complete in reasonable time (less than 5 seconds for 1000 updates)
             assert duration < 5.0
-            
+
             # Verify final metrics are correct
             validator = MetricValidator()
             germination_count = validator.get_counter_value(
@@ -612,41 +633,39 @@ class TestMonitoringPerformance:
         """Stress test with many concurrent metric updates."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="stress_test")
-            
+
             def stress_worker() -> None:
                 """Worker function for stress testing."""
                 for i in range(100):
                     monitor.update_training_metrics(f"phase_{i%3}", 0.1, 0.2, 0.8, 0.9)
                     monitor.record_germination()
-                    monitor.update_seed_metrics(
-                        seed_id=f"seed_{i}",
-                        state="training",
-                        alpha=0.5
-                    )
-            
+                    monitor.update_seed_metrics(seed_id=f"seed_{i}", state="training", alpha=0.5)
+
             # Many concurrent workers
             threads = [threading.Thread(target=stress_worker) for _ in range(10)]
-            
+
             start_time = time.time()
-            
+
             for thread in threads:
                 thread.start()
-                
+
             for thread in threads:
                 thread.join()
-                
+
             end_time = time.time()
             duration = end_time - start_time
-            
+
             # Should complete in reasonable time
             assert duration < 10.0  # 10 threads * 100 operations each should be fast
-            
+
             # Verify metrics were recorded
             validator = MetricValidator()
             germination_count = validator.get_counter_value(
                 GERMINATIONS_TOTAL, {"experiment_id": "stress_test"}
             )
-            assert germination_count is not None and abs(germination_count - 1000.0) < 1e-10  # 10 threads * 100 operations each
+            assert (
+                germination_count is not None and abs(germination_count - 1000.0) < 1e-10
+            )  # 10 threads * 100 operations each
 
 
 class TestPrometheusCompliance:
@@ -656,30 +675,38 @@ class TestPrometheusCompliance:
         """Test that metric names follow Prometheus conventions."""
         # All metrics should start with application prefix
         metrics_to_check = [
-            EPOCHS_TOTAL, GERMINATIONS_TOTAL, TRAINING_LOSS, VALIDATION_LOSS,
-            VALIDATION_ACCURACY, BEST_ACCURACY, SEED_ALPHA, SEED_STATE
+            EPOCHS_TOTAL,
+            GERMINATIONS_TOTAL,
+            TRAINING_LOSS,
+            VALIDATION_LOSS,
+            VALIDATION_ACCURACY,
+            BEST_ACCURACY,
+            SEED_ALPHA,
+            SEED_STATE,
         ]
-        
+
         for metric in metrics_to_check:
             # pylint: disable=protected-access
             metric_name = metric._name
-            assert metric_name.startswith("kaslite_"), f"Metric {metric_name} should start with kaslite_"
+            assert metric_name.startswith(
+                "kaslite_"
+            ), f"Metric {metric_name} should start with kaslite_"
             assert "_" in metric_name, f"Metric {metric_name} should use underscores"
-            assert metric_name.islower() or "_" in metric_name, f"Metric {metric_name} should be lowercase"
+            assert (
+                metric_name.islower() or "_" in metric_name
+            ), f"Metric {metric_name} should be lowercase"
 
     def test_label_cardinality_limits(self, monitor_with_mocked_server: PrometheusMonitor) -> None:
         """Test that label cardinality stays within reasonable limits."""
         # Create many different seed metrics to test cardinality
         for i in range(100):  # Reasonable number of seeds
             monitor_with_mocked_server.update_seed_metrics(
-                seed_id=f"seed_{i}",
-                state="training",
-                alpha=0.5
+                seed_id=f"seed_{i}", state="training", alpha=0.5
             )
-        
+
         # Should not raise any cardinality warnings or errors
         validator = MetricValidator()
-        
+
         # Verify last metric is recorded correctly
         state_value = validator.get_gauge_value(
             SEED_STATE, {"seed_id": "seed_99", "experiment_id": "test_exp_123"}
@@ -693,9 +720,9 @@ class TestPrometheusCompliance:
             (GERMINATIONS_TOTAL, "germination"),
             (TRAINING_LOSS, "loss"),
             (VALIDATION_ACCURACY, "accuracy"),
-            (SEED_STATE, "state")
+            (SEED_STATE, "state"),
         ]
-        
+
         for metric, expected_keyword in metrics_with_help:
             # pylint: disable=protected-access
             help_text = metric._documentation.lower()
@@ -710,30 +737,32 @@ class TestMonitoringMemoryManagement:
         """Test that metrics don't accumulate unbounded memory."""
         process = psutil.Process(os.getpid())
         initial_memory = process.memory_info().rss
-        
+
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="memory_test")
-            
+
             # Create many metrics with unique labels to test memory usage
             for i in range(1000):
                 monitor.update_seed_metrics(
-                    seed_id=f"seed_{i}", 
-                    state="training", 
+                    seed_id=f"seed_{i}",
+                    state="training",
                     alpha=0.5,
                     drift=0.1,
                     health_signal=0.8,
-                    training_progress=0.6
+                    training_progress=0.6,
                 )
-            
+
             # Don't clear registry - let pytest fixtures handle cleanup
             # MetricValidator.clear_registry()
-            
+
             # Memory should not grow significantly
             final_memory = process.memory_info().rss
             memory_growth = final_memory - initial_memory
-            
+
             # Allow some growth but not unbounded (< 50MB for 1000 metrics)
-            assert memory_growth < 50 * 1024 * 1024, f"Memory grew by {memory_growth / (1024*1024):.1f} MB"
+            assert (
+                memory_growth < 50 * 1024 * 1024
+            ), f"Memory grew by {memory_growth / (1024*1024):.1f} MB"
 
     def test_prometheus_export_format_validation(self) -> None:
         """Test that metrics export in valid Prometheus format."""
@@ -741,57 +770,87 @@ class TestMonitoringMemoryManagement:
             monitor = PrometheusMonitor(experiment_id="export_test")
             monitor.update_training_metrics("phase_1", 0.5, 0.4, 0.85, 0.90)
             monitor.record_germination()
-            
+
             # Generate metrics output
-            output = generate_latest().decode('utf-8')
-            
+            output = generate_latest().decode("utf-8")
+
             # The output should contain metrics
             assert len(output) > 0, "Prometheus output should not be empty"
-            
+
             # Look for kaslite metrics
-            kaslite_metrics = [line for line in output.split('\n') if 'kaslite_' in line and not line.startswith('#')]
+            kaslite_metrics = [
+                line
+                for line in output.split("\n")
+                if "kaslite_" in line and not line.startswith("#")
+            ]
             assert len(kaslite_metrics) > 0, "No kaslite metrics found in output"
-            
+
             # Validate format contains expected metrics (flexible pattern matching)
-            training_loss_found = any('kaslite_training_loss' in line and 'export_test' in line and 'phase_1' in line for line in kaslite_metrics)
-            germination_found = any('kaslite_germinations_total' in line and 'export_test' in line for line in kaslite_metrics)
-            
-            assert training_loss_found, f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
-            assert germination_found, f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
-            
+            training_loss_found = any(
+                "kaslite_training_loss" in line and "export_test" in line and "phase_1" in line
+                for line in kaslite_metrics
+            )
+            germination_found = any(
+                "kaslite_germinations_total" in line and "export_test" in line
+                for line in kaslite_metrics
+            )
+
+            assert (
+                training_loss_found
+            ), f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
+            assert (
+                germination_found
+            ), f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
+
             # Look for kaslite metrics
-            kaslite_metrics = [line for line in output.split('\n') if 'kaslite_' in line and not line.startswith('#')]
+            kaslite_metrics = [
+                line
+                for line in output.split("\n")
+                if "kaslite_" in line and not line.startswith("#")
+            ]
             assert len(kaslite_metrics) > 0, "No kaslite metrics found in output"
-            
+
             # Validate format contains expected metrics (flexible pattern matching)
-            training_loss_found = any('kaslite_training_loss' in line and 'export_test' in line and 'phase_1' in line for line in kaslite_metrics)
-            germination_found = any('kaslite_germinations_total' in line and 'export_test' in line for line in kaslite_metrics)
-            
-            assert training_loss_found, f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
-            assert germination_found, f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
-            
+            training_loss_found = any(
+                "kaslite_training_loss" in line and "export_test" in line and "phase_1" in line
+                for line in kaslite_metrics
+            )
+            germination_found = any(
+                "kaslite_germinations_total" in line and "export_test" in line
+                for line in kaslite_metrics
+            )
+
+            assert (
+                training_loss_found
+            ), f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
+            assert (
+                germination_found
+            ), f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
+
             # Validate no malformed lines
             for line in kaslite_metrics:
                 if line.strip():
                     # Valid metric line should have format: metric_name{labels} value
-                    assert '{' in line and '}' in line and ' ' in line, f"Malformed metric line: {line}"
+                    assert (
+                        "{" in line and "}" in line and " " in line
+                    ), f"Malformed metric line: {line}"
 
     def test_label_cardinality_monitoring(self) -> None:
         """Test monitoring of label cardinality to prevent explosion."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="cardinality_test")
-            
+
             # Track unique label combinations
             label_combinations = set()
-            
+
             for i in range(100):
                 seed_id = f"seed_{i}"
                 monitor.update_seed_metrics(seed_id=seed_id, state="training", alpha=0.5)
                 label_combinations.add((seed_id, "cardinality_test"))
-            
+
             # Cardinality should be reasonable
             assert len(label_combinations) == 100
-            
+
             # Verify metrics are recorded correctly
             validator = MetricValidator()
             state_value = validator.get_gauge_value(
@@ -810,37 +869,37 @@ class TestMonitoringNetworkResilience:
             mock_server.side_effect = [
                 OSError("Network is unreachable"),
                 OSError("Address already in use"),
-                None  # Success on third try
+                None,  # Success on third try
             ]
-            
+
             monitor = PrometheusMonitor(experiment_id="network_test")
-            
+
             # Should handle failures gracefully
             monitor.start_metrics_server()
             assert not monitor.server_started
-            
+
             monitor.start_metrics_server()
             assert not monitor.server_started
-            
+
             monitor.start_metrics_server()
             assert monitor.server_started
 
     def test_prometheus_client_compatibility(self) -> None:
         """Test compatibility with expected Prometheus client features."""
         # Test that we're using expected API
-        assert hasattr(prometheus_client, 'Counter')
-        assert hasattr(prometheus_client, 'Gauge')
-        assert hasattr(prometheus_client, 'Histogram')
-        assert hasattr(prometheus_client, 'start_http_server')
-        
+        assert hasattr(prometheus_client, "Counter")
+        assert hasattr(prometheus_client, "Gauge")
+        assert hasattr(prometheus_client, "Histogram")
+        assert hasattr(prometheus_client, "start_http_server")
+
         # Test metric creation patterns work
-        test_counter = prometheus_client.Counter('test_compat_counter', 'Test counter', ['label'])
-        test_counter.labels(label='test').inc()
-        
+        test_counter = prometheus_client.Counter("test_compat_counter", "Test counter", ["label"])
+        test_counter.labels(label="test").inc()
+
         # Verify collection works
         samples = list(test_counter.collect())
         assert len(samples) > 0
-        
+
         # Clean up test metric
         try:
             prometheus_client.REGISTRY.unregister(test_counter)
@@ -855,73 +914,77 @@ class TestMonitoringPerformanceBaselines:
         """Test that performance doesn't regress below baseline."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="baseline_test")
-            
+
             # Warm up
             for _ in range(100):
                 monitor.update_training_metrics("phase_1", 0.1, 0.2, 0.8, 0.9)
-            
+
             # Benchmark core operations
             start_time = time.perf_counter()
             for _ in range(1000):
                 monitor.update_training_metrics("phase_1", 0.1, 0.2, 0.8, 0.9)
             end_time = time.perf_counter()
-            
+
             operations_per_second = 1000 / (end_time - start_time)
-            
+
             # Should handle at least 5,000 operations per second (conservative baseline)
-            assert operations_per_second > 5_000, f"Performance regression: {operations_per_second:.1f} ops/sec"
+            assert (
+                operations_per_second > 5_000
+            ), f"Performance regression: {operations_per_second:.1f} ops/sec"
 
     def test_concurrent_operations_performance(self) -> None:
         """Test performance under concurrent load."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="concurrent_perf_test")
-            
+
             def concurrent_worker(worker_id: int) -> None:
                 """Worker function for concurrent performance testing."""
                 for i in range(200):
                     monitor.update_training_metrics(f"phase_{worker_id}", 0.1, 0.2, 0.8, 0.9)
                     if i % 10 == 0:
                         monitor.record_germination()
-            
+
             # Test with multiple concurrent workers
             threads = [threading.Thread(target=concurrent_worker, args=(i,)) for i in range(5)]
-            
+
             start_time = time.perf_counter()
-            
+
             for thread in threads:
                 thread.start()
-                
+
             for thread in threads:
                 thread.join()
-                
+
             end_time = time.perf_counter()
             duration = end_time - start_time
-            
+
             # Should complete 1000 operations (5 threads × 200 ops) in reasonable time
             total_operations = 5 * 200
             operations_per_second = total_operations / duration
-            
+
             # Conservative baseline: should handle at least 2,000 concurrent ops/sec
-            assert operations_per_second > 2_000, f"Concurrent performance regression: {operations_per_second:.1f} ops/sec"
+            assert (
+                operations_per_second > 2_000
+            ), f"Concurrent performance regression: {operations_per_second:.1f} ops/sec"
             assert duration < 2.0, f"Concurrent operations took too long: {duration:.2f}s"
 
     def test_metric_timestamp_accuracy(self) -> None:
         """Test that metric timestamps are accurate and consistent."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="timestamp_test")
-            
+
             # Record metrics at known times
             monitor.update_training_metrics("phase_1", 0.5, 0.4, 0.85, 0.90)
             after_time = time.time()
-            
+
             # Verify experiment duration is within expected range
             monitor.update_experiment_duration()
-            
+
             validator = MetricValidator()
             duration = validator.get_gauge_value(
                 EXPERIMENT_DURATION, {"experiment_id": "timestamp_test"}
             )
-            
+
             # Duration should be reasonable (within measurement window)
             assert duration is not None
             expected_duration = after_time - monitor.experiment_start_time
