@@ -9,6 +9,7 @@ import argparse
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -89,7 +90,7 @@ class TestValidateSweepConfig:
     def test_empty_config(self):
         """Test validation with empty configuration."""
         valid_args = get_valid_argument_names()
-        config = {}
+        config: dict[str, Any] = {}
         # Should not raise an exception
         validate_sweep_config(config, valid_args)
 
@@ -208,7 +209,7 @@ class TestExpandGrid:
 
     def test_empty_config(self):
         """Test grid expansion with empty configuration."""
-        config = {}
+        config: dict[str, Any] = {}
         grid = expand_grid(config)
         assert grid == [{}]
 
