@@ -27,6 +27,17 @@ class SentinelSeed(nn.Module):
         drift_warn: float = 0.12,
     ):
         super().__init__()
+
+        # Parameter validation
+        if dim <= 0:
+            raise ValueError(f"Invalid dimension: {dim}. Must be positive.")
+        if blend_steps <= 0:
+            raise ValueError(f"Invalid blend_steps: {blend_steps}. Must be positive.")
+        if not (0.0 < progress_thresh < 1.0):
+            raise ValueError(
+                f"Invalid progress_thresh: {progress_thresh}. Must be between 0 and 1."
+            )
+
         self.seed_id = seed_id
         self.dim = dim
         self.blend_steps = blend_steps
@@ -54,6 +65,11 @@ class SentinelSeed(nn.Module):
 
     # ------------------------------------------------------------------
     def _set_state(self, new_state: str):
+        # Validate state
+        valid_states = {"dormant", "training", "blending", "active"}
+        if new_state not in valid_states:
+            raise ValueError(f"Invalid state: {new_state}. Must be one of {valid_states}")
+
         if self.state == new_state:
             return  # redundant transition guard
         old_state = self.state
