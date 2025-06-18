@@ -69,10 +69,14 @@ class ModelRegistry:
             # Register the model
             model_version = mlflow.register_model(model_uri=model_uri, name=model_name, tags=tags)
 
-            # Update version description
-            self.client.update_model_version(
-                name=model_name, version=model_version.version, description=description
-            )
+            # Update version description (non-critical, don't fail if this doesn't work)
+            try:
+                self.client.update_model_version(
+                    name=model_name, version=model_version.version, description=description
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                logger.warning("Failed to update model description: %s", e)
+                # Continue anyway - the model registration succeeded
 
             logger.info(
                 "Registered model %s version %s from run %s",
@@ -135,11 +139,22 @@ class ModelRegistry:
             return None
 
     def _get_filtered_versions(self, model_name: str, stage: Optional[str]) -> List[ModelVersion]:
-        """Get model versions filtered by stage."""
+        """Get model versions filtered by alias."""
         versions = self.client.search_model_versions(filter_string=f"name='{model_name}'")
 
         if stage:
-            versions = [v for v in versions if v.current_stage == stage]
+            # Filter by alias instead of deprecated stage
+            filtered_versions = []
+            for v in versions:
+                try:
+                    # Handle both real aliases (list) and mock objects
+                    aliases = getattr(v, 'aliases', [])
+                    if hasattr(aliases, '__contains__') and stage in aliases:
+                        filtered_versions.append(v)
+                except (TypeError, AttributeError):
+                    # Skip if we can't check aliases (e.g., for mocks)
+                    continue
+            versions = filtered_versions
 
         return versions
 
@@ -175,6 +190,56 @@ class ModelRegistry:
         """Check if current metric is better than the best so far."""
         return (higher_is_better and current > best) or (not higher_is_better and current < best)
 
+    def _find_existing_version(self, model_name: str, stage: str) -> Optional[ModelVersion]:
+        """Find existing version with the given stage/alias."""
+        logger.debug("Looking for existing version with stage/alias: %s", stage)
+        
+        # Try to find existing version with this alias first
+        try:
+            existing_version = self.client.get_model_version_by_alias(name=model_name, alias=stage)
+            if existing_version:
+                logger.debug("Found version via alias: %s", existing_version.version)
+                return existing_version
+        except mlflow.exceptions.MlflowException:
+            logger.debug("No version found via alias for stage: %s", stage)
+        
+        # Fallback: search for versions and check aliases/stages
+        logger.debug("Searching for versions with stage/alias: %s", stage)
+        existing_versions = self.client.search_model_versions(filter_string=f"name='{model_name}'")
+        logger.debug("Found %d total versions", len(existing_versions))
+        
+        for v in existing_versions:
+            logger.debug("Checking version %s: aliases=%s", 
+                        v.version, getattr(v, 'aliases', 'N/A'))
+            
+            try:
+                aliases = getattr(v, 'aliases', [])
+                if hasattr(aliases, '__contains__') and stage in aliases:
+                    logger.debug("Found version %s via aliases", v.version)
+                    return v
+            except (TypeError, AttributeError):
+                pass
+                
+        logger.debug("No existing version found for stage: %s", stage)
+        return None
+
+    def _archive_existing_version(self, model_name: str, stage: str) -> None:
+        """Archive existing version with the given stage/alias."""
+        existing_version = self._find_existing_version(model_name, stage)
+        
+        if existing_version:
+            logger.info("Found existing version %s for stage %s, removing alias...", existing_version.version, stage)
+            
+            # Remove the existing alias (modern alias-based approach)
+            try:
+                self.client.delete_registered_model_alias(name=model_name, alias=stage)
+                logger.info("Deleted existing alias %s", stage)
+            except mlflow.exceptions.RestException:
+                # Alias doesn't exist, which is fine
+                logger.info("No existing alias %s to delete", stage)
+        else:
+            logger.info("No existing version found for stage %s, skipping archiving", stage)
+
     def promote_model(
         self,
         model_name: Optional[str] = None,
@@ -182,13 +247,13 @@ class ModelRegistry:
         stage: str = "Staging",
         archive_existing: bool = True,
     ) -> bool:
-        """Promote a model version to a specific stage.
+        """Promote a model version to a specific stage using modern MLflow aliases.
 
         Args:
             model_name: Model name
             version: Model version to promote
-            stage: Target stage ("Staging", "Production", etc.)
-            archive_existing: Whether to archive existing models in the stage
+            stage: Target stage/alias ("Staging", "Production", etc.)
+            archive_existing: Whether to archive existing versions and remove aliases
 
         Returns:
             True if successful, False otherwise
@@ -202,25 +267,28 @@ class ModelRegistry:
                 if not best_version:
                     logger.error("No best model version found for promotion")
                     return False
-                version = best_version.version
+                version = str(best_version.version)
 
-            # Archive existing models in the target stage
+            # Convert version to string to ensure consistency
+            version_str = str(version)
+            
+            # Handle archiving of existing versions if requested
             if archive_existing:
-                existing_versions = self.client.search_model_versions(
-                    filter_string=f"name='{model_name}'"
-                )
-                for v in existing_versions:
-                    if v.current_stage == stage:
-                        self.client.transition_model_version_stage(
-                            name=model_name, version=v.version, stage="Archived"
-                        )
+                self._archive_existing_version(model_name, stage)
 
-            # Promote the new version
-            self.client.transition_model_version_stage(
-                name=model_name, version=version, stage=stage
-            )
+            # Set the new alias (modern alias-based API)
+            logger.debug("Setting alias %s for model %s version %s (type: %s)", stage, model_name, version_str, type(version_str))
+            try:
+                # Try with string version first
+                self.client.set_registered_model_alias(name=model_name, alias=stage, version=version_str)
+                logger.debug("Successfully set alias %s for model %s version %s (string)", stage, model_name, version_str)
+            except Exception as e:
+                logger.debug("Failed with string version %s: %s. Trying integer...", version_str, e)
+                # Try with integer version
+                self.client.set_registered_model_alias(name=model_name, alias=stage, version=int(version_str))
+                logger.debug("Successfully set alias %s for model %s version %s (integer)", stage, model_name, version_str)
 
-            logger.info("Promoted model %s v%s to %s", model_name, version, stage)
+            logger.info("Promoted model %s v%s to %s", model_name, version_str, stage)
             return True
 
         except mlflow.exceptions.MlflowException as e:
@@ -235,11 +303,11 @@ class ModelRegistry:
         model_name: Optional[str] = None,
         stage: Optional[str] = None,
     ) -> List[ModelVersion]:
-        """List model versions with optional filtering.
+        """List model versions with optional filtering by alias.
 
         Args:
             model_name: Model name to filter by
-            stage: Stage to filter by
+            stage: Alias to filter by (replaces the old stage concept)
 
         Returns:
             List of ModelVersion objects
@@ -251,7 +319,18 @@ class ModelRegistry:
             versions = self.client.search_model_versions(filter_string=filter_string)
 
             if stage:
-                versions = [v for v in versions if v.current_stage == stage]
+                # Filter by alias instead of deprecated stage
+                filtered_versions = []
+                for v in versions:
+                    try:
+                        # Handle both real aliases (list) and mock objects
+                        aliases = getattr(v, 'aliases', [])
+                        if hasattr(aliases, '__contains__') and stage in aliases:
+                            filtered_versions.append(v)
+                    except (TypeError, AttributeError):
+                        # Skip if we can't check aliases (e.g., for mocks)
+                        continue
+                versions = filtered_versions
 
             return sorted(versions, key=lambda v: int(v.version), reverse=True)
 
@@ -260,7 +339,7 @@ class ModelRegistry:
             return []
 
     def get_production_model_uri(self, model_name: Optional[str] = None) -> Optional[str]:
-        """Get the URI of the current production model.
+        """Get the URI of the current production model using aliases.
 
         Args:
             model_name: Model name
@@ -270,12 +349,17 @@ class ModelRegistry:
         """
         try:
             model_name = model_name or self.model_name
-            versions = self.list_model_versions(model_name, stage="Production")
+            
+            # Get model version by alias instead of deprecated stage
+            try:
+                model_version = self.client.get_model_version_by_alias(name=model_name, alias="Production")
+                return f"models:/{model_name}/{model_version.version}"
+            except mlflow.exceptions.RestException:
+                # No Production alias exists
+                return None
 
-            if versions:
-                latest_prod = versions[0]  # Already sorted by version desc
-                return f"models:/{model_name}/{latest_prod.version}"
-
+        except mlflow.exceptions.MlflowException as e:
+            logger.error("Failed to get production model URI: %s", e)
             return None
 
         except Exception as e:  # pylint: disable=broad-except

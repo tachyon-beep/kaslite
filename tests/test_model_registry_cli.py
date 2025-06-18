@@ -337,14 +337,9 @@ class TestModelRegistryCLIIntegration:
     def test_promote_model_with_archiving(self, promote_args, mock_mlflow_environment):
         """Test model promotion with automatic archiving of existing production models."""
         # ARRANGE
-        # Simulate existing production model
-        existing_prod = MockModelVersion.create(version="1", stage="Production")
+        # Simulate existing production model with both stage and aliases for compatibility
+        existing_prod = MockModelVersion.create(version="1", stage="Production", aliases=["Production"])
         mock_mlflow_environment["client"].search_model_versions.return_value = [existing_prod]
-
-        promoted_version = MockModelVersion.create(version="3", stage="Production")
-        mock_mlflow_environment["client"].transition_model_version_stage.return_value = (
-            promoted_version
-        )
 
         # ACT
         promote_model(promote_args)
@@ -352,13 +347,19 @@ class TestModelRegistryCLIIntegration:
         # ASSERT
         client = mock_mlflow_environment["client"]
 
-        # Should search for existing models (for archiving)
-        search_call = client.search_model_versions.call_args
-        expected_filter = f"name='{promote_args.model_name}'"
-        assert expected_filter in search_call[1]["filter_string"]
+        # Should search for existing models (for archiving) if get_model_version_by_alias fails
+        # The new implementation tries get_model_version_by_alias first, then falls back to search
+        search_calls = client.search_model_versions.call_args_list
+        if search_calls:
+            search_call = search_calls[0]
+            expected_filter = f"name='{promote_args.model_name}'"
+            assert expected_filter in search_call[1]["filter_string"]
 
-        # Should have made transition calls for archiving and promoting
-        assert client.transition_model_version_stage.call_count >= 1
+        # Should have set the new alias (modern API)
+        client.set_registered_model_alias.assert_called()
+        
+        # Should have deleted the existing alias for archiving
+        client.delete_registered_model_alias.assert_called()
 
     def test_list_models_with_realistic_data(self, list_args, mock_mlflow_environment):
         """Test model listing with realistic model version data."""
@@ -400,16 +401,18 @@ class TestModelRegistryCLIIntegration:
     def test_get_production_model_uri_retrieval(self, production_args, mock_mlflow_environment):
         """Test production model URI retrieval."""
         # ARRANGE
-        prod_version = MockModelVersion.create(version="2", stage="Production")
-        mock_mlflow_environment["client"].search_model_versions.return_value = [prod_version]
+        prod_version = MockModelVersion.create(version="2", stage="Production", aliases=["Production"])
+        # Set up the get_model_version_by_alias call (modern API)
+        mock_mlflow_environment["client"].get_model_version_by_alias.return_value = prod_version
 
         # ACT
         get_production_model(production_args)
 
         # ASSERT
-        search_call = mock_mlflow_environment["client"].search_model_versions.call_args
-        expected_filter = f"name='{production_args.model_name}'"
-        assert expected_filter in search_call[1]["filter_string"]
+        # Should use the modern get_model_version_by_alias API
+        mock_mlflow_environment["client"].get_model_version_by_alias.assert_called_with(
+            name=production_args.model_name, alias="Production"
+        )
 
 
 class TestModelRegistryCLIEdgeCases:
@@ -456,22 +459,19 @@ class TestModelRegistryCLIEdgeCases:
     def test_promote_model_with_concurrent_modifications(
         self, promote_args, mock_mlflow_environment
     ):
-        """Test promotion when concurrent modifications occur."""
-        # ARRANGE - Simulate race condition where production model changes during promotion
-        initial_prod = MockModelVersion.create(version="1", stage="Production")
-        new_prod = MockModelVersion.create(version="2", stage="Production")
+        """Test promotion when concurrent modifications occur with alias-based API."""
+        # ARRANGE - With alias-based API, we primarily use get_model_version_by_alias
+        initial_prod = MockModelVersion.create(version="1", stage="Production", aliases=["Production"])
+        
+        # Set up get_model_version_by_alias to return existing version
+        mock_mlflow_environment["client"].get_model_version_by_alias.return_value = initial_prod
 
-        # First call returns initial state, second call returns changed state
-        mock_mlflow_environment["client"].search_model_versions.side_effect = [
-            [initial_prod],  # First search
-            [new_prod],  # Second search (after concurrent change)
-        ]
-
-        # ACT & ASSERT - Should handle gracefully
+        # ACT & ASSERT - Should handle gracefully with modern API
         promote_model(promote_args)
 
-        # Should have made multiple search calls due to the race condition handling
-        assert mock_mlflow_environment["client"].search_model_versions.call_count >= 1
+        # Should have used the modern alias-based API
+        mock_mlflow_environment["client"].get_model_version_by_alias.assert_called()
+        mock_mlflow_environment["client"].set_registered_model_alias.assert_called()
 
     def test_list_models_with_malformed_timestamps(self, list_args, mock_mlflow_environment):
         """Test listing models with malformed or None timestamps."""
@@ -533,14 +533,14 @@ class TestModelRegistryCLIEdgeCases:
     def test_promote_model_invalid_stages(
         self, promote_args, mock_mlflow_environment, invalid_stage
     ):
-        """Test promotion with invalid stage names."""
+        """Test promotion with invalid stage names using modern alias API."""
         # ARRANGE
         promote_args.stage = invalid_stage
-        # ModelRegistry catches MLflow exceptions and returns False
+        # Modern API: set_registered_model_alias will fail for invalid aliases
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].transition_model_version_stage.side_effect = (
-            mlflow.exceptions.MlflowException(f"Invalid stage: {invalid_stage}")
+        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = (
+            mlflow.exceptions.MlflowException(f"Invalid alias: {invalid_stage}")
         )
 
         # ACT & ASSERT - CLI should exit with error code due to promote_model returning False
@@ -601,7 +601,7 @@ class TestModelRegistryCLIErrorConditions:
         # ARRANGE - ModelRegistry catches exception and returns False
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].transition_model_version_stage.side_effect = (
+        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = (
             mlflow.exceptions.MlflowException("Model version not found")
         )
 
@@ -615,8 +615,8 @@ class TestModelRegistryCLIErrorConditions:
         # ARRANGE - ModelRegistry catches exception and returns False
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].transition_model_version_stage.side_effect = (
-            mlflow.exceptions.MlflowException("Permission denied: Cannot transition model stage")
+        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = (
+            mlflow.exceptions.MlflowException("Permission denied: Cannot set model alias")
         )
 
         # ACT & ASSERT

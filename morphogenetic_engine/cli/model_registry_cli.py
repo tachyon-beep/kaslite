@@ -3,7 +3,7 @@
 CLI tool for managing morphogenetic model registry operations.
 
 This script provides command-line utilities for registering models,
-promoting them between stages, and managing the model lifecycle.
+promoting them between aliases, and managing the model lifecycle.
 """
 
 import argparse
@@ -57,7 +57,7 @@ def register_model(args):
 
 
 def promote_model(args):
-    """Promote a model to a specific stage."""
+    """Promote a model to a specific alias."""
     registry = ModelRegistry(args.model_name)
 
     success = registry.promote_model(
@@ -75,17 +75,19 @@ def list_models(args):
     """List model versions."""
     registry = ModelRegistry(args.model_name)
 
-    versions = registry.list_model_versions(stage=args.stage)
+    # Support both old 'stage' and new 'alias' argument names for backwards compatibility
+    stage_filter = getattr(args, 'alias', None) or getattr(args, 'stage', None)
+    versions = registry.list_model_versions(stage=stage_filter)
 
     if not versions:
         print(f"No model versions found for {args.model_name}")
-        if args.stage:
-            print(f"(filtered by stage: {args.stage})")
+        if stage_filter:
+            print(f"(filtered by alias: {stage_filter})")
         return
 
     print(f"\nModel versions for {args.model_name}:")
     print("-" * 80)
-    print(f"{'Version':<10} {'Stage':<12} {'Run ID':<32} {'Created':<20}")
+    print(f"{'Version':<10} {'Aliases':<20} {'Run ID':<32} {'Created':<20}")
     print("-" * 80)
 
     for version in versions:
@@ -97,8 +99,10 @@ def list_models(args):
         else:
             created_str = "Unknown"
 
+        aliases_str = _format_aliases(version)
+
         print(
-            f"{version.version:<10} {version.current_stage:<12} {version.run_id:<32} {created_str:<20}"
+            f"{version.version:<10} {aliases_str:<20} {version.run_id:<32} {created_str:<20}"
         )
 
 
@@ -106,13 +110,19 @@ def get_best_model(args):
     """Find the best model version based on a metric."""
     registry = ModelRegistry(args.model_name)
 
+    # Support both old 'stage' and new 'alias' argument names for backwards compatibility
+    stage_filter = getattr(args, 'alias', None) or getattr(args, 'stage', None)
+    
     best_version = registry.get_best_model_version(
-        stage=args.stage, metric_name=args.metric, higher_is_better=args.higher_is_better
+        stage=stage_filter, metric_name=args.metric, higher_is_better=args.higher_is_better
     )
 
     if best_version:
         print(f"✅ Best model version: {best_version.version}")
-        print(f"   Stage: {best_version.current_stage}")
+        
+        aliases_str = _format_aliases(best_version)
+        
+        print(f"   Aliases: {aliases_str}")
         print(f"   Run ID: {best_version.run_id}")
         print(f"   Metric: {args.metric}")
 
@@ -143,6 +153,22 @@ def get_production_model(args):
         print(f"❌ No production model found for {args.model_name}")
 
 
+def _format_aliases(version) -> str:
+    """Format model version aliases for display."""
+    # Get aliases (modern approach) or fallback to current_stage for backwards compatibility
+    aliases = getattr(version, 'aliases', [])
+    if not aliases and hasattr(version, 'current_stage') and version.current_stage != 'None':
+        aliases = [version.current_stage]
+    
+    # Ensure aliases is iterable
+    if isinstance(aliases, str):
+        aliases = [aliases]
+    elif not hasattr(aliases, '__iter__'):
+        aliases = []
+        
+    return ', '.join(aliases) if aliases else 'None'
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -168,28 +194,30 @@ def main():
     register_parser.add_argument("--tags", nargs="*", help="Tags in key=value format")
 
     # Promote command
-    promote_parser = subparsers.add_parser("promote", help="Promote model to stage")
+    promote_parser = subparsers.add_parser("promote", help="Promote model to alias")
     promote_parser.add_argument(
-        "stage", choices=["Staging", "Production", "Archived"], help="Target stage"
+        "stage", choices=["Staging", "Production", "Archived"], help="Target alias"
     )
     promote_parser.add_argument("--version", help="Model version (defaults to best)")
     promote_parser.add_argument(
         "--no-archive",
         dest="archive_existing",
         action="store_false",
-        help="Do not archive existing models in target stage",
+        help="Do not remove existing alias when promoting",
     )
 
     # List command
     list_parser = subparsers.add_parser("list", help="List model versions")
-    list_parser.add_argument("--stage", help="Filter by stage")
+    list_parser.add_argument("--alias", help="Filter by alias")
+    list_parser.add_argument("--stage", help="Filter by stage (deprecated, use --alias)")
 
     # Best command
     best_parser = subparsers.add_parser("best", help="Find best model by metric")
     best_parser.add_argument(
         "--metric", default="val_acc", help="Metric to optimize (default: val_acc)"
     )
-    best_parser.add_argument("--stage", help="Filter by stage")
+    best_parser.add_argument("--alias", help="Filter by alias")
+    best_parser.add_argument("--stage", help="Filter by stage (deprecated, use --alias)")
     best_parser.add_argument(
         "--lower-is-better",
         dest="higher_is_better",
