@@ -7,7 +7,7 @@ modern Python 3.12+ practices with proper isolation and comprehensive scenarios.
 
 Test Categories:
 - Unit tests: Isolated SeedManager behavior with mocking
-- Thread safety: Concurrent operation validation  
+- Thread safety: Concurrent operation validation
 - Edge cases: Boundary conditions and error scenarios
 - Integration: Logger and monitoring integration
 """
@@ -360,21 +360,19 @@ class TestSeedManagerEdgeCases:
                 # Register a seed
                 mock_seed = mock_seed_factory()
                 manager.register_seed(mock_seed, f"thread_{thread_id}_seed")
-                
+
                 # Record a transition
                 manager.record_transition(f"thread_{thread_id}_seed", "dormant", "training")
-                
+
                 # Record drift
                 manager.record_drift(f"thread_{thread_id}_seed", 0.1 * thread_id)
-                
+
                 results.append(f"thread_{thread_id}_success")
             except (RuntimeError, ValueError, AttributeError) as e:
                 results.append(f"thread_{thread_id}_error: {e}")
 
         # Run concurrent operations
-        threads = [
-            threading.Thread(target=concurrent_operations, args=(i,)) for i in range(10)
-        ]
+        threads = [threading.Thread(target=concurrent_operations, args=(i,)) for i in range(10)]
         for t in threads:
             t.start()
         for t in threads:
@@ -383,7 +381,7 @@ class TestSeedManagerEdgeCases:
         # All operations should succeed
         assert len(results) == 10
         assert all("success" in result for result in results)
-        
+
         # Verify all seeds were registered
         assert len(manager.seeds) == 10
         for i in range(10):
@@ -392,22 +390,22 @@ class TestSeedManagerEdgeCases:
     def test_memory_cleanup_on_reset(self, clean_seed_manager, mock_seed_factory):
         """Test that reset properly cleans up memory references."""
         manager = clean_seed_manager
-        
+
         # Create large buffer data
         for i in range(100):
             mock_seed = mock_seed_factory()
             manager.register_seed(mock_seed, f"seed_{i}")
-            
+
             # Add data to buffers
             for _ in range(50):
                 tensor = torch.randn(100, 100)  # Large tensor
                 manager.append_to_buffer(f"seed_{i}", tensor)
-        
+
         # Verify data exists
         assert len(manager.seeds) == 100
         total_buffer_items = sum(len(info["buffer"]) for info in manager.seeds.values())
         assert total_buffer_items > 0
-        
+
         # Reset and verify cleanup
         manager.reset()
         assert len(manager.seeds) == 0
@@ -420,15 +418,15 @@ class TestSeedManagerPerformance:
     def test_large_scale_seed_registration(self, clean_seed_manager, mock_seed_factory):
         """Test performance with large number of seeds."""
         manager = clean_seed_manager
-        
+
         # Register many seeds
         num_seeds = 1000
         for i in range(num_seeds):
             mock_seed = mock_seed_factory()
             manager.register_seed(mock_seed, f"performance_seed_{i}")
-        
+
         assert len(manager.seeds) == num_seeds
-        
+
         # Test lookup performance
         for i in range(0, num_seeds, 100):  # Sample every 100th seed
             seed_id = f"performance_seed_{i}"
@@ -440,17 +438,17 @@ class TestSeedManagerPerformance:
         manager = clean_seed_manager
         mock_seed = mock_seed_factory()
         manager.register_seed(mock_seed, "stress_seed")
-        
+
         # Add many tensors rapidly
         num_tensors = TestConstants.BUFFER_MAXLEN * 2
         for _ in range(num_tensors):
             tensor = torch.randn(10, 10)
             manager.append_to_buffer("stress_seed", tensor)
-        
+
         # Buffer should maintain size limit
         buffer = manager.seeds["stress_seed"]["buffer"]
         assert len(buffer) == TestConstants.BUFFER_MAXLEN
-        
+
         # Recent tensors should be preserved
         assert buffer[-1] is not None
         assert buffer[0] is not None

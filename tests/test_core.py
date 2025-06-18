@@ -7,7 +7,7 @@ testing, and edge case scenarios. Component-specific unit tests are in
 dedicated test files (test_seed_manager.py, test_kasmina_micro.py).
 
 Test Categories:
-- Integration tests: Component collaboration scenarios  
+- Integration tests: Component collaboration scenarios
 - Performance tests: Benchmarking and stress testing
 - Property-based tests: Hypothesis-driven boundary testing
 - Edge cases: Boundary conditions and stress scenarios
