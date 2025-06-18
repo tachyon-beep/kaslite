@@ -9,6 +9,7 @@ import argparse
 from pathlib import Path
 from typing import Optional
 
+import yaml
 from rich.console import Console
 
 from ..sweeps.config import load_sweep_config, load_sweep_configs
@@ -135,7 +136,16 @@ class SweepCLI:
         except FileNotFoundError as e:
             self.console.print(f"[bold red]Error: {e}[/bold red]")
             return 1
+        except PermissionError as e:
+            self.console.print(f"[bold red]Error: Permission denied accessing file: {e}[/bold red]")
+            return 1
+        except yaml.YAMLError as e:
+            self.console.print(f"[bold red]Error: Invalid YAML format: {e}[/bold red]")
+            return 1
         except (ValueError, RuntimeError, ImportError) as e:
+            self.console.print(f"[bold red]Error: {e}[/bold red]")
+            return 1
+        except Exception as e:
             self.console.print(f"[bold red]Unexpected error: {e}[/bold red]")
             return 1
 
@@ -174,7 +184,16 @@ class SweepCLI:
         except FileNotFoundError as e:
             self.console.print(f"[bold red]Error: {e}[/bold red]")
             return 1
+        except PermissionError as e:
+            self.console.print(f"[bold red]Error: Permission denied accessing file: {e}[/bold red]")
+            return 1
+        except yaml.YAMLError as e:
+            self.console.print(f"[bold red]Error: Invalid YAML format: {e}[/bold red]")
+            return 1
         except (ValueError, RuntimeError, ImportError) as e:
+            self.console.print(f"[bold red]Error: {e}[/bold red]")
+            return 1
+        except Exception as e:
             self.console.print(f"[bold red]Unexpected error: {e}[/bold red]")
             return 1
 
