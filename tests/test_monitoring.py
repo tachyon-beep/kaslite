@@ -725,8 +725,8 @@ class TestMonitoringMemoryManagement:
                     training_progress=0.6
                 )
             
-            # Clear registry
-            MetricValidator.clear_registry()
+            # Don't clear registry - let pytest fixtures handle cleanup
+            # MetricValidator.clear_registry()
             
             # Memory should not grow significantly
             final_memory = process.memory_info().rss
@@ -742,22 +742,22 @@ class TestMonitoringMemoryManagement:
             monitor.update_training_metrics("phase_1", 0.5, 0.4, 0.85, 0.90)
             monitor.record_germination()
             
-            # Ensure metrics are collected properly by checking the specific metrics
-            validator = MetricValidator()
-            
-            # Verify metrics were recorded first
-            train_loss = validator.get_gauge_value(TRAINING_LOSS, {"phase": "phase_1", "experiment_id": "export_test"})
-            germination_count = validator.get_counter_value(GERMINATIONS_TOTAL, {"experiment_id": "export_test"})
-            
-            # If metrics aren't being recorded, skip the export format test
-            if train_loss is None or germination_count is None:
-                pytest.skip("Metrics not being recorded properly - registry may be cleared")
-            
             # Generate metrics output
             output = generate_latest().decode('utf-8')
             
-            # Now we know metrics should be present
+            # The output should contain metrics
             assert len(output) > 0, "Prometheus output should not be empty"
+            
+            # Look for kaslite metrics
+            kaslite_metrics = [line for line in output.split('\n') if 'kaslite_' in line and not line.startswith('#')]
+            assert len(kaslite_metrics) > 0, "No kaslite metrics found in output"
+            
+            # Validate format contains expected metrics (flexible pattern matching)
+            training_loss_found = any('kaslite_training_loss' in line and 'export_test' in line and 'phase_1' in line for line in kaslite_metrics)
+            germination_found = any('kaslite_germinations_total' in line and 'export_test' in line for line in kaslite_metrics)
+            
+            assert training_loss_found, f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
+            assert germination_found, f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
             
             # Look for kaslite metrics
             kaslite_metrics = [line for line in output.split('\n') if 'kaslite_' in line and not line.startswith('#')]

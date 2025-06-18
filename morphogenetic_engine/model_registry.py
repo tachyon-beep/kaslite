@@ -59,7 +59,7 @@ class ModelRegistry:
             if not description:
                 val_acc = metrics.get("val_acc", 0.0)
                 train_loss = metrics.get("train_loss", 0.0)
-                seeds_activated = metrics.get("seeds_activated", False)
+                seeds_activated = bool(metrics.get("seeds_activated", False))
                 description = (
                     f"Morphogenetic model - Val Acc: {val_acc:.4f}, "
                     f"Train Loss: {train_loss:.4f}, "
@@ -225,6 +225,9 @@ class ModelRegistry:
 
         except mlflow.exceptions.MlflowException as e:
             logger.error("Failed to promote model: %s", e)
+            return False
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error("Unexpected error promoting model: %s", e)
             return False
 
     def list_model_versions(
