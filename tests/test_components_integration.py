@@ -1,4 +1,5 @@
 """Integration tests for cross-component interactions and system-level behavior."""
+
 # pylint: disable=redefined-outer-name  # pytest fixtures intentionally shadow outer scope
 
 import threading
@@ -21,7 +22,6 @@ THREAD_COUNT = 10  # Number of threads for concurrency tests
 STRESS_TEST_BATCH_SIZE = 16  # Batch size for stress testing
 
 
-
 def _get_seed_by_type(module: Any) -> SentinelSeed:
     """Type-safe helper to get SentinelSeed from module."""
     if isinstance(module, SentinelSeed):
@@ -33,7 +33,7 @@ def _activate_seed(net: BaseNet, index: int) -> SentinelSeed:
     """Helper to activate a specific seed in the network through natural flow."""
     seed = _get_seed_by_type(net.all_seeds[index])
     seed.initialize_child()
-    
+
     # Progress the seed through its natural lifecycle to active state
     # First train it to get to blending state
     dummy_input = torch.randn(4, seed.dim)
@@ -41,13 +41,13 @@ def _activate_seed(net: BaseNet, index: int) -> SentinelSeed:
         seed.train_child_step(dummy_input)
         if seed.state == "blending":
             break
-    
+
     # Now progress through blending to active
     for _ in range(seed.blend_steps + 5):
         seed.update_blending()
         if seed.state == "active":
             break
-    
+
     return seed
 
 
@@ -62,7 +62,7 @@ def _set_seed_to_blending_state(seed: SentinelSeed) -> None:
     """Helper to naturally progress a seed to blending state."""
     if seed.state != "training":
         seed.initialize_child()
-    
+
     # Train until it reaches blending threshold
     dummy_input = torch.randn(4, seed.dim)
     for _ in range(100):
@@ -75,10 +75,10 @@ def _activate_seed_by_reference(seed: SentinelSeed) -> None:
     """Helper to activate a seed through natural lifecycle progression."""
     if seed.state == "dormant":
         seed.initialize_child()
-    
+
     if seed.state == "training":
         _set_seed_to_blending_state(seed)
-    
+
     if seed.state == "blending":
         # Progress through blending to active
         for _ in range(seed.blend_steps + 5):
@@ -98,7 +98,7 @@ def _get_memory_usage_mb() -> float:
 def fresh_seed_manager(mocker) -> SeedManager:
     """Fixture for creating a fresh SeedManager instance for each test."""
     # Mock external dependencies for isolation
-    mocker.patch('morphogenetic_engine.core.ExperimentLogger')
+    mocker.patch("morphogenetic_engine.core.ExperimentLogger")
     # Reset singleton state before each test
     SeedManager.reset_singleton()
     return SeedManager()
@@ -108,11 +108,7 @@ def fresh_seed_manager(mocker) -> SeedManager:
 def basic_network(fresh_seed_manager: SeedManager) -> BaseNet:
     """Fixture providing a basic network for common test scenarios."""
     return BaseNet(
-        seed_manager=fresh_seed_manager,
-        input_dim=2,
-        num_layers=2,
-        seeds_per_layer=2,
-        hidden_dim=32
+        seed_manager=fresh_seed_manager, input_dim=2, num_layers=2, seeds_per_layer=2, hidden_dim=32
     )
 
 
@@ -124,7 +120,7 @@ def large_network(fresh_seed_manager: SeedManager) -> BaseNet:
         input_dim=10,
         num_layers=15,
         seeds_per_layer=4,
-        hidden_dim=64
+        hidden_dim=64,
     )
 
 
@@ -132,25 +128,23 @@ def large_network(fresh_seed_manager: SeedManager) -> BaseNet:
 def activated_network(fresh_seed_manager: SeedManager) -> tuple[BaseNet, list[SentinelSeed]]:
     """Fixture providing a network with some pre-activated seeds."""
     net = BaseNet(
-        seed_manager=fresh_seed_manager,
-        input_dim=5,
-        num_layers=3,
-        seeds_per_layer=2,
-        hidden_dim=32
+        seed_manager=fresh_seed_manager, input_dim=5, num_layers=3, seeds_per_layer=2, hidden_dim=32
     )
     activated_seeds = []
     # Activate first seed in each layer
     for i in range(0, len(net.all_seeds), 2):
         seed = _activate_seed(net, i)
         activated_seeds.append(seed)
-    
+
     return net, activated_seeds
 
 
 class TestSystemIntegration:
     """Test system-level integration between components."""
 
-    def test_seed_manager_integration(self, basic_network: BaseNet, fresh_seed_manager: SeedManager):
+    def test_seed_manager_integration(
+        self, basic_network: BaseNet, fresh_seed_manager: SeedManager
+    ):
         """Test integration between BaseNet and SeedManager for state tracking."""
         # Arrange
         net = basic_network
@@ -169,7 +163,9 @@ class TestSystemIntegration:
             assert "buffer" in seed_data
             assert "telemetry" in seed_data
 
-    def test_cross_component_gradient_flow(self, basic_network: BaseNet, fresh_seed_manager: SeedManager):
+    def test_cross_component_gradient_flow(
+        self, basic_network: BaseNet, fresh_seed_manager: SeedManager
+    ):
         """Test gradient flow across BaseNet, SentinelSeed, and SeedManager integration."""
         # Arrange
         net = basic_network
@@ -192,12 +188,20 @@ class TestSystemIntegration:
         # Check that active seed child parameters got gradients
         found_active_seed_grad = False
         for name, param in net.named_parameters():
-            if ("seed" in name and "child" in name and param.requires_grad 
-                and param.grad is not None 
-                and not torch.allclose(param.grad, torch.zeros_like(param.grad), atol=GRADIENT_TOLERANCE)):
+            if (
+                "seed" in name
+                and "child" in name
+                and param.requires_grad
+                and param.grad is not None
+                and not torch.allclose(
+                    param.grad, torch.zeros_like(param.grad), atol=GRADIENT_TOLERANCE
+                )
+            ):
                 found_active_seed_grad = True
                 break
-        assert found_active_seed_grad, "Active seed should have received gradients through integration"
+        assert (
+            found_active_seed_grad
+        ), "Active seed should have received gradients through integration"
 
     def test_multi_component_state_consistency(self, fresh_seed_manager: SeedManager):
         """Test that state remains consistent across BaseNet and SeedManager."""
@@ -231,10 +235,12 @@ class TestErrorHandlingIntegration:
         # Act & Assert - Test with extremely large values that might cause overflow
         x_large = torch.full((4, 2), 1e20)
         output = net(x_large)
-        
+
         # Verify output contains expected overflow/large values
-        assert torch.isfinite(output).all() or torch.isinf(output).any(), "Should handle large values"
-        
+        assert (
+            torch.isfinite(output).all() or torch.isinf(output).any()
+        ), "Should handle large values"
+
         # Test with invalid dimensions
         with pytest.raises((RuntimeError, ValueError)):
             x_wrong_dim = torch.randn(4, 5)  # Wrong input dimension
@@ -249,7 +255,7 @@ class TestErrorHandlingIntegration:
                 input_dim=1000,
                 num_layers=100,
                 seeds_per_layer=50,
-                hidden_dim=512
+                hidden_dim=512,
             )
             # Act & Assert - Should handle gracefully or fail with clear error
             x = torch.randn(100, 1000)
@@ -294,7 +300,7 @@ class TestThreadSafetyIntegration:
                 input_dim=2,
                 num_layers=2,
                 seeds_per_layer=1,
-                hidden_dim=16
+                hidden_dim=16,
             )
             networks.append(net)
 
@@ -306,16 +312,16 @@ class TestThreadSafetyIntegration:
             try:
                 net = networks[net_idx]
                 seed = _initialize_seed(net, 0)
-                
+
                 # Simulate concurrent operations
                 x = torch.randn(2, 2)
                 output = net(x)
-                
+
                 return {
                     "success": True,
                     "seed_id": seed.seed_id,
                     "output_shape": output.shape,
-                    "thread_id": threading.get_ident()
+                    "thread_id": threading.get_ident(),
                 }
             except (RuntimeError, ValueError, TypeError) as e:
                 return {"success": False, "error": str(e), "thread_id": threading.get_ident()}
@@ -333,18 +339,22 @@ class TestThreadSafetyIntegration:
         # Assert - All operations should succeed
         assert len(errors) == 0, f"Concurrent operations failed: {errors}"
         assert len(results) == THREAD_COUNT
-        
+
         # Verify all seeds were registered (only 2 because networks share the same manager)
         # Each network has 2 layers × 1 seed = 2 seeds, but they share the same manager
         # So we expect only the seeds from the first two networks to be tracked
-        assert len(seed_manager.seeds) >= 2, f"Expected at least 2 seeds, got {len(seed_manager.seeds)}"
+        assert (
+            len(seed_manager.seeds) >= 2
+        ), f"Expected at least 2 seeds, got {len(seed_manager.seeds)}"
 
     def test_concurrent_seed_state_changes(self, fresh_seed_manager: SeedManager):
         """Test concurrent seed state changes don't cause race conditions."""
         # Arrange
         seed_manager = fresh_seed_manager
-        net = BaseNet(seed_manager=seed_manager, input_dim=2, num_layers=1, seeds_per_layer=THREAD_COUNT)
-        
+        net = BaseNet(
+            seed_manager=seed_manager, input_dim=2, num_layers=1, seeds_per_layer=THREAD_COUNT
+        )
+
         # Initialize all seeds
         seeds = []
         for seed_idx in range(THREAD_COUNT):
@@ -371,11 +381,13 @@ class TestThreadSafetyIntegration:
 
         # Assert - No race conditions should occur
         assert all(results), "Concurrent state changes should not fail"
-        
+
         # Verify final state consistency
         for seed in seeds:
             manager_state = seed_manager.seeds[seed.seed_id]["state"]
-            assert seed.state == manager_state, f"State inconsistency: {seed.state} != {manager_state}"
+            assert (
+                seed.state == manager_state
+            ), f"State inconsistency: {seed.state} != {manager_state}"
 
 
 class TestResourceManagement:
@@ -386,68 +398,70 @@ class TestResourceManagement:
         # Arrange
         seed_manager = fresh_seed_manager
         initial_memory = _get_memory_usage_mb()
-        
+
         try:
             # Create network that will fail due to dimension mismatch
-            net = BaseNet(
-                seed_manager=seed_manager,
-                input_dim=2,
-                num_layers=2,
-                seeds_per_layer=2
-            )
-            
+            net = BaseNet(seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=2)
+
             # Force failure with wrong input dimensions
             with pytest.raises((RuntimeError, ValueError)):
                 invalid_input = torch.randn(4, 5)  # Wrong input dimension
                 _ = net(invalid_input)
-                
+
         except (RuntimeError, ValueError):
             # Expected failure due to dimension mismatch
             pass
-            
+
         # Assert - Memory should be cleaned up
         final_memory = _get_memory_usage_mb()
         memory_increase = final_memory - initial_memory
-        assert memory_increase < MEMORY_THRESHOLD_MB, f"Memory leak detected: {memory_increase}MB increase"
+        assert (
+            memory_increase < MEMORY_THRESHOLD_MB
+        ), f"Memory leak detected: {memory_increase}MB increase"
 
     def test_seed_optimizer_cleanup(self, fresh_seed_manager: SeedManager):
         """Test that seed optimizers are properly cleaned up."""
         # Arrange
         seed_manager = fresh_seed_manager
         net = BaseNet(seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=2)
-        
+
         # Initialize seeds to create optimizers
         active_seeds = [_initialize_seed(net, i) for i in range(len(net.all_seeds))]
-        
+
         # Verify optimizers exist
         for seed in active_seeds:
             assert seed.child_optim is not None
             assert len(list(seed.child_optim.param_groups)) > 0
-        
+
         # Act - Simulate cleanup
         self._cleanup_seed_optimizers(active_seeds)
-        
+
         # Assert - Verify cleanup
         for seed in active_seeds:
-            if hasattr(seed, 'child_optim') and seed.child_optim is not None:
+            if hasattr(seed, "child_optim") and seed.child_optim is not None:
                 for group in seed.child_optim.param_groups:
-                    assert len(group['params']) == 0
+                    assert len(group["params"]) == 0
 
     def _cleanup_seed_optimizers(self, seeds: list[SentinelSeed]) -> None:
         """Helper method to cleanup seed optimizers."""
         for seed in seeds:
-            if hasattr(seed, 'child_optim') and seed.child_optim is not None:
+            if hasattr(seed, "child_optim") and seed.child_optim is not None:
                 seed.child_optim.zero_grad()
                 for group in seed.child_optim.param_groups:
-                    group['params'].clear()
+                    group["params"].clear()
 
-    @pytest.mark.parametrize("invalid_config", [
-        {"num_layers": 0, "seeds_per_layer": 1},
-        {"num_layers": 1, "seeds_per_layer": 0},
-        {"hidden_dim": -1, "num_layers": 1, "seeds_per_layer": 1},
-        {"input_dim": 0, "num_layers": 1, "seeds_per_layer": 1},
-    ])
-    def test_invalid_configuration_integration(self, invalid_config: dict[str, Any], fresh_seed_manager: SeedManager):
+    @pytest.mark.parametrize(
+        "invalid_config",
+        [
+            {"num_layers": 0, "seeds_per_layer": 1},
+            {"num_layers": 1, "seeds_per_layer": 0},
+            {"hidden_dim": -1, "num_layers": 1, "seeds_per_layer": 1},
+            {"input_dim": 0, "num_layers": 1, "seeds_per_layer": 1},
+        ],
+    )
+    def test_invalid_configuration_integration(
+        self, invalid_config: dict[str, Any], fresh_seed_manager: SeedManager
+    ):
         """Test system behavior with invalid configurations."""
         # Arrange & Act & Assert
         config = {
@@ -456,9 +470,9 @@ class TestResourceManagement:
             "num_layers": 1,
             "seeds_per_layer": 1,
             "hidden_dim": 32,
-            **invalid_config
+            **invalid_config,
         }
-        
+
         with pytest.raises((ValueError, RuntimeError)):
             BaseNet(**config)
 
@@ -485,10 +499,12 @@ class TestPerformanceIntegration:
 
         # Performance assertions
         assert inference_time < 5.0, f"Inference too slow: {inference_time:.3f}s"
-        
+
         final_memory = _get_memory_usage_mb()
         memory_increase = final_memory - initial_memory
-        assert memory_increase < MEMORY_THRESHOLD_MB * 2, f"Excessive memory usage: {memory_increase}MB"
+        assert (
+            memory_increase < MEMORY_THRESHOLD_MB * 2
+        ), f"Excessive memory usage: {memory_increase}MB"
 
         # All seeds should be tracked
         for seed_module in net.all_seeds:
@@ -523,23 +539,26 @@ class TestPerformanceIntegration:
 
         # Performance metrics
         assert inference_time < 1.0, f"Inference with dormant seeds too slow: {inference_time:.3f}s"
-        
+
         final_memory = _get_memory_usage_mb()
         memory_increase = final_memory - initial_memory
-        assert memory_increase < MEMORY_THRESHOLD_MB, f"Dormant seeds using too much memory: {memory_increase}MB"
+        assert (
+            memory_increase < MEMORY_THRESHOLD_MB
+        ), f"Dormant seeds using too much memory: {memory_increase}MB"
 
         # Most seeds should remain dormant (not consuming training resources)
         active_seeds = sum(
-            1 for seed_module in net.all_seeds 
-            if _get_seed_by_type(seed_module).state != "dormant"
+            1 for seed_module in net.all_seeds if _get_seed_by_type(seed_module).state != "dormant"
         )
         total_seeds = len(net.all_seeds)
         dormant_ratio = (total_seeds - active_seeds) / total_seeds
-        assert dormant_ratio > (1 - DORMANT_SEED_THRESHOLD), (
-            f"Not enough dormant seeds for efficiency: {dormant_ratio:.2%} dormant"
-        )
+        assert dormant_ratio > (
+            1 - DORMANT_SEED_THRESHOLD
+        ), f"Not enough dormant seeds for efficiency: {dormant_ratio:.2%} dormant"
 
-    def test_batch_processing_efficiency(self, activated_network: tuple[BaseNet, list[SentinelSeed]]):
+    def test_batch_processing_efficiency(
+        self, activated_network: tuple[BaseNet, list[SentinelSeed]]
+    ):
         """Test batch processing performance with activated seeds."""
         # Arrange
         net, _ = activated_network
@@ -550,11 +569,11 @@ class TestPerformanceIntegration:
             # Act
             x = torch.randn(batch_size, 5)
             start_time = time.time()
-            
+
             # Run multiple iterations for better timing accuracy
             for _ in range(10):
                 output = net(x)
-                
+
             total_time = time.time() - start_time
             avg_time_per_batch = total_time / 10
             timing_results[batch_size] = avg_time_per_batch
@@ -565,7 +584,7 @@ class TestPerformanceIntegration:
         # Assert - Batch processing should scale reasonably
         time_per_sample_batch1 = timing_results[1] / 1
         time_per_sample_batch32 = timing_results[32] / 32
-        
+
         # Larger batches should be more efficient per sample
         assert time_per_sample_batch32 < time_per_sample_batch1, (
             f"Batch processing not scaling efficiently: "
@@ -581,23 +600,14 @@ class TestEdgeCasesIntegration:
         """Test behavior with minimal network configuration."""
         # Arrange & Act & Assert
         with pytest.raises(ValueError):
-            BaseNet(
-                seed_manager=fresh_seed_manager,
-                input_dim=1,
-                num_layers=0,
-                seeds_per_layer=1
-            )
+            BaseNet(seed_manager=fresh_seed_manager, input_dim=1, num_layers=0, seeds_per_layer=1)
 
     def test_single_seed_network(self, fresh_seed_manager: SeedManager):
         """Test network with exactly one seed."""
         # Arrange
         seed_manager = fresh_seed_manager
         net = BaseNet(
-            seed_manager=seed_manager,
-            input_dim=2,
-            num_layers=1,
-            seeds_per_layer=1,
-            hidden_dim=4
+            seed_manager=seed_manager, input_dim=2, num_layers=1, seeds_per_layer=1, hidden_dim=4
         )
 
         # Act
@@ -614,16 +624,12 @@ class TestEdgeCasesIntegration:
         """Test handling of extreme input dimensions."""
         # Arrange
         seed_manager = fresh_seed_manager
-        
+
         # Test very small dimensions
         net_small = BaseNet(
-            seed_manager=seed_manager,
-            input_dim=1,
-            num_layers=1,
-            seeds_per_layer=1,
-            hidden_dim=2
+            seed_manager=seed_manager, input_dim=1, num_layers=1, seeds_per_layer=1, hidden_dim=2
         )
-        
+
         # Act & Assert - Small dimensions
         x_small = torch.randn(1, 1)
         output_small = net_small(x_small)
@@ -637,15 +643,15 @@ class TestEdgeCasesIntegration:
 
         # Test with extreme values
         test_cases = [
-            torch.full((2, 2), 1e-8),    # Very small values
-            torch.full((2, 2), 1e8),     # Very large values
-            torch.zeros((2, 2)),         # Zero input
+            torch.full((2, 2), 1e-8),  # Very small values
+            torch.full((2, 2), 1e8),  # Very large values
+            torch.zeros((2, 2)),  # Zero input
         ]
 
         for x in test_cases:
             # Act
             output = net(x)
-            
+
             # Assert - Should not produce NaN or Inf
             assert torch.isfinite(output).all(), f"Non-finite output for input: {x[0, 0].item()}"
             assert output.shape == (2, 2)
@@ -658,7 +664,7 @@ class TestEdgeCasesIntegration:
 
         # Test with zero gradients
         x = torch.zeros((2, 2), requires_grad=True)
-        
+
         # Act
         output = net(x)
         loss = output.sum()
