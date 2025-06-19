@@ -90,8 +90,15 @@ class RichDashboard:
         )
         footer.update(progress_layout)
 
+        # --- Quit Message Footer ---
+        quit_footer = Layout(
+            Align.center(Text("Press 'q' to quit", style="dim")),
+            name="quit_footer",
+            size=1,
+        )
+
         # Root layout splits into title, main content, and the footer
-        self.layout.split(title_header, main_area, footer)
+        self.layout.split(title_header, main_area, footer, quit_footer)
 
         # 3 Columns in Main
         self.layout["main"].split_row(
@@ -309,6 +316,7 @@ class RichDashboard:
             "dormant": "⚪",
             "blending": "🟡",
             "germinated": "🌱",
+            "fossilized": "🦴",
         }
         empty_emoji = "⚫"
         layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
@@ -440,7 +448,7 @@ class RichDashboard:
     def _create_seed_legend_panel(self) -> Panel:
         """Generate the legend for the seed box."""
         legend_text = Text.from_markup(
-            "🟢 Active  🟡 Blending  🌱 Germinated  ⚪ Dormant  ⚫ Empty"
+            "🟢 Active  🟡 Blending  🌱 Germinated  ⚪ Dormant  🦴 Fossilized  ⚫ Empty"
         )
         return Panel(
             Align.center(legend_text),
