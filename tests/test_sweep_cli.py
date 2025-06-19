@@ -4,6 +4,7 @@ Comprehensive tests for the sweep CLI module.
 This test suite covers argument parsing, error handling, user experience,
 and integration testing with proper mocking strategies.
 """
+
 # pylint: disable=redefined-outer-name
 # pylint: disable=protected-access
 
@@ -140,9 +141,7 @@ class TestArgumentParsing:
         """Test Bayesian command argument parsing."""
         parser = cli.create_parser()
 
-        args = parser.parse_args(
-            ["bayesian", "--config", "test.yaml", "--trials", "100", "--timeout", "7200"]
-        )
+        args = parser.parse_args(["bayesian", "--config", "test.yaml", "--trials", "100", "--timeout", "7200"])
 
         assert args.command == "bayesian"
         assert args.trials == 100
@@ -167,9 +166,7 @@ class TestErrorHandling:
 
     def test_nonexistent_config_file_shows_helpful_error(self, cli, capsys):
         """Test handling of non-existent configuration files."""
-        args = argparse.Namespace(
-            config=Path("nonexistent.yaml"), parallel=1, timeout=3600, seed=None
-        )
+        args = argparse.Namespace(config=Path("nonexistent.yaml"), parallel=1, timeout=3600, seed=None)
 
         result = cli.run_grid_search(args)
 
@@ -195,9 +192,7 @@ class TestErrorHandling:
         readonly_config_file.chmod(0o000)
 
         try:
-            args = argparse.Namespace(
-                config=readonly_config_file, parallel=1, timeout=3600, seed=None
-            )
+            args = argparse.Namespace(config=readonly_config_file, parallel=1, timeout=3600, seed=None)
 
             result = cli.run_grid_search(args)
 
@@ -394,9 +389,7 @@ class TestUserExperience:
 
     def test_error_messages_are_user_friendly(self, cli, capsys):
         """Test that error messages are clear and helpful."""
-        args = argparse.Namespace(
-            config=Path("nonexistent_file.yaml"), parallel=1, timeout=3600, seed=None
-        )
+        args = argparse.Namespace(config=Path("nonexistent_file.yaml"), parallel=1, timeout=3600, seed=None)
 
         result = cli.run_grid_search(args)
 
@@ -428,9 +421,7 @@ class TestEdgeCases:
 
     def test_very_large_timeout_value(self, cli, tmp_config_file, mock_runner):
         """Test handling of very large timeout values."""
-        args = argparse.Namespace(
-            config=tmp_config_file, parallel=1, timeout=999999999, seed=None  # Very large timeout
-        )
+        args = argparse.Namespace(config=tmp_config_file, parallel=1, timeout=999999999, seed=None)  # Very large timeout
 
         result = cli.run_grid_search(args)
 

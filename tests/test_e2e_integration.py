@@ -158,9 +158,7 @@ class E2EIntegrationTest:
             log_files = all_logs
             print(f"Found {len(all_logs)} total log files in results")
 
-        assert (
-            len(log_files) > 0
-        ), f"No log files found in {results_dir}. Contents: {list(results_dir.iterdir())}"
+        assert len(log_files) > 0, f"No log files found in {results_dir}. Contents: {list(results_dir.iterdir())}"
 
         print("✅ Experiment execution successful")
 

@@ -89,9 +89,7 @@ class TestGerminationController:
     def test_step_loss_improvement_resets_plateau(self, clean_seed_manager) -> None:
         """Test step with improving loss resets plateau counter."""
         manager = clean_seed_manager
-        km = KasminaMicro(
-            manager, patience=TestConstants.PATIENCE_SHORT, delta=TestConstants.PLATEAU_THRESHOLD
-        )
+        km = KasminaMicro(manager, patience=TestConstants.PATIENCE_SHORT, delta=TestConstants.PLATEAU_THRESHOLD)
 
         # First step should not trigger germination
         result = km.step(1.0, TestConstants.LOW_ACCURACY)
@@ -128,9 +126,7 @@ class TestGerminationController:
             result = km.step(1.0 + TestConstants.SMALL_LOSS_DELTA, TestConstants.HIGH_ACCURACY)
             assert result is False  # No germination due to high accuracy
 
-    def test_germination_triggered_by_plateau_and_low_accuracy(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
+    def test_germination_triggered_by_plateau_and_low_accuracy(self, clean_seed_manager, mock_seed_factory) -> None:
         """Test germination triggering under correct conditions."""
         manager = clean_seed_manager
         mock_seed = mock_seed_factory(health_signal=TestConstants.LOW_HEALTH_SIGNAL)
@@ -158,17 +154,13 @@ class TestGerminationController:
             assert result3 is True  # Should trigger germination
             mock_germ.assert_called_once_with("test_seed")
 
-    def test_germination_resets_plateau_counter(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
+    def test_germination_resets_plateau_counter(self, clean_seed_manager, mock_seed_factory) -> None:
         """Test that successful germination resets plateau counter."""
         manager = clean_seed_manager
         mock_seed = mock_seed_factory(health_signal=TestConstants.LOW_HEALTH_SIGNAL)
         manager.register_seed(mock_seed, "test_seed")
 
-        km = KasminaMicro(
-            manager, patience=TestConstants.PATIENCE_SHORT, delta=TestConstants.PLATEAU_THRESHOLD
-        )
+        km = KasminaMicro(manager, patience=TestConstants.PATIENCE_SHORT, delta=TestConstants.PLATEAU_THRESHOLD)
 
         # Build up plateau
         km.step(1.0, TestConstants.LOW_ACCURACY)
@@ -259,9 +251,7 @@ class TestGerminationController:
             # Test that monitoring methods are called
             km.step(1.0, TestConstants.LOW_ACCURACY)
 
-            mock_monitor.update_kasmina_metrics.assert_called_once_with(
-                0, TestConstants.PATIENCE_SHORT
-            )
+            mock_monitor.update_kasmina_metrics.assert_called_once_with(0, TestConstants.PATIENCE_SHORT)
 
             # Test germination recording
             mock_seed = Mock()

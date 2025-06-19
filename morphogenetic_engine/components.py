@@ -34,9 +34,7 @@ class SentinelSeed(nn.Module):
         if blend_steps <= 0:
             raise ValueError(f"Invalid blend_steps: {blend_steps}. Must be positive.")
         if not (0.0 < progress_thresh < 1.0):
-            raise ValueError(
-                f"Invalid progress_thresh: {progress_thresh}. Must be between 0 and 1."
-            )
+            raise ValueError(f"Invalid progress_thresh: {progress_thresh}. Must be between 0 and 1.")
 
         self.seed_id = seed_id
         self.dim = dim

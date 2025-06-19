@@ -15,6 +15,7 @@ from morphogenetic_engine.training import clear_seed_report_cache, log_seed_upda
 
 # pylint: disable=protected-access
 
+
 # Test Fixtures
 @pytest.fixture
 def mock_args():
@@ -105,9 +106,7 @@ class TestTensorBoardIntegration:
                                 mock_writer.assert_called_once()
                                 assert tb_writer is not None
 
-    def test_log_seed_updates_with_tensorboard(
-        self, seed_manager_with_blending_seed, mock_tensorboard_components
-    ):
+    def test_log_seed_updates_with_tensorboard(self, seed_manager_with_blending_seed, mock_tensorboard_components):
         """Test that log_seed_updates correctly logs to TensorBoard."""
         # Arrange
         epoch = 5
@@ -122,9 +121,7 @@ class TestTensorBoardIntegration:
         # Verify logger was called
         logger.log_blending_progress.assert_called_with(epoch, "test_seed", 0.75)
 
-    def test_log_seed_updates_state_transition_tensorboard(
-        self, seed_manager_with_active_seed, mock_tensorboard_components
-    ):
+    def test_log_seed_updates_state_transition_tensorboard(self, seed_manager_with_active_seed, mock_tensorboard_components):
         """Test that state transitions are logged to TensorBoard as text."""
         # Arrange
         epoch = 10
@@ -135,9 +132,7 @@ class TestTensorBoardIntegration:
 
         # Assert
         # Verify TensorBoard text was logged for state transition
-        tb_writer.add_text.assert_called_with(
-            "seed/test_seed/events", "Epoch 10: unknown → active", epoch
-        )
+        tb_writer.add_text.assert_called_with("seed/test_seed/events", "Epoch 10: unknown → active", epoch)
         # Verify logger was called
         logger.log_seed_event.assert_called_with(epoch, "test_seed", "unknown", "active")
 
@@ -200,13 +195,9 @@ class TestTensorBoardIntegration:
                     with patch("morphogenetic_engine.runners.SummaryWriter") as mock_writer:
                         with patch("morphogenetic_engine.runners.initialize_monitoring"):
                             with patch("morphogenetic_engine.runners.mlflow"):
-                                mock_writer.side_effect = Exception(
-                                    "TensorBoard initialization failed"
-                                )
+                                mock_writer.side_effect = Exception("TensorBoard initialization failed")
 
-                                with pytest.raises(
-                                    Exception, match="TensorBoard initialization failed"
-                                ):
+                                with pytest.raises(Exception, match="TensorBoard initialization failed"):
                                     setup_experiment(mock_args)
 
     def test_log_seed_updates_tensorboard_write_failure(self, seed_manager_with_blending_seed):
@@ -260,12 +251,8 @@ class TestTensorBoardIntegration:
         tb_writer.add_scalar.assert_any_call("seed/blending_seed/alpha", 0.6, epoch)
 
         # Should have logged text for state transitions
-        tb_writer.add_text.assert_any_call(
-            "seed/active_seed/events", "Epoch 15: unknown → active", epoch
-        )
-        tb_writer.add_text.assert_any_call(
-            "seed/dormant_seed/events", "Epoch 15: unknown → dormant", epoch
-        )
+        tb_writer.add_text.assert_any_call("seed/active_seed/events", "Epoch 15: unknown → active", epoch)
+        tb_writer.add_text.assert_any_call("seed/dormant_seed/events", "Epoch 15: unknown → dormant", epoch)
 
     def test_log_seed_updates_empty_seed_manager(self):
         """Test logging with empty seed manager."""
@@ -434,13 +421,9 @@ class TestTensorBoardIntegration:
 
         # Assert
         # Should have logged state transitions
-        tb_writer.add_text.assert_any_call(
-            "seed/changing_seed/events", "Epoch 1: unknown → dormant", 1
-        )
+        tb_writer.add_text.assert_any_call("seed/changing_seed/events", "Epoch 1: unknown → dormant", 1)
         tb_writer.add_scalar.assert_any_call("seed/changing_seed/alpha", 0.3, 2)
-        tb_writer.add_text.assert_any_call(
-            "seed/changing_seed/events", "Epoch 3: blending:0.300 → active", 3
-        )
+        tb_writer.add_text.assert_any_call("seed/changing_seed/events", "Epoch 3: blending:0.300 → active", 3)
 
 
 if __name__ == "__main__":

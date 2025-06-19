@@ -43,9 +43,7 @@ def count_trainable_parameters(model: torch.nn.Module) -> int:
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def assert_model_output_shape(
-    model: torch.nn.Module, input_tensor: torch.Tensor, expected_output_shape: tuple[int, ...]
-) -> None:
+def assert_model_output_shape(model: torch.nn.Module, input_tensor: torch.Tensor, expected_output_shape: tuple[int, ...]) -> None:
     """Assert model produces output of expected shape.
 
     Args:

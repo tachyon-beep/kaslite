@@ -39,9 +39,10 @@ from tests.conftest import MockModelVersion, create_mock_run
 @pytest.fixture
 def mock_mlflow_environment():
     """Provide a properly configured MLflow environment for integration tests."""
-    with patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class, patch(
-        "morphogenetic_engine.model_registry.mlflow.register_model"
-    ) as mock_register:
+    with (
+        patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class,
+        patch("morphogenetic_engine.model_registry.mlflow.register_model") as mock_register,
+    ):
 
         mock_client = Mock()
         mock_client_class.return_value = mock_client
@@ -49,9 +50,7 @@ def mock_mlflow_environment():
         # Configure default successful behavior
         mock_register.return_value = MockModelVersion.create(version="1")
         mock_client.update_model_version.return_value = None
-        mock_client.transition_model_version_stage.return_value = MockModelVersion.create(
-            version="1", stage="Production"
-        )
+        mock_client.transition_model_version_stage.return_value = MockModelVersion.create(version="1", stage="Production")
         mock_client.search_model_versions.return_value = []
 
         # Configure get_run to return proper run data with real metrics
@@ -78,15 +77,11 @@ def mock_cli_mlflow_client():
 
 def assert_registry_called_with_correct_params(mock_method, expected_params: Dict[str, Any]):
     """Helper to validate ModelRegistry method calls with expected parameters."""
-    assert (
-        mock_method.called
-    ), f"Expected {getattr(mock_method, '_mock_name', 'mock method')} to be called"
+    assert mock_method.called, f"Expected {getattr(mock_method, '_mock_name', 'mock method')} to be called"
     call_kwargs = mock_method.call_args[1]
     for key, expected_value in expected_params.items():
         assert key in call_kwargs, f"Expected parameter '{key}' not found in call"
-        assert (
-            call_kwargs[key] == expected_value
-        ), f"Parameter '{key}': expected {expected_value}, got {call_kwargs[key]}"
+        assert call_kwargs[key] == expected_value, f"Parameter '{key}': expected {expected_value}, got {call_kwargs[key]}"
 
 
 def create_realistic_model_versions(count: int = 3) -> list:
@@ -110,11 +105,7 @@ def create_realistic_model_versions(count: int = 3) -> list:
 @st.composite
 def valid_tag_strategy(draw):
     """Generate valid tag strings for property-based testing."""
-    key = draw(
-        st.text(
-            min_size=1, max_size=20, alphabet=st.characters(min_codepoint=32, max_codepoint=126)
-        )
-    )
+    key = draw(st.text(min_size=1, max_size=20, alphabet=st.characters(min_codepoint=32, max_codepoint=126)))
     value = draw(st.text(max_size=50, alphabet=st.characters(min_codepoint=32, max_codepoint=126)))
     return f"{key}={value}"
 
@@ -126,9 +117,7 @@ def unicode_text_strategy(draw):
         st.text(
             min_size=1,
             max_size=100,
-            alphabet=st.characters(
-                categories=["Lu", "Ll", "Nd", "Pc", "Pd"]  # Letters, numbers, punctuation
-            ),
+            alphabet=st.characters(categories=["Lu", "Ll", "Nd", "Pc", "Pd"]),  # Letters, numbers, punctuation
         )
     )
 
@@ -238,9 +227,10 @@ class TestModelRegistryCLIUnit:
     def test_tag_parsing_property_based(self, tags):
         """Property-based test for tag parsing with various valid inputs."""
         # ARRANGE - Use context manager instead of fixture
-        with patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class, patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model"
-        ) as mock_register:
+        with (
+            patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class,
+            patch("morphogenetic_engine.model_registry.mlflow.register_model") as mock_register,
+        ):
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -278,9 +268,10 @@ class TestModelRegistryCLIUnit:
     def test_unicode_model_names(self, unicode_name):
         """Test handling of Unicode characters in model names."""
         # ARRANGE - Use context manager instead of fixture
-        with patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class, patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model"
-        ) as mock_register:
+        with (
+            patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class,
+            patch("morphogenetic_engine.model_registry.mlflow.register_model") as mock_register,
+        ):
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -338,9 +329,7 @@ class TestModelRegistryCLIIntegration:
         """Test model promotion with automatic archiving of existing production models."""
         # ARRANGE
         # Simulate existing production model with both stage and aliases for compatibility
-        existing_prod = MockModelVersion.create(
-            version="1", stage="Production", aliases=["Production"]
-        )
+        existing_prod = MockModelVersion.create(version="1", stage="Production", aliases=["Production"])
         mock_mlflow_environment["client"].search_model_versions.return_value = [existing_prod]
 
         # ACT
@@ -377,9 +366,7 @@ class TestModelRegistryCLIIntegration:
         expected_filter = f"name='{list_args.model_name}'"
         assert expected_filter in search_call[1]["filter_string"]
 
-    def test_get_best_model_with_metric_retrieval(
-        self, best_args, mock_mlflow_environment, mock_cli_mlflow_client
-    ):
+    def test_get_best_model_with_metric_retrieval(self, best_args, mock_mlflow_environment, mock_cli_mlflow_client):
         """Test best model retrieval with actual metric fetching."""
         # ARRANGE
         best_version = MockModelVersion.create(version="3", stage="Staging", run_id="run_789")
@@ -403,9 +390,7 @@ class TestModelRegistryCLIIntegration:
     def test_get_production_model_uri_retrieval(self, production_args, mock_mlflow_environment):
         """Test production model URI retrieval."""
         # ARRANGE
-        prod_version = MockModelVersion.create(
-            version="2", stage="Production", aliases=["Production"]
-        )
+        prod_version = MockModelVersion.create(version="2", stage="Production", aliases=["Production"])
         # Set up the get_model_version_by_alias call (modern API)
         mock_mlflow_environment["client"].get_model_version_by_alias.return_value = prod_version
 
@@ -422,9 +407,7 @@ class TestModelRegistryCLIIntegration:
 class TestModelRegistryCLIEdgeCases:
     """Test edge cases, boundary conditions, and error scenarios."""
 
-    def test_register_model_with_extremely_long_inputs(
-        self, register_args, mock_mlflow_environment
-    ):
+    def test_register_model_with_extremely_long_inputs(self, register_args, mock_mlflow_environment):
         """Test handling of extremely long model names and descriptions."""
         # ARRANGE
         long_name = "ModelName" * 100  # 900 characters
@@ -460,14 +443,10 @@ class TestModelRegistryCLIEdgeCases:
         assert tags["unicode"] == "αβγδε"
         assert tags["symbols"] == "!@#$%^&*()"
 
-    def test_promote_model_with_concurrent_modifications(
-        self, promote_args, mock_mlflow_environment
-    ):
+    def test_promote_model_with_concurrent_modifications(self, promote_args, mock_mlflow_environment):
         """Test promotion when concurrent modifications occur with alias-based API."""
         # ARRANGE - With alias-based API, we primarily use get_model_version_by_alias
-        initial_prod = MockModelVersion.create(
-            version="1", stage="Production", aliases=["Production"]
-        )
+        initial_prod = MockModelVersion.create(version="1", stage="Production", aliases=["Production"])
 
         # Set up get_model_version_by_alias to return existing version
         mock_mlflow_environment["client"].get_model_version_by_alias.return_value = initial_prod
@@ -493,9 +472,7 @@ class TestModelRegistryCLIEdgeCases:
         # ACT & ASSERT - Should not crash
         list_models(list_args)
 
-    def test_get_best_model_with_no_metrics(
-        self, best_args, mock_mlflow_environment, mock_cli_mlflow_client
-    ):
+    def test_get_best_model_with_no_metrics(self, best_args, mock_mlflow_environment, mock_cli_mlflow_client):
         """Test best model retrieval when runs have no metrics."""
         # ARRANGE
         best_version = MockModelVersion.create(version="1", run_id="run_no_metrics")
@@ -536,17 +513,15 @@ class TestModelRegistryCLIEdgeCases:
             "None",  # String "None"
         ],
     )
-    def test_promote_model_invalid_stages(
-        self, promote_args, mock_mlflow_environment, invalid_stage
-    ):
+    def test_promote_model_invalid_stages(self, promote_args, mock_mlflow_environment, invalid_stage):
         """Test promotion with invalid stage names using modern alias API."""
         # ARRANGE
         promote_args.stage = invalid_stage
         # Modern API: set_registered_model_alias will fail for invalid aliases
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = (
-            mlflow.exceptions.MlflowException(f"Invalid alias: {invalid_stage}")
+        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = mlflow.exceptions.MlflowException(
+            f"Invalid alias: {invalid_stage}"
         )
 
         # ACT & ASSERT - CLI should exit with error code due to promote_model returning False
@@ -570,9 +545,7 @@ class TestModelRegistryCLIEdgeCases:
 class TestModelRegistryCLIErrorConditions:
     """Test comprehensive error conditions and failure scenarios."""
 
-    def test_register_model_mlflow_service_unavailable(
-        self, register_args, mock_mlflow_environment
-    ):
+    def test_register_model_mlflow_service_unavailable(self, register_args, mock_mlflow_environment):
         """Test registration when MLflow service is unavailable."""
         # ARRANGE - ModelRegistry returns None on failure
         mock_mlflow_environment["register_model"].return_value = None
@@ -607,8 +580,8 @@ class TestModelRegistryCLIErrorConditions:
         # ARRANGE - ModelRegistry catches exception and returns False
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = (
-            mlflow.exceptions.MlflowException("Model version not found")
+        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = mlflow.exceptions.MlflowException(
+            "Model version not found"
         )
 
         # ACT & ASSERT - CLI checks return value and exits
@@ -621,8 +594,8 @@ class TestModelRegistryCLIErrorConditions:
         # ARRANGE - ModelRegistry catches exception and returns False
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = (
-            mlflow.exceptions.MlflowException("Permission denied: Cannot set model alias")
+        mock_mlflow_environment["client"].set_registered_model_alias.side_effect = mlflow.exceptions.MlflowException(
+            "Permission denied: Cannot set model alias"
         )
 
         # ACT & ASSERT
@@ -635,16 +608,14 @@ class TestModelRegistryCLIErrorConditions:
         # ARRANGE - ModelRegistry.list_model_versions returns [] on error
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].search_model_versions.side_effect = (
-            mlflow.exceptions.MlflowException("Connection timeout: MLflow server not responding")
+        mock_mlflow_environment["client"].search_model_versions.side_effect = mlflow.exceptions.MlflowException(
+            "Connection timeout: MLflow server not responding"
         )
 
         # ACT & ASSERT - list_models handles empty result gracefully
         list_models(list_args)  # Should not crash
 
-    def test_get_best_model_run_not_found(
-        self, best_args, mock_mlflow_environment, mock_cli_mlflow_client
-    ):
+    def test_get_best_model_run_not_found(self, best_args, mock_mlflow_environment, mock_cli_mlflow_client):
         """Test best model retrieval when associated run is missing."""
         # ARRANGE
         best_version = MockModelVersion.create(version="1", run_id="missing_run")
@@ -658,15 +629,13 @@ class TestModelRegistryCLIErrorConditions:
         # Should still attempt to get the run even if it fails
         mock_cli_mlflow_client.get_run.assert_called_with("missing_run")
 
-    def test_get_production_model_database_corruption(
-        self, production_args, mock_mlflow_environment
-    ):
+    def test_get_production_model_database_corruption(self, production_args, mock_mlflow_environment):
         """Test production model retrieval with database corruption."""
         # ARRANGE - ModelRegistry.get_production_model_uri returns None on error
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].search_model_versions.side_effect = (
-            mlflow.exceptions.MlflowException("Database corruption detected")
+        mock_mlflow_environment["client"].search_model_versions.side_effect = mlflow.exceptions.MlflowException(
+            "Database corruption detected"
         )
 
         # ACT & ASSERT - Should not crash, returns None and prints message
@@ -697,8 +666,8 @@ class TestModelRegistryCLIErrorConditions:
         # ARRANGE - ModelRegistry.list_model_versions returns [] on error
         import mlflow.exceptions
 
-        mock_mlflow_environment["client"].search_model_versions.side_effect = (
-            mlflow.exceptions.MlflowException("Cannot allocate memory for large result set")
+        mock_mlflow_environment["client"].search_model_versions.side_effect = mlflow.exceptions.MlflowException(
+            "Cannot allocate memory for large result set"
         )
 
         # ACT & ASSERT - Should not crash
@@ -733,9 +702,7 @@ class TestModelRegistryCLIArgumentValidation:
         full_argv = ["model_registry_cli.py"] + command
 
         with patch("sys.argv", full_argv):
-            with patch(
-                f"morphogenetic_engine.cli.model_registry_cli.{expected_function}"
-            ) as mock_func:
+            with patch(f"morphogenetic_engine.cli.model_registry_cli.{expected_function}") as mock_func:
                 # ACT
                 main()
 
@@ -775,9 +742,7 @@ class TestModelRegistryCLIArgumentValidation:
         ]
 
         with patch("sys.argv", argv):
-            with patch(
-                "morphogenetic_engine.cli.model_registry_cli.register_model"
-            ) as mock_register:
+            with patch("morphogenetic_engine.cli.model_registry_cli.register_model") as mock_register:
                 # ACT
                 main()
 
@@ -805,9 +770,7 @@ class TestModelRegistryCLIArgumentValidation:
     def test_best_command_with_lower_is_better_flag(self):
         """Test best command with --lower-is-better flag."""
         # ARRANGE
-        with patch(
-            "sys.argv", ["model_registry_cli.py", "best", "--metric", "loss", "--lower-is-better"]
-        ):
+        with patch("sys.argv", ["model_registry_cli.py", "best", "--metric", "loss", "--lower-is-better"]):
             with patch("morphogenetic_engine.cli.model_registry_cli.get_best_model") as mock_best:
                 # ACT
                 main()
@@ -830,9 +793,7 @@ class TestModelRegistryCLIArgumentValidation:
         """Test main function exception handling for various error types."""
         # ARRANGE
         with patch("sys.argv", ["model_registry_cli.py", "register", "test_run"]):
-            with patch(
-                "morphogenetic_engine.cli.model_registry_cli.register_model"
-            ) as mock_register:
+            with patch("morphogenetic_engine.cli.model_registry_cli.register_model") as mock_register:
                 mock_register.side_effect = exception_type
 
                 # ACT & ASSERT
@@ -844,9 +805,7 @@ class TestModelRegistryCLIArgumentValidation:
         """Test graceful handling of keyboard interrupts."""
         # ARRANGE
         with patch("sys.argv", ["model_registry_cli.py", "register", "test_run"]):
-            with patch(
-                "morphogenetic_engine.cli.model_registry_cli.register_model"
-            ) as mock_register:
+            with patch("morphogenetic_engine.cli.model_registry_cli.register_model") as mock_register:
                 mock_register.side_effect = KeyboardInterrupt()
 
                 # ACT & ASSERT
@@ -862,9 +821,10 @@ class TestModelRegistryCLIPropertyBased:
     def test_tag_parsing_robustness(self, tags):
         """Property-based test ensuring tag parsing never crashes."""
         # ARRANGE - Use context manager instead of fixture
-        with patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class, patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model"
-        ) as mock_register:
+        with (
+            patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class,
+            patch("morphogenetic_engine.model_registry.mlflow.register_model") as mock_register,
+        ):
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -895,9 +855,10 @@ class TestModelRegistryCLIPropertyBased:
     def test_metrics_boundary_values(self, metric_value):
         """Test metrics handling with various boundary values."""
         # ARRANGE - Use context manager instead of fixture
-        with patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class, patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model"
-        ) as mock_register:
+        with (
+            patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class,
+            patch("morphogenetic_engine.model_registry.mlflow.register_model") as mock_register,
+        ):
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -930,9 +891,10 @@ class TestModelRegistryCLIPropertyBased:
     def test_unicode_handling_in_descriptions(self, unicode_text):
         """Property-based test for Unicode handling in descriptions."""
         # ARRANGE - Use context manager instead of fixture
-        with patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class, patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model"
-        ) as mock_register:
+        with (
+            patch("morphogenetic_engine.model_registry.MlflowClient") as mock_client_class,
+            patch("morphogenetic_engine.model_registry.mlflow.register_model") as mock_register,
+        ):
 
             mock_client = Mock()
             mock_client_class.return_value = mock_client
@@ -1013,9 +975,7 @@ class TestModelRegistryCLIPerformance:
         # ASSERT - All operations should complete
         assert len(results) == 10
         success_count = len([r for r in results if r.startswith("success_")])
-        assert (
-            success_count == 10
-        ), f"Expected 10 successes, got {success_count}. Results: {results}"
+        assert success_count == 10, f"Expected 10 successes, got {success_count}. Results: {results}"
 
     def test_large_tag_list_performance(self, register_args, mock_mlflow_environment):
         """Test performance with large number of tags."""

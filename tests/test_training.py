@@ -180,16 +180,12 @@ def mock_seed_with_buffer(mocker):
 class TestTrainEpochUnit:
     """Unit tests for training epoch functionality with mocked dependencies."""
 
-    def test_train_epoch_basic_unit(
-        self, data_loader, mock_model, mock_optimizer, mock_criterion, mock_seed_manager, mocker
-    ):
+    def test_train_epoch_basic_unit(self, data_loader, mock_model, mock_optimizer, mock_criterion, mock_seed_manager, mocker):
         """Test basic training epoch functionality with mocked components."""
         # Mock handle_seed_training to isolate the core training logic
         mocker.patch("morphogenetic_engine.training.handle_seed_training")
 
-        avg_loss = train_epoch(
-            mock_model, data_loader, mock_optimizer, mock_criterion, mock_seed_manager
-        )
+        avg_loss = train_epoch(mock_model, data_loader, mock_optimizer, mock_criterion, mock_seed_manager)
 
         # Verify core training workflow
         assert mock_model.train.called
@@ -198,9 +194,7 @@ class TestTrainEpochUnit:
         assert isinstance(avg_loss, float)
         assert avg_loss > 0.0
 
-    def test_train_epoch_no_optimizer_unit(
-        self, data_loader, mock_model, mock_criterion, mock_seed_manager, mocker
-    ):
+    def test_train_epoch_no_optimizer_unit(self, data_loader, mock_model, mock_criterion, mock_seed_manager, mocker):
         """Test training epoch without optimizer (inference mode)."""
         mocker.patch("morphogenetic_engine.training.handle_seed_training")
 
@@ -247,9 +241,7 @@ class TestTrainEpochUnit:
         """Test training epoch with empty data loader."""
         mocker.patch("morphogenetic_engine.training.handle_seed_training")
 
-        avg_loss = train_epoch(
-            mock_model, empty_data_loader, mock_optimizer, mock_criterion, mock_seed_manager
-        )
+        avg_loss = train_epoch(mock_model, empty_data_loader, mock_optimizer, mock_criterion, mock_seed_manager)
 
         # With empty loader, should return 0.0 and not call optimizer
         assert np.isclose(avg_loss, 0.0)
@@ -392,9 +384,7 @@ class TestSeedTraining:
 class TestErrorHandling:
     """Tests for error scenarios and edge cases."""
 
-    def test_train_epoch_invalid_tensor_shapes(
-        self, mock_model, mock_optimizer, mock_criterion, mock_seed_manager, mocker
-    ):
+    def test_train_epoch_invalid_tensor_shapes(self, mock_model, mock_optimizer, mock_criterion, mock_seed_manager, mocker):
         """Test training epoch with mismatched tensor shapes."""
         # Create data with mismatched shapes
         X = torch.randn(4, 3)  # Wrong input dimension
@@ -434,9 +424,7 @@ class TestErrorHandling:
         with pytest.raises(RuntimeError, match="Expected.*cuda.*cpu"):
             train_epoch(model, data_loader, optimizer, criterion, mock_seed_manager)
 
-    def test_train_epoch_nan_loss(
-        self, data_loader, mock_model, mock_optimizer, mock_seed_manager, mocker
-    ):
+    def test_train_epoch_nan_loss(self, data_loader, mock_model, mock_optimizer, mock_seed_manager, mocker):
         """Test training epoch with NaN loss values."""
         # Mock criterion to return NaN
         mock_criterion = mocker.MagicMock()
@@ -446,15 +434,11 @@ class TestErrorHandling:
 
         mocker.patch("morphogenetic_engine.training.handle_seed_training")
 
-        avg_loss = train_epoch(
-            mock_model, data_loader, mock_optimizer, mock_criterion, mock_seed_manager
-        )
+        avg_loss = train_epoch(mock_model, data_loader, mock_optimizer, mock_criterion, mock_seed_manager)
 
         assert np.isnan(avg_loss)
 
-    def test_train_epoch_optimizer_failure(
-        self, data_loader, mock_model, mock_criterion, mock_seed_manager, mocker
-    ):
+    def test_train_epoch_optimizer_failure(self, data_loader, mock_model, mock_criterion, mock_seed_manager, mocker):
         """Test training epoch with optimizer step failure."""
         mock_optimizer = mocker.MagicMock(spec=torch.optim.Adam)
         mock_optimizer.zero_grad = mocker.MagicMock()

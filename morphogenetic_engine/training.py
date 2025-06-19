@@ -64,7 +64,7 @@ def train_epoch(
         if loss.requires_grad:
             loss.backward()
             optimiser.step()
-        
+
         total_loss += loss.item()
         handle_seed_training(seed_manager, device)
 
@@ -74,9 +74,7 @@ def train_epoch(
 
 
 @torch.no_grad()
-def evaluate(
-    model: nn.Module, loader: DataLoader, criterion: nn.Module, device: torch.device
-) -> tuple[float, float]:
+def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device: torch.device) -> tuple[float, float]:
     """Evaluate the model and return (loss, accuracy)."""
     model.eval()
     loss_accum, correct, total = 0.0, 0, 0
@@ -98,21 +96,22 @@ def log_seed_updates(epoch: int, seed_manager: "SeedManager", logger: "Experimen
         module = info["module"]
         current_state = module.state
         current_alpha = getattr(module, "alpha", 0.0)
-        
+
         # Create a unique tag for the current state to detect changes
         current_tag = f"{current_state}:{current_alpha:.3f}" if current_state == "blending" else current_state
         last_tag = _last_report[sid]
 
         if current_tag != last_tag:
             from_state = last_tag.split(":")[0] if ":" in last_tag else last_tag
-            if from_state == "": from_state = "init"
-            
+            if from_state == "":
+                from_state = "init"
+
             # Use the correct, specific logger methods
             if current_state == "blending":
                 logger.log_blending_progress(epoch, sid, current_alpha)
             else:
                 logger.log_seed_event(epoch, sid, from_state, current_state)
-            
+
             # Also log to TensorBoard
             if current_state == "blending":
                 tb_writer.add_scalar(f"seed/{sid}/alpha", current_alpha, epoch)
@@ -123,8 +122,14 @@ def log_seed_updates(epoch: int, seed_manager: "SeedManager", logger: "Experimen
 
 
 def execute_phase_1(
-    config: Dict[str, Any], model: nn.Module, loaders: tuple, loss_fn: nn.Module, 
-    seed_manager: "SeedManager", logger: "ExperimentLogger", tb_writer: "SummaryWriter", log_f
+    config: Dict[str, Any],
+    model: nn.Module,
+    loaders: tuple,
+    loss_fn: nn.Module,
+    seed_manager: "SeedManager",
+    logger: "ExperimentLogger",
+    tb_writer: "SummaryWriter",
+    log_f,
 ) -> float:
     """
     REFACTORED: Runs the initial warm-up phase, reporting all progress via the logger.
@@ -142,10 +147,10 @@ def execute_phase_1(
         best_acc = max(best_acc, val_acc)
 
         metrics = {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc, "best_acc": best_acc}
-        
+
         # <<< CHANGE: Single call to the logger handles all UI and file logging.
         logger.log_epoch_progress(epoch, metrics)
-        
+
         log_seed_updates(epoch, seed_manager, logger, tb_writer)
 
         # Log to other platforms
@@ -159,9 +164,16 @@ def execute_phase_1(
 
 
 def execute_phase_2(
-    config: Dict[str, Any], model: nn.Module, loaders: tuple, loss_fn: nn.Module,
-    seed_manager: "SeedManager", kasmina, logger: "ExperimentLogger", tb_writer: "SummaryWriter", 
-    log_f, initial_best_acc: float
+    config: Dict[str, Any],
+    model: nn.Module,
+    loaders: tuple,
+    loss_fn: nn.Module,
+    seed_manager: "SeedManager",
+    kasmina,
+    logger: "ExperimentLogger",
+    tb_writer: "SummaryWriter",
+    log_f,
+    initial_best_acc: float,
 ) -> Dict[str, Any]:
     """
     REFACTORED: Runs the adaptation phase, reporting all progress via the logger.
@@ -171,13 +183,13 @@ def execute_phase_2(
     device = config["device"]
     warm_up_epochs = config["warm_up_epochs"]
     adaptation_epochs = config["adaptation_epochs"]
-    
+
     model.freeze_backbone()
-    
+
     def rebuild_opt(m):
         params = [p for p in m.parameters() if p.requires_grad]
         return torch.optim.Adam(params, lr=config["lr"] * 0.1) if params else None
-        
+
     optimiser = rebuild_opt(model)
     best_acc, acc_pre, acc_post, t_recover, germ_epoch = initial_best_acc, None, None, None, None
     seeds_activated = False
@@ -194,17 +206,18 @@ def execute_phase_2(
             seeds_activated, germ_epoch, acc_pre = True, epoch, val_acc
             logger.log_germination(epoch, kasmina.get_last_germinated_seed_id())
             optimiser = rebuild_opt(model)
-        
+
         if germ_epoch:
-            if epoch == germ_epoch + 1: acc_post = val_acc
+            if epoch == germ_epoch + 1:
+                acc_post = val_acc
             if t_recover is None and acc_pre is not None and val_acc >= acc_pre:
                 t_recover = epoch - germ_epoch
 
         metrics = {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc, "best_acc": best_acc}
-        
+
         # <<< CHANGE: Single call to the logger handles all UI and file logging.
         logger.log_epoch_progress(epoch, metrics)
-        
+
         log_seed_updates(epoch, seed_manager, logger, tb_writer)
 
         # Log to other platforms
@@ -217,9 +230,12 @@ def execute_phase_2(
     return {
         "best_acc": best_acc,
         "accuracy_dip": (acc_pre - acc_post) if acc_pre is not None and acc_post is not None else None,
-        "recovery_time": t_recover, "seeds_activated": seeds_activated,
-        "acc_pre": acc_pre, "acc_post": acc_post,
+        "recovery_time": t_recover,
+        "seeds_activated": seeds_activated,
+        "acc_pre": acc_pre,
+        "acc_post": acc_post,
     }
+
 
 def clear_seed_report_cache():
     """Clear the global seed report cache. Useful for test isolation."""

@@ -175,9 +175,7 @@ def mock_model_registry(mocker) -> Any:
     version_2.version = "2"
 
     registry_mock.list_model_versions.return_value = [version_1, version_2]
-    registry_mock.get_production_model_uri.return_value = (
-        f"models://{TEST_MODEL_NAME}/{PRODUCTION_MODEL_VERSION}"
-    )
+    registry_mock.get_production_model_uri.return_value = f"models://{TEST_MODEL_NAME}/{PRODUCTION_MODEL_VERSION}"
 
     return registry_mock
 
@@ -294,9 +292,7 @@ def test_health_endpoint_with_model(sync_client: TestClient, mocker) -> None:
         sync_client: Synchronous test client fixture.
         mocker: pytest-mock fixture for patching.
     """
-    mocker.patch(
-        "morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION
-    )
+    mocker.patch("morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION)
 
     response = sync_client.get("/health")
 
@@ -362,12 +358,8 @@ def test_get_model_info_success(sync_client: TestClient, mocker, mock_model_regi
         mocker: pytest-mock fixture for patching.
         mock_model_registry: Mocked model registry fixture.
     """
-    mocker.patch(
-        "morphogenetic_engine.inference_server.ModelRegistry", return_value=mock_model_registry
-    )
-    mocker.patch(
-        "morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION
-    )
+    mocker.patch("morphogenetic_engine.inference_server.ModelRegistry", return_value=mock_model_registry)
+    mocker.patch("morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION)
 
     response = sync_client.get("/models")
 
@@ -400,9 +392,7 @@ def test_get_model_info_registry_failure(sync_client: TestClient, mocker) -> Non
 
 
 # Prediction Endpoint Tests - Real PyTorch Operations
-def test_predict_success_real_operations(
-    client_with_mock_model: TestClient, prediction_request_data: dict[str, Any]
-) -> None:
+def test_predict_success_real_operations(client_with_mock_model: TestClient, prediction_request_data: dict[str, Any]) -> None:
     """
     Test successful prediction using real PyTorch operations.
 
@@ -432,9 +422,7 @@ def test_predict_success_real_operations(
         assert abs(sum(prob_dist) - 1.0) < 1e-6
 
 
-def test_predict_single_point_expansion(
-    client_with_mock_model: TestClient, single_point_data: TestBatch
-) -> None:
+def test_predict_single_point_expansion(client_with_mock_model: TestClient, single_point_data: TestBatch) -> None:
     """
     Test that single data point predictions work with real tensor operations.
 
@@ -484,9 +472,7 @@ def test_predict_no_model_available(sync_client: TestClient, mocker) -> None:
     assert "No model available" in response.json()["detail"]
 
 
-def test_predict_invalid_input_data(
-    sync_client: TestClient, mocker, invalid_input_data: dict[str, Any]
-) -> None:
+def test_predict_invalid_input_data(sync_client: TestClient, mocker, invalid_input_data: dict[str, Any]) -> None:
     """Test prediction with invalid input data."""
     mocker.patch("morphogenetic_engine.inference_server.current_model_version", TEST_MODEL_VERSION)
 
@@ -504,9 +490,7 @@ def test_predict_model_not_in_cache(sync_client: TestClient, mocker) -> None:
     async def mock_load_fail(version: str) -> bool:  # pylint: disable=unused-argument
         return False
 
-    mocker.patch(
-        "morphogenetic_engine.inference_server.load_specific_model", side_effect=mock_load_fail
-    )
+    mocker.patch("morphogenetic_engine.inference_server.load_specific_model", side_effect=mock_load_fail)
 
     request_data = {"data": [[0.1, 0.2, 0.3]]}
     response = sync_client.post("/predict", json=request_data)
@@ -556,9 +540,7 @@ async def test_reload_model_success(
     """Test successful model reload."""
     mock_load = AsyncMock(return_value=True)
     mocker.patch("morphogenetic_engine.inference_server.load_production_model", mock_load)
-    mocker.patch(
-        "morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION
-    )
+    mocker.patch("morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION)
 
     response = sync_client.post("/reload-model")
 
@@ -594,14 +576,10 @@ async def test_reload_model_exception(sync_client: TestClient, mocker) -> None:
 
 # Model Loading Function Tests
 @pytest.mark.asyncio
-async def test_load_production_model_success(
-    mocker, mock_model_registry, mock_simple_model: torch.nn.Module
-) -> None:
+async def test_load_production_model_success(mocker, mock_model_registry, mock_simple_model: torch.nn.Module) -> None:
     """Test successful production model loading."""
     # Mock dependencies
-    mocker.patch(
-        "morphogenetic_engine.inference_server.ModelRegistry", return_value=mock_model_registry
-    )
+    mocker.patch("morphogenetic_engine.inference_server.ModelRegistry", return_value=mock_model_registry)
     mocker.patch("mlflow.pytorch.load_model", return_value=mock_simple_model)
 
     # Mock the global cache and version
@@ -619,9 +597,7 @@ async def test_load_production_model_success(
 async def test_load_production_model_no_model(mocker, mock_model_registry) -> None:
     """Test production model loading when no model exists."""
     mock_model_registry.get_production_model_uri.return_value = None
-    mocker.patch(
-        "morphogenetic_engine.inference_server.ModelRegistry", return_value=mock_model_registry
-    )
+    mocker.patch("morphogenetic_engine.inference_server.ModelRegistry", return_value=mock_model_registry)
 
     result = await load_production_model()
 
@@ -658,9 +634,7 @@ async def test_load_specific_model_success(mocker, mock_simple_model: torch.nn.M
 
 
 @pytest.mark.asyncio
-async def test_load_specific_model_already_cached(
-    mocker, mock_simple_model: torch.nn.Module
-) -> None:
+async def test_load_specific_model_already_cached(mocker, mock_simple_model: torch.nn.Module) -> None:
     """Test loading specific model that's already cached."""
     # Mock cache with model already present
     mock_cache = {TEST_MODEL_VERSION: mock_simple_model}
@@ -684,9 +658,7 @@ async def test_load_specific_model_exception(mocker) -> None:
 
 # Integration Tests
 @pytest.mark.asyncio
-async def test_end_to_end_prediction_workflow(
-    mocker, mock_simple_model: torch.nn.Module, sample_input_data: TestBatch
-) -> None:
+async def test_end_to_end_prediction_workflow(mocker, mock_simple_model: torch.nn.Module, sample_input_data: TestBatch) -> None:
     """
     Test complete end-to-end prediction workflow.
 
@@ -702,9 +674,7 @@ async def test_end_to_end_prediction_workflow(
     # Setup complete environment
     mock_cache = {PRODUCTION_MODEL_VERSION: mock_simple_model}
     mocker.patch("morphogenetic_engine.inference_server.model_cache", mock_cache)
-    mocker.patch(
-        "morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION
-    )
+    mocker.patch("morphogenetic_engine.inference_server.current_model_version", PRODUCTION_MODEL_VERSION)
 
     # Test complete workflow: health -> models -> predict
     transport = httpx.ASGITransport(app=app)
@@ -728,9 +698,7 @@ async def test_end_to_end_prediction_workflow(
 
 
 @pytest.mark.asyncio
-async def test_concurrent_predictions(
-    mocker, mock_simple_model: torch.nn.Module, sample_input_data: TestBatch
-) -> None:
+async def test_concurrent_predictions(mocker, mock_simple_model: torch.nn.Module, sample_input_data: TestBatch) -> None:
     """
     Test handling of concurrent prediction requests.
 
@@ -766,9 +734,7 @@ async def test_concurrent_predictions(
 
 # Performance and Memory Tests
 @pytest.mark.asyncio
-async def test_prediction_performance_benchmark(
-    client_with_mock_model: TestClient, sample_input_data: TestBatch
-) -> None:
+async def test_prediction_performance_benchmark(client_with_mock_model: TestClient, sample_input_data: TestBatch) -> None:
     """Basic performance benchmark for prediction endpoint."""
     request_data = {"data": sample_input_data}
 
@@ -821,9 +787,7 @@ def test_model_cache_management(mocker, mock_simple_model: torch.nn.Module) -> N
         ("/health", "POST", 405),  # Wrong method
     ],
 )
-def test_error_boundaries(
-    sync_client: TestClient, endpoint: str, method: str, expected_status: int
-) -> None:
+def test_error_boundaries(sync_client: TestClient, endpoint: str, method: str, expected_status: int) -> None:
     """Test error handling for various invalid requests."""
     response = getattr(sync_client, method.lower())(endpoint)
     assert response.status_code == expected_status
@@ -834,9 +798,7 @@ def test_malformed_json_request(sync_client: TestClient, mocker) -> None:
     mocker.patch("morphogenetic_engine.inference_server.current_model_version", TEST_MODEL_VERSION)
 
     # Send malformed JSON
-    response = sync_client.post(
-        "/predict", content="{ invalid json }", headers={"Content-Type": "application/json"}
-    )
+    response = sync_client.post("/predict", content="{ invalid json }", headers={"Content-Type": "application/json"})
 
     assert response.status_code == 422
 
@@ -866,20 +828,11 @@ def validate_response_structure(response_data: dict[str, Any], response_type: st
     # If mypy complains, ensure tool.mypy.python_version = "3.12" in pyproject.toml
     match response_type:
         case "health":
-            return all(
-                key in response_data
-                for key in ["status", "model_loaded", "model_version", "timestamp"]
-            )
+            return all(key in response_data for key in ["status", "model_loaded", "model_version", "timestamp"])
         case "prediction":
-            return all(
-                key in response_data
-                for key in ["predictions", "probabilities", "model_version", "inference_time_ms"]
-            )
+            return all(key in response_data for key in ["predictions", "probabilities", "model_version", "inference_time_ms"])
         case "models":
-            return all(
-                key in response_data
-                for key in ["current_version", "available_versions", "model_name"]
-            )
+            return all(key in response_data for key in ["current_version", "available_versions", "model_name"])
         case _:
             return False
 

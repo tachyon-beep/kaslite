@@ -16,6 +16,7 @@ from sklearn.datasets import make_blobs, make_moons
 try:
     from torchvision.datasets import CIFAR10
     from torchvision.transforms import ToTensor
+
     CIFAR10_AVAILABLE = True
 except ImportError:
     CIFAR10_AVAILABLE = False
@@ -36,9 +37,7 @@ def _validate_common_params(n_samples: int, input_dim: int, noise: float = None)
         raise ValueError(f"noise must be a non-negative number, got {noise}")
 
 
-def create_spirals(
-    n_samples: int = 2000, noise: float = 0.25, rotations: int = 4, input_dim: int = 2
-):
+def create_spirals(n_samples: int = 2000, noise: float = 0.25, rotations: int = 4, input_dim: int = 2):
     """Generate the classic two-spirals toy dataset, optionally padded to input_dim."""
     # Validate parameters
     _validate_common_params(n_samples, input_dim, noise)
@@ -187,14 +186,10 @@ def create_clusters(
         elif input_dim == 3:
             # Use spherical coordinates for 3D
             phi = np.pi * i / cluster_count  # elevation angle
-            center = cluster_sep * np.array(
-                [np.cos(angle) * np.sin(phi), np.sin(angle) * np.sin(phi), np.cos(phi)]
-            )
+            center = cluster_sep * np.array([np.cos(angle) * np.sin(phi), np.sin(angle) * np.sin(phi), np.cos(phi)])
         else:
             # For higher dimensions, randomize the remaining coordinates
-            center = cluster_sep * np.concatenate(
-                [[np.cos(angle), np.sin(angle)], rng.standard_normal(input_dim - 2)]
-            )
+            center = cluster_sep * np.concatenate([[np.cos(angle), np.sin(angle)], rng.standard_normal(input_dim - 2)])
         centers.append(center)
 
     # Generate data using make_blobs
@@ -259,9 +254,7 @@ def create_spheres(
     try:
         radii = [float(r.strip()) for r in sphere_radii.split(",")]
     except ValueError as e:
-        raise ValueError(
-            f"sphere_radii must be comma-separated numbers, got '{sphere_radii}'"
-        ) from e
+        raise ValueError(f"sphere_radii must be comma-separated numbers, got '{sphere_radii}'") from e
 
     if len(radii) != sphere_count:
         raise ValueError(f"Number of radii ({len(radii)}) must match sphere_count ({sphere_count})")
@@ -347,41 +340,38 @@ def load_cifar10(data_dir: str = "./data", download: bool = True) -> tuple[np.nd
 
 def create_cifar10(data_dir: str = "data/cifar", train: bool = True):
     """Generate CIFAR-10 dataset with flattened images.
-    
+
     Args:
         data_dir: Directory to store/load CIFAR-10 data
         train: Whether to load training set (True) or test set (False)
-        
+
     Returns:
         tuple: (X, y) where X is flattened images (N, 3072) and y is labels (N,)
-        
+
     Raises:
         ImportError: If torchvision is not available
         ValueError: If data loading fails
     """
     if not CIFAR10_AVAILABLE:
-        raise ImportError(
-            "torchvision is required for CIFAR-10 support. "
-            "Install with: pip install torchvision"
-        )
-    
+        raise ImportError("torchvision is required for CIFAR-10 support. " "Install with: pip install torchvision")
+
     try:
         # Load CIFAR-10 dataset
         dataset = CIFAR10(root=data_dir, train=train, download=True, transform=ToTensor())
-        
+
         # Extract data and labels
         # dataset.data is (N, 32, 32, 3) uint8 array
         # dataset.targets is list of labels
         X = dataset.data.astype(np.float32)
         y = np.array(dataset.targets, dtype=np.int64)
-        
+
         # Flatten images: (N, 32, 32, 3) -> (N, 3072)
         X = X.reshape(len(X), -1)
-        
+
         # Normalize pixel values to [0, 1] range
         X = X / 255.0
-        
+
         return X, y
-        
+
     except Exception as e:
         raise ValueError(f"Failed to load CIFAR-10 dataset: {e}") from e

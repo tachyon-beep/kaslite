@@ -37,12 +37,8 @@ def create_experiment_parser() -> argparse.ArgumentParser:
         default=30,
         help="Number of blend steps for morphogenetic adaptation",
     )
-    parser.add_argument(
-        "--shadow_lr", type=float, default=1e-3, help="Learning rate for shadow networks"
-    )
-    parser.add_argument(
-        "--progress_thresh", type=float, default=0.6, help="Progress threshold for seed activation"
-    )
+    parser.add_argument("--shadow_lr", type=float, default=1e-3, help="Learning rate for shadow networks")
+    parser.add_argument("--progress_thresh", type=float, default=0.6, help="Progress threshold for seed activation")
     parser.add_argument(
         "--drift_warn",
         type=float,
@@ -70,9 +66,7 @@ def create_experiment_parser() -> argparse.ArgumentParser:
         default=3,
         help="Embedding/dimension for clusters and spheres",
     )
-    parser.add_argument(
-        "--train_frac", type=float, default=0.8, help="Train/validation split fraction"
-    )
+    parser.add_argument("--train_frac", type=float, default=0.8, help="Train/validation split fraction")
     parser.add_argument("--batch_size", type=int, default=64, help="DataLoader batch size")
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu", help='"cpu" or "cuda"')
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
@@ -104,9 +98,7 @@ def create_experiment_parser() -> argparse.ArgumentParser:
         help="Number of concentric spherical shells",
     )
     parser.add_argument("--sphere_size", type=int, default=500, help="Points per sphere shell")
-    parser.add_argument(
-        "--sphere_radii", type=parse_float_list, default="1,2", help="Comma-separated list of radii"
-    )
+    parser.add_argument("--sphere_radii", type=parse_float_list, default="1,2", help="Comma-separated list of radii")
     parser.add_argument(
         "--sphere_noise",
         type=float,

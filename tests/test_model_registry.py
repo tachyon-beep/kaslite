@@ -70,9 +70,7 @@ def mock_mlflow_client(mocker):
 def sample_model_versions():
     """Create reusable test data for model versions."""
     versions = []
-    for i, (aliases, run_id) in enumerate(
-        [([], "run_1"), (["Staging"], "run_2"), (["Production"], "run_3")], 1
-    ):
+    for i, (aliases, run_id) in enumerate([([], "run_1"), (["Staging"], "run_2"), (["Production"], "run_3")], 1):
         version = Mock()
         version.version = str(i)
         version.run_id = run_id
@@ -119,17 +117,13 @@ class TestModelRegistryUnit:
             ("special-run-789", "runs:/special-run-789/model"),
         ],
     )
-    def test_model_uri_formatting(
-        self, model_registry: ModelRegistry, run_id: str, expected_uri: str
-    ) -> None:
+    def test_model_uri_formatting(self, model_registry: ModelRegistry, run_id: str, expected_uri: str) -> None:
         """Test that model URIs are formatted correctly."""
         # Setup mock
         mock_version = Mock()
         mock_version.version = "1"
 
-        with patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version
-        ) as mock_register:
+        with patch("morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version) as mock_register:
 
             model_registry.register_best_model(run_id=run_id, metrics=TestConstants.SAMPLE_METRICS)
 
@@ -138,17 +132,13 @@ class TestModelRegistryUnit:
             call_args = mock_register.call_args[1]
             assert call_args["model_uri"] == expected_uri, f"Model URI should be '{expected_uri}'"
 
-    def test_register_best_model_success(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_register_best_model_success(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test successful model registration with proper mock setup."""
         # Setup mocks
         mock_version = Mock()
         mock_version.version = "1"
 
-        with patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version
-        ) as mock_register:
+        with patch("morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version) as mock_register:
 
             # Test registration
             result = model_registry.register_best_model(
@@ -171,16 +161,12 @@ class TestModelRegistryUnit:
                 description="Test model description",
             )
 
-    def test_register_best_model_auto_description(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_register_best_model_auto_description(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test model registration with auto-generated description."""
         mock_version = Mock()
         mock_version.version = "2"
 
-        with patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version
-        ):
+        with patch("morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version):
 
             # Test registration without explicit description
             result = model_registry.register_best_model(
@@ -203,9 +189,7 @@ class TestModelRegistryUnit:
             side_effect=Exception("Registration failed"),
         ):
 
-            result = model_registry.register_best_model(
-                run_id="test_run_fail", metrics=TestConstants.SAMPLE_METRICS
-            )
+            result = model_registry.register_best_model(run_id="test_run_fail", metrics=TestConstants.SAMPLE_METRICS)
 
             assert result is None, "Should return None on registration failure"
 
@@ -256,9 +240,7 @@ class TestModelRegistryUnit:
         mock_mlflow_client.get_run.side_effect = mock_runs
 
         # Test best model selection
-        result = model_registry.get_best_model_version(
-            metric_name=metric_name, higher_is_better=higher_is_better
-        )
+        result = model_registry.get_best_model_version(metric_name=metric_name, higher_is_better=higher_is_better)
 
         expected_version = sample_model_versions[expected_version_idx]
         assert result == expected_version, (
@@ -284,9 +266,7 @@ class TestModelRegistryUnit:
         production_version = sample_model_versions[2]  # Third version is Production
         assert result == production_version, "Should return the Production model version"
 
-    def test_get_best_model_version_no_versions(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_get_best_model_version_no_versions(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test behavior when no model versions exist."""
         mock_mlflow_client.search_model_versions.return_value = []
 
@@ -321,9 +301,7 @@ class TestModelRegistryUnit:
             mock_mlflow_client.search_model_versions.return_value = []
 
         # Test promotion
-        result = model_registry.promote_model(
-            version="3", stage="Production", archive_existing=archive_existing
-        )
+        result = model_registry.promote_model(version="3", stage="Production", archive_existing=archive_existing)
 
         assert result is True, "Promotion should succeed"
 
@@ -348,9 +326,7 @@ class TestModelRegistryUnit:
         else:
             mock_mlflow_client.delete_registered_model_alias.assert_not_called()
 
-    def test_promote_model_auto_selection(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_promote_model_auto_selection(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test promoting best model when version not specified."""
         mock_mlflow_client.search_model_versions.return_value = []
 
@@ -358,9 +334,7 @@ class TestModelRegistryUnit:
         mock_best_version = Mock()
         mock_best_version.version = "4"
 
-        with patch.object(
-            model_registry, "get_best_model_version", return_value=mock_best_version
-        ) as mock_get_best:
+        with patch.object(model_registry, "get_best_model_version", return_value=mock_best_version) as mock_get_best:
 
             result = model_registry.promote_model(stage="Staging")
 
@@ -370,9 +344,7 @@ class TestModelRegistryUnit:
                 name=TestConstants.DEFAULT_MODEL_NAME, alias="Staging", version="4"
             )
 
-    def test_promote_model_failure_handling(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_promote_model_failure_handling(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test model promotion failure handling."""
         mock_mlflow_client.set_registered_model_alias.side_effect = Exception("Promotion failed")
 
@@ -380,9 +352,7 @@ class TestModelRegistryUnit:
 
         assert result is False, "Should return False on promotion failure"
 
-    def test_promote_model_no_best_version_found(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_promote_model_no_best_version_found(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test promotion when no best version can be found."""
         with patch.object(model_registry, "get_best_model_version", return_value=None):
 
@@ -391,9 +361,7 @@ class TestModelRegistryUnit:
             assert result is False, "Should return False when no best version found"
             mock_mlflow_client.transition_model_version_stage.assert_not_called()
 
-    def test_list_model_versions_sorting(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_list_model_versions_sorting(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test that model versions are returned in descending order."""
         # Create mock versions in random order
         version1 = Mock()
@@ -424,9 +392,7 @@ class TestModelRegistryUnit:
         assert len(result) == 1, "Should return only Production models"
         assert "Production" in result[0].aliases, "Returned model should have Production alias"
 
-    def test_get_production_model_uri_success(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_get_production_model_uri_success(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test getting production model URI when model exists."""
         mock_version = Mock()
         mock_version.version = "5"
@@ -442,14 +408,10 @@ class TestModelRegistryUnit:
             name=TestConstants.DEFAULT_MODEL_NAME, alias="Production"
         )
 
-    def test_get_production_model_uri_no_model(
-        self, model_registry: ModelRegistry, mock_mlflow_client
-    ) -> None:
+    def test_get_production_model_uri_no_model(self, model_registry: ModelRegistry, mock_mlflow_client) -> None:
         """Test getting production model URI when no production model exists."""
         # Mock get_model_version_by_alias to raise an exception (no model found)
-        mock_mlflow_client.get_model_version_by_alias.side_effect = (
-            mlflow.exceptions.MlflowException("No model found")
-        )
+        mock_mlflow_client.get_model_version_by_alias.side_effect = mlflow.exceptions.MlflowException("No model found")
 
         result = model_registry.get_production_model_uri()
 
@@ -491,14 +453,10 @@ class TestModelRegistryPropertyBased:
                 return_value=mock_version,
             ):
                 model_registry = ModelRegistry(TestConstants.DEFAULT_MODEL_NAME)
-                result = model_registry.register_best_model(
-                    run_id="test_run", metrics=converted_metrics
-                )
+                result = model_registry.register_best_model(run_id="test_run", metrics=converted_metrics)
 
                 # Should handle any valid metrics dictionary
-                assert (
-                    result == mock_version
-                ), "Should successfully register model with any valid metrics"
+                assert result == mock_version, "Should successfully register model with any valid metrics"
 
     @given(model_name=st.text(min_size=1, max_size=50).filter(lambda x: x.strip()))
     def test_model_registry_initialization_arbitrary_names(self, model_name: str) -> None:
@@ -581,14 +539,10 @@ class TestModelRegistryIntegration:
                 version = mlflow.register_model(model_uri=model_uri, name="IntegrationTestModel")
 
                 assert version is not None, "Model registration should succeed"
-                assert (
-                    str(version.version) == "1"
-                ), f"First registered model should be version 1, got: {version.version}"
+                assert str(version.version) == "1", f"First registered model should be version 1, got: {version.version}"
 
                 # Test our model registry methods for promotion and listing
-                promote_result = registry.promote_model(
-                    version=str(version.version), stage="Staging"
-                )
+                promote_result = registry.promote_model(version=str(version.version), stage="Staging")
                 assert promote_result is True, "Model promotion should succeed"
 
                 # Test listing - check for alias instead of deprecated stage
@@ -601,9 +555,7 @@ class TestModelRegistryIntegration:
                 assert "Staging" in staging_version.aliases, "Model should have Staging alias"
 
                 # Test production promotion
-                promote_result = registry.promote_model(
-                    version=str(version.version), stage="Production"
-                )
+                promote_result = registry.promote_model(version=str(version.version), stage="Production")
                 assert promote_result is True, "Production promotion should succeed"
 
                 # Test URI generation
@@ -636,14 +588,10 @@ class TestModelRegistryErrorBoundaries:
         mock_version = Mock()
         mock_version.version = "1"
 
-        with patch(
-            "morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version
-        ):
+        with patch("morphogenetic_engine.model_registry.mlflow.register_model", return_value=mock_version):
 
             # Should handle malformed metrics gracefully
-            result = model_registry.register_best_model(
-                run_id="test_run", metrics=malformed_metrics
-            )
+            result = model_registry.register_best_model(run_id="test_run", metrics=malformed_metrics)
 
             # Registration should still work, but description generation should be robust
             assert result == mock_version, "Should handle malformed metrics gracefully"
@@ -695,15 +643,11 @@ class TestModelRegistryErrorBoundaries:
             mock_register.side_effect = [mock_version, Exception("Model name already exists")]
 
             # First registration should succeed
-            result1 = model_registry.register_best_model(
-                run_id="run_1", metrics=TestConstants.SAMPLE_METRICS
-            )
+            result1 = model_registry.register_best_model(run_id="run_1", metrics=TestConstants.SAMPLE_METRICS)
             assert result1 == mock_version, "First registration should succeed"
 
             # Second registration should fail gracefully
-            result2 = model_registry.register_best_model(
-                run_id="run_2", metrics=TestConstants.SAMPLE_METRICS
-            )
+            result2 = model_registry.register_best_model(run_id="run_2", metrics=TestConstants.SAMPLE_METRICS)
             assert result2 is None, "Second registration should fail gracefully"
 
 
@@ -716,9 +660,7 @@ class TestModelRegistryErrorBoundaries:
 class TestModelRegistryPerformance:
     """Performance tests for large datasets and operations."""
 
-    def test_list_large_number_of_model_versions(
-        self, model_registry: ModelRegistry, mock_mlflow_client, benchmark
-    ) -> None:
+    def test_list_large_number_of_model_versions(self, model_registry: ModelRegistry, mock_mlflow_client, benchmark) -> None:
         """Test performance with large number of model versions."""
         # Create 1000 mock model versions
         large_version_list = []

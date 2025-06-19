@@ -10,6 +10,29 @@ All utilities follow the project's core principles:
 - Modern Python 3.12+: Uses latest language features and type hints
 """
 
+# Assertion utilities for domain-specific logic
+from .assertion_utils import (
+    assert_accuracy_range,
+    assert_convergence_behavior,
+    assert_log_file_format,
+    assert_seed_state,
+    assert_valid_experiment_slug,
+    assert_valid_metrics_json,
+)
+
+# Experiment configuration utilities
+from .config_utils import create_test_experiment_config, create_test_final_stats, create_test_sweep_config
+
+# File system utilities
+from .file_utils import (
+    assert_directory_exists,
+    assert_file_exists,
+    create_test_json_file,
+    create_test_log_file,
+    temporary_directory,
+    temporary_file,
+)
+
 # Mock utilities and data classes
 from .mock_utils import (
     MockDataLoader,
@@ -24,16 +47,6 @@ from .mock_utils import (
     create_test_seed_manager,
 )
 
-# Tensor testing utilities
-from .tensor_utils import (
-    assert_tensor_properties,
-    assert_tensor_shape,
-    assert_tensors_close,
-    create_test_input,
-    create_test_target,
-    create_test_tensor,
-)
-
 # Model testing utilities
 from .model_utils import (
     assert_model_in_eval_mode,
@@ -44,41 +57,21 @@ from .model_utils import (
     create_mock_model,
 )
 
-# File system utilities
-from .file_utils import (
-    assert_directory_exists,
-    assert_file_exists,
-    create_test_json_file,
-    create_test_log_file,
-    temporary_directory,
-    temporary_file,
-)
+# Sweep utilities (existing)
+from .sweep_test_utils import SweepConfigBuilder
 
-# Experiment configuration utilities
-from .config_utils import (
-    create_test_experiment_config,
-    create_test_final_stats,
-    create_test_sweep_config,
-)
-
-# Assertion utilities for domain-specific logic
-from .assertion_utils import (
-    assert_accuracy_range,
-    assert_convergence_behavior,
-    assert_log_file_format,
-    assert_seed_state,
-    assert_valid_experiment_slug,
-    assert_valid_metrics_json,
+# Tensor testing utilities
+from .tensor_utils import (
+    assert_tensor_properties,
+    assert_tensor_shape,
+    assert_tensors_close,
+    create_test_input,
+    create_test_target,
+    create_test_tensor,
 )
 
 # Environment validation utilities
-from .validation_utils import (
-    setup_test_logging,
-    validate_test_environment,
-)
-
-# Sweep utilities (existing)
-from .sweep_test_utils import SweepConfigBuilder
+from .validation_utils import setup_test_logging, validate_test_environment
 
 __all__ = [
     # Mock utilities

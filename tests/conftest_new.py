@@ -112,9 +112,7 @@ def register_args_minimal():
 @pytest.fixture
 def promote_args():
     """Fixture providing arguments for model promotion."""
-    return argparse.Namespace(
-        model_name="TestModel", stage="Production", version="3", archive_existing=True
-    )
+    return argparse.Namespace(model_name="TestModel", stage="Production", version="3", archive_existing=True)
 
 
 @pytest.fixture
@@ -132,9 +130,7 @@ def list_args_with_stage():
 @pytest.fixture
 def best_args():
     """Fixture providing arguments for best model retrieval."""
-    return argparse.Namespace(
-        model_name="TestModel", metric="val_acc", stage=None, higher_is_better=True
-    )
+    return argparse.Namespace(model_name="TestModel", metric="val_acc", stage=None, higher_is_better=True)
 
 
 @pytest.fixture

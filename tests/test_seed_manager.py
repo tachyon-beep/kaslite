@@ -173,9 +173,7 @@ class TestSeedManager:
         assert len(buffer) == TestConstants.BUFFER_MAXLEN
 
         # First tensor should be evicted, last should be preserved
-        assert torch.equal(
-            buffer[-1], torch.full((2, 3), float(TestConstants.BUFFER_MAXLEN + 9)).detach()
-        )
+        assert torch.equal(buffer[-1], torch.full((2, 3), float(TestConstants.BUFFER_MAXLEN + 9)).detach())
         assert torch.equal(buffer[0], torch.full((2, 3), float(10)).detach())
 
     def test_request_germination_success(self, clean_seed_manager, mock_seed_factory) -> None:
@@ -195,9 +193,7 @@ class TestSeedManager:
         assert log_entry["event_type"] == "germination_attempt"
         assert log_entry["seed_id"] == "test_seed"
 
-    def test_request_germination_already_active(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
+    def test_request_germination_already_active(self, clean_seed_manager, mock_seed_factory) -> None:
         """Test germination request on already active seed."""
         manager = clean_seed_manager
         mock_seed = mock_seed_factory()
@@ -217,9 +213,7 @@ class TestSeedManager:
 
         assert result is False
 
-    def test_request_germination_exception_handling(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
+    def test_request_germination_exception_handling(self, clean_seed_manager, mock_seed_factory) -> None:
         """Test germination request with initialization failure."""
         manager = clean_seed_manager
         mock_seed = mock_seed_factory()
@@ -340,9 +334,7 @@ class TestSeedManager:
             results.append((seed_id, result))
 
         # Attempt concurrent germinations
-        threads = [
-            threading.Thread(target=attempt_germination, args=(f"seed_{i}",)) for i in range(5)
-        ]
+        threads = [threading.Thread(target=attempt_germination, args=(f"seed_{i}",)) for i in range(5)]
         for t in threads:
             t.start()
         for t in threads:
@@ -551,9 +543,7 @@ class TestKasminaMicroIntegration:
         seed.initialize_child.assert_not_called()
 
     @patch("morphogenetic_engine.monitoring.get_monitor")
-    def test_kasmina_monitoring_integration_success(
-        self, mock_get_monitor, clean_seed_manager, mock_seed_factory, mock_monitor
-    ):
+    def test_kasmina_monitoring_integration_success(self, mock_get_monitor, clean_seed_manager, mock_seed_factory, mock_monitor):
         """Test that successful germination records metrics in monitoring system."""
         mock_get_monitor.return_value = mock_monitor
 
@@ -572,9 +562,7 @@ class TestKasminaMicroIntegration:
         mock_monitor.record_germination.assert_called_once()
 
     @patch("morphogenetic_engine.monitoring.get_monitor")
-    def test_kasmina_monitoring_integration_no_monitor(
-        self, mock_get_monitor, clean_seed_manager, mock_seed_factory
-    ):
+    def test_kasmina_monitoring_integration_no_monitor(self, mock_get_monitor, clean_seed_manager, mock_seed_factory):
         """Test that KasminaMicro handles absence of monitoring gracefully."""
         mock_get_monitor.return_value = None
 
@@ -658,9 +646,7 @@ class TestEnhancedErrorScenarios:
                 results.append((seed_id, "exception", str(e)))
 
         # Attempt concurrent germinations
-        threads = [
-            threading.Thread(target=attempt_germination, args=(f"seed_{i}",)) for i in range(5)
-        ]
+        threads = [threading.Thread(target=attempt_germination, args=(f"seed_{i}",)) for i in range(5)]
         for t in threads:
             t.start()
         for t in threads:
@@ -678,9 +664,7 @@ class TestEnhancedErrorScenarios:
         for seed_id in failure_seeds:
             assert manager.seeds[seed_id]["status"] == "failed"
 
-    def test_memory_leak_detection_with_weak_references(
-        self, clean_seed_manager, mock_seed_factory
-    ):
+    def test_memory_leak_detection_with_weak_references(self, clean_seed_manager, mock_seed_factory):
         """Test for memory leaks using weak references to ensure proper cleanup."""
         manager = clean_seed_manager
         weak_refs = []
@@ -712,9 +696,7 @@ class TestEnhancedErrorScenarios:
         # Note: Weak references may still be alive due to test framework holding references
         # The key test is that manager.reset() doesn't crash and clears state properly
 
-    def test_buffer_operations_under_stress_with_errors(
-        self, clean_seed_manager, mock_seed_factory
-    ):
+    def test_buffer_operations_under_stress_with_errors(self, clean_seed_manager, mock_seed_factory):
         """Test buffer operations when some operations encounter errors."""
         manager = clean_seed_manager
         seed = mock_seed_factory()
@@ -759,9 +741,7 @@ class TestEnhancedErrorScenarios:
             (TestConstants.BUFFER_MAXLEN, "normal_operation"),
         ],
     )
-    def test_buffer_edge_cases_parametrized(
-        self, clean_seed_manager, mock_seed_factory, maxlen_size, expected_behavior
-    ):
+    def test_buffer_edge_cases_parametrized(self, clean_seed_manager, mock_seed_factory, maxlen_size, expected_behavior):
         """Test buffer operations under various edge conditions."""
         manager = clean_seed_manager
         seed = mock_seed_factory()
@@ -788,9 +768,7 @@ class TestEnhancedErrorScenarios:
             buffer = manager.seeds["edge_test_seed"]["buffer"]
             assert len(buffer) == maxlen_size
             # Should contain the last maxlen_size items
-            expected_start = (
-                2  # Started from 0, added maxlen_size+2 items, so last should be from 2
-            )
+            expected_start = 2  # Started from 0, added maxlen_size+2 items, so last should be from 2
             for i, tensor in enumerate(buffer):
                 assert torch.equal(tensor, torch.full((2, 2), float(expected_start + i)))
 
@@ -921,9 +899,7 @@ class TestPerformanceBenchmarks:
         registration_time = time.time() - start_time
 
         # Registration should be reasonably fast (less than 5 seconds for 1000 seeds)
-        assert (
-            registration_time < 5.0
-        ), f"Registration took {registration_time:.2f}s, expected < 5.0s"
+        assert registration_time < 5.0, f"Registration took {registration_time:.2f}s, expected < 5.0s"
 
         # Test lookup performance
         start_time = time.time()
@@ -956,10 +932,7 @@ class TestPerformanceBenchmarks:
             results.append((seed_id, result, time.time()))
 
         # Concurrent germination attempts
-        threads = [
-            threading.Thread(target=attempt_germination, args=(f"perf_seed_{i}",))
-            for i in range(num_seeds)
-        ]
+        threads = [threading.Thread(target=attempt_germination, args=(f"perf_seed_{i}",)) for i in range(num_seeds)]
 
         for t in threads:
             t.start()

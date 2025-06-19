@@ -144,11 +144,7 @@ class SweepResults:
 
                 # Analyze each metric
                 for metric in sorted(metrics):
-                    raw_values = [
-                        r.get(metric)
-                        for r in successful_results
-                        if metric in r and r.get(metric) is not None
-                    ]
+                    raw_values = [r.get(metric) for r in successful_results if metric in r and r.get(metric) is not None]
                     if raw_values:
                         # Convert to numpy array for proper type handling
                         values = np.array(raw_values, dtype=float)
@@ -231,9 +227,7 @@ class SweepResults:
                         param_value = result.get("parameters", {}).get(param)
                         metric_value = result.get(metric)
 
-                        if isinstance(param_value, (int, float)) and isinstance(
-                            metric_value, (int, float)
-                        ):
+                        if isinstance(param_value, (int, float)) and isinstance(metric_value, (int, float)):
                             param_subset.append(param_value)
                             metric_values.append(metric_value)
 

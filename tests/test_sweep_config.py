@@ -10,12 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from morphogenetic_engine.sweeps.config import (
-    SweepConfig,
-    load_sweep_config,
-    load_sweep_configs,
-    parse_value_list,
-)
+from morphogenetic_engine.sweeps.config import SweepConfig, load_sweep_config, load_sweep_configs, parse_value_list
 
 
 # Test Fixtures
@@ -206,10 +201,7 @@ class TestSweepConfig:
             assert combo["n_samples"] == 2000
 
         # Verify we have all unique combinations
-        combo_tuples = {
-            (combo["lr"], combo["batch_size"], combo["optimizer"], combo["dropout"])
-            for combo in combinations
-        }
+        combo_tuples = {(combo["lr"], combo["batch_size"], combo["optimizer"], combo["dropout"]) for combo in combinations}
         assert len(combo_tuples) == 54
 
     def test_parameter_precedence(self):
@@ -237,15 +229,11 @@ class TestSweepConfig:
         bayesian_config_obj = SweepConfig(bayesian_config)
 
         # Grid config should not allow Bayesian methods
-        with pytest.raises(
-            ValueError, match="Bayesian search space only available for bayesian sweep type"
-        ):
+        with pytest.raises(ValueError, match="Bayesian search space only available for bayesian sweep type"):
             grid_config_obj.get_bayesian_search_space()
 
         # Bayesian config should not allow grid methods
-        with pytest.raises(
-            ValueError, match="Grid combinations only available for grid sweep type"
-        ):
+        with pytest.raises(ValueError, match="Grid combinations only available for grid sweep type"):
             bayesian_config_obj.get_grid_combinations()
 
     def test_default_values(self):
@@ -324,6 +312,7 @@ class TestParseValueList:
         # Test with custom object
         class CustomObject:
             """Test helper class for custom object parsing."""
+
             def __init__(self, value):
                 self.value = value
 

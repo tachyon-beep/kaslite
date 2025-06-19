@@ -3,6 +3,7 @@
 This module tests the test utilities themselves to ensure they work correctly
 and provide reliable testing infrastructure for the rest of the project.
 """
+
 # pylint: disable=protected-access
 # pylint: disable=redefined-outer-name
 

@@ -28,9 +28,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Prometheus metrics
-REQUEST_COUNT = Counter(
-    "inference_requests_total", "Total inference requests", ["method", "endpoint", "status"]
-)
+REQUEST_COUNT = Counter("inference_requests_total", "Total inference requests", ["method", "endpoint", "status"])
 REQUEST_DURATION = Histogram("inference_request_duration_seconds", "Inference request duration")
 MODEL_PREDICTION_TIME = Histogram("model_prediction_duration_seconds", "Model prediction duration")
 MODEL_LOAD_TIME = Histogram("model_load_duration_seconds", "Model loading duration")
@@ -111,9 +109,7 @@ async def prometheus_middleware(request: Request, call_next):
     # Record metrics
     duration = time.time() - start_time
     REQUEST_DURATION.observe(duration)
-    REQUEST_COUNT.labels(
-        method=request.method, endpoint=request.url.path, status=response.status_code
-    ).inc()
+    REQUEST_COUNT.labels(method=request.method, endpoint=request.url.path, status=response.status_code).inc()
 
     return response
 
@@ -221,9 +217,7 @@ async def predict(request: PredictionRequest):
         # Load model if not cached
         if model_version not in model_cache:
             if not await load_specific_model(model_version):
-                raise HTTPException(
-                    status_code=404, detail=f"Model version {model_version} not found"
-                )
+                raise HTTPException(status_code=404, detail=f"Model version {model_version} not found")
 
         model = model_cache[model_version]
 

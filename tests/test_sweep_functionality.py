@@ -4,6 +4,7 @@ Test suite for the hyperparameter sweep functionality.
 This module tests all aspects of the YAML-driven hyperparameter sweep feature,
 including YAML parsing, grid expansion, parameter validation, and sweep execution.
 """
+
 # pylint: disable=protected-access
 # pylint: disable=redefined-outer-name
 
@@ -143,9 +144,7 @@ class TestLoadSweepConfigs:
             temp_path = f.name
 
         try:
-            with pytest.raises(
-                ValueError, match="Sweep config file must have .yml or .yaml extension"
-            ):
+            with pytest.raises(ValueError, match="Sweep config file must have .yml or .yaml extension"):
                 load_sweep_configs(temp_path)
         finally:
             os.unlink(temp_path)
@@ -221,9 +220,7 @@ class TestMergeArgsWithCombo:
 
     def test_override_existing_args(self):
         """Test merging combo that overrides existing arguments."""
-        base_args = argparse.Namespace(
-            num_layers=8, hidden_dim=128, lr=0.001, problem_type="spirals"
-        )
+        base_args = argparse.Namespace(num_layers=8, hidden_dim=128, lr=0.001, problem_type="spirals")
         combo = {"num_layers": "4", "lr": "0.003"}
 
         merged = merge_args_with_combo(base_args, combo)
@@ -262,9 +259,7 @@ class TestMergeArgsWithCombo:
 
     def test_type_preservation(self):
         """Test that type conversion respects original argument types."""
-        base_args = argparse.Namespace(
-            int_param=10, float_param=1.5, str_param="hello", bool_param=True
-        )
+        base_args = argparse.Namespace(int_param=10, float_param=1.5, str_param="hello", bool_param=True)
         combo = {
             "int_param": "20",
             "float_param": "2.7",

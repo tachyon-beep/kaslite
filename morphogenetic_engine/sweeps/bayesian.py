@@ -7,13 +7,13 @@ Tree-structured Parzen Estimator (TPE) and other optimization algorithms.
 
 import argparse
 import hashlib
+import json
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-import json
 
 import optuna
 from rich.console import Console
@@ -22,6 +22,7 @@ from rich.table import Table
 
 from .config import SweepConfig
 from .results import SweepResults
+
 
 class BayesianSearchRunner:
     """Bayesian optimization runner using Optuna."""
@@ -183,9 +184,7 @@ class BayesianSearchRunner:
 
                     return float(metric_value)
                 else:
-                    self.console.print(
-                        f"[yellow]Target metric '{target_metric}' not found in results[/yellow]"
-                    )
+                    self.console.print(f"[yellow]Target metric '{target_metric}' not found in results[/yellow]")
                     experiment_result["error"] = f"Target metric '{target_metric}' not found"
                     self.results.add_result(experiment_result)
                     raise optuna.TrialPruned()
@@ -219,9 +218,7 @@ class BayesianSearchRunner:
 
     def run_optimization(self, n_trials: int = 50, timeout: Optional[int] = None) -> SweepResults:
         """Run the Bayesian optimization."""
-        self.console.print(
-            f"[bold green]Starting Bayesian optimization with {n_trials} trials[/bold green]"
-        )
+        self.console.print(f"[bold green]Starting Bayesian optimization with {n_trials} trials[/bold green]")
         self.console.print(f"Results will be saved to: {self.sweep_dir}")
 
         with Progress() as progress:
@@ -232,18 +229,14 @@ class BayesianSearchRunner:
 
                 # Print trial results
                 if trial.state == optuna.trial.TrialState.COMPLETE:
-                    self.console.print(
-                        f"Trial {trial.number}: {self.config.target_metric} = {trial.value:.4f}"
-                    )
+                    self.console.print(f"Trial {trial.number}: {self.config.target_metric} = {trial.value:.4f}")
                 elif trial.state == optuna.trial.TrialState.PRUNED:
                     self.console.print(f"Trial {trial.number}: Pruned")
                 elif trial.state == optuna.trial.TrialState.FAIL:
                     self.console.print(f"Trial {trial.number}: Failed")
 
             # Run optimization
-            self.study.optimize(
-                self._objective, n_trials=n_trials, timeout=timeout, callbacks=[callback]
-            )
+            self.study.optimize(self._objective, n_trials=n_trials, timeout=timeout, callbacks=[callback])
 
         # Finalize results
         self.results.finalize()
@@ -343,8 +336,6 @@ class BayesianSearchRunner:
         if not self.study.best_trial:
             self.console.print("[bold red]No successful trials![/bold red]")
             return
-
-
 
         table = Table(title="Bayesian Optimization Summary")
         table.add_column("Metric", style="cyan")

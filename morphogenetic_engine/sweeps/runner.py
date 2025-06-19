@@ -37,9 +37,7 @@ def validate_sweep_config(sweep_config: Dict[str, Any], valid_args: set) -> None
         # Remove leading dashes if present to match argument names
         clean_key = key.lstrip("-")
         if clean_key not in valid_args:
-            raise ValueError(
-                f"Unknown parameter in sweep config: '{key}'. Valid parameters: {sorted(valid_args)}"
-            )
+            raise ValueError(f"Unknown parameter in sweep config: '{key}'. Valid parameters: {sorted(valid_args)}")
 
 
 def load_sweep_configs(config_path: Union[str, Path]) -> List[Dict[str, Any]]:
@@ -89,9 +87,7 @@ def expand_grid(sweep_config: Dict[str, Any]) -> List[Dict[str, Any]]:
     return grid
 
 
-def merge_args_with_combo(
-    base_args: argparse.Namespace, combo: Dict[str, Any]
-) -> argparse.Namespace:
+def merge_args_with_combo(base_args: argparse.Namespace, combo: Dict[str, Any]) -> argparse.Namespace:
     """Merge base CLI arguments with a parameter combination from the sweep grid."""
     # Create a new namespace with base args
     merged_args = argparse.Namespace(**vars(base_args))
@@ -178,9 +174,7 @@ def create_run_directory_and_setup(sweep_dir: Path, run_slug: str, original_setu
     run_dir = sweep_dir / run_slug
     run_dir.mkdir(exist_ok=True)
 
-    def setup_experiment_for_sweep(
-        args_inner, run_dir_param=run_dir, original_setup_param=original_setup_func
-    ):
+    def setup_experiment_for_sweep(args_inner, run_dir_param=run_dir, original_setup_param=original_setup_func):
         """Modified setup_experiment that puts logs in the run directory."""
         from torch.utils.tensorboard import SummaryWriter
 
@@ -279,9 +273,7 @@ def process_single_sweep_config(
                 "run_id": run_slug,
                 "run_slug": run_slug,
                 "parameters": combo,
-                "results": {
-                    k: v for k, v in experiment_results.items() if k not in ["run_id", "parameters"]
-                },
+                "results": {k: v for k, v in experiment_results.items() if k not in ["run_id", "parameters"]},
             }
             config_runs.append(run_record)
 
@@ -322,9 +314,7 @@ def run_parameter_sweep(args: argparse.Namespace) -> None:
     run_counter = 0
 
     for config_idx, sweep_config in enumerate(sweep_configs):
-        config_runs, run_counter = process_single_sweep_config(
-            config_idx, sweep_config, args, sweep_dir, run_counter, valid_args
-        )
+        config_runs, run_counter = process_single_sweep_config(config_idx, sweep_config, args, sweep_dir, run_counter, valid_args)
         all_runs.extend(config_runs)
 
     # Create summary and print results

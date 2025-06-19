@@ -120,9 +120,7 @@ class TestSeedManagerKasminaMicroIntegration:
         mock_logger.log_germination.assert_called_once_with(0, "bad_seed")
         bad_seed.initialize_child.assert_called_once()
 
-    def test_multiple_germination_attempts_different_seeds(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
+    def test_multiple_germination_attempts_different_seeds(self, clean_seed_manager, mock_seed_factory) -> None:
         """Test multiple germination events select different seeds appropriately."""
         manager = clean_seed_manager
 
@@ -139,38 +137,28 @@ class TestSeedManagerKasminaMicroIntegration:
         base_loss = 1.0
         km.step(base_loss, TestConstants.LOW_ACCURACY)
         km.step(base_loss + TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-        result1 = km.step(
-            base_loss + 2 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY
-        )
+        result1 = km.step(base_loss + 2 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
         assert result1 is True
         assert manager.seeds["seed_0"]["status"] == "active"
 
         # Second germination - Step 4 builds plateau, Step 5 triggers
         km.step(base_loss + 3 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-        result2 = km.step(
-            base_loss + 4 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY
-        )
+        result2 = km.step(base_loss + 4 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
         assert result2 is True
         assert manager.seeds["seed_1"]["status"] == "active"
 
         # Third germination - Step 6 builds plateau, Step 7 triggers
         km.step(base_loss + 5 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-        result3 = km.step(
-            base_loss + 6 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY
-        )
+        result3 = km.step(base_loss + 6 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
         assert result3 is True
         assert manager.seeds["seed_2"]["status"] == "active"
 
         # Fourth attempt should fail (no dormant seeds left)
         km.step(base_loss + 7 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
-        result4 = km.step(
-            base_loss + 8 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY
-        )
+        result4 = km.step(base_loss + 8 * TestConstants.SMALL_LOSS_DELTA, TestConstants.LOW_ACCURACY)
         assert result4 is False
 
-    def test_germination_with_initialization_failures(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
+    def test_germination_with_initialization_failures(self, clean_seed_manager, mock_seed_factory) -> None:
         """Test handling of germination when seed initialization fails."""
         manager = clean_seed_manager
 
@@ -275,9 +263,7 @@ class TestPerformanceBenchmarking:
         seed = mock_seed_factory(health_signal=TestConstants.LOW_HEALTH_SIGNAL)
         manager.register_seed(seed, "test_seed")
 
-        km = KasminaMicro(
-            manager, patience=TestConstants.PATIENCE_MEDIUM, delta=TestConstants.PLATEAU_THRESHOLD
-        )
+        km = KasminaMicro(manager, patience=TestConstants.PATIENCE_MEDIUM, delta=TestConstants.PLATEAU_THRESHOLD)
 
         # Simulate many training steps
         start = time.time()
@@ -305,9 +291,7 @@ class TestSeedContract:
 
         # Verify method signatures and return types
         health = seed.get_health_signal()
-        assert isinstance(
-            health, (int, float)
-        ), f"Health signal should be numeric, got {type(health)}"
+        assert isinstance(health, (int, float)), f"Health signal should be numeric, got {type(health)}"
         assert 0.0 <= health <= 1.0, f"Health signal should be in [0,1], got {health}"
 
         # Verify behavior contracts
@@ -500,9 +484,7 @@ class TestEdgeCaseScenarios:
         # Should detect plateau with such small changes
         assert km.plateau >= km.patience
 
-    def test_rapid_seed_registration_and_removal(
-        self, clean_seed_manager, mock_seed_factory
-    ) -> None:
+    def test_rapid_seed_registration_and_removal(self, clean_seed_manager, mock_seed_factory) -> None:
         """Test rapid registration and germination of seeds."""
         manager = clean_seed_manager
 

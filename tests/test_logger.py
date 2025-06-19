@@ -73,9 +73,7 @@ def real_filesystem_logger(tmp_path, sample_config):
 # =============================================================================
 
 
-def assert_event_structure(
-    event, expected_epoch, expected_type, expected_message, expected_data=None
-):
+def assert_event_structure(event, expected_epoch, expected_type, expected_message, expected_data=None):
     """Helper function to assert event structure consistently."""
     assert event.epoch == expected_epoch
     assert event.event_type == expected_type
@@ -169,9 +167,7 @@ class TestLogEvent:
             ({}, True),  # Empty dict
         ],
     )
-    def test_to_dict_handles_various_data_types(
-        self, fixed_timestamp, data_input, expected_serializable
-    ):
+    def test_to_dict_handles_various_data_types(self, fixed_timestamp, data_input, expected_serializable):
         """Test that to_dict handles various data types correctly."""
         event = LogEvent(
             timestamp=fixed_timestamp,
@@ -251,9 +247,7 @@ class TestExperimentLogger:
         """Test experiment start logging with mocked time."""
         mock_time.return_value = fixed_timestamp
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_experiment_start()
 
         assert len(mock_logger.events) == 1
@@ -273,9 +267,7 @@ class TestExperimentLogger:
         mock_time.return_value = fixed_timestamp
         metrics = {"accuracy": 0.92, "loss": 0.15, "val_accuracy": 0.89}
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_epoch_progress(15, metrics)
 
         assert len(mock_logger.events) == 1
@@ -317,9 +309,7 @@ class TestExperimentLogger:
         """Test seed state transition logging with various parameters."""
         mock_time.return_value = fixed_timestamp
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_seed_event(8, seed_id, from_state, to_state, description)
 
         assert len(mock_logger.events) == 1
@@ -337,9 +327,7 @@ class TestExperimentLogger:
         """Test germination event logging."""
         mock_time.return_value = fixed_timestamp
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_germination(20, "seed_gamma")
 
         assert len(mock_logger.events) == 1
@@ -362,15 +350,11 @@ class TestExperimentLogger:
             (0.0, "0.000"),
         ],
     )
-    def test_log_blending_progress_formatting(
-        self, mock_time, mock_logger, fixed_timestamp, alpha, expected_formatted
-    ):
+    def test_log_blending_progress_formatting(self, mock_time, mock_logger, fixed_timestamp, alpha, expected_formatted):
         """Test blending progress logging with various alpha values."""
         mock_time.return_value = fixed_timestamp
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_blending_progress(25, "seed_delta", alpha)
 
         assert len(mock_logger.events) == 1
@@ -388,9 +372,7 @@ class TestExperimentLogger:
         """Test phase transition logging."""
         mock_time.return_value = fixed_timestamp
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_phase_transition(30, "exploration", "exploitation")
 
         assert len(mock_logger.events) == 1
@@ -408,9 +390,7 @@ class TestExperimentLogger:
         """Test accuracy dip logging."""
         mock_time.return_value = fixed_timestamp
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_accuracy_dip(35, 0.72)
 
         assert len(mock_logger.events) == 1
@@ -431,9 +411,7 @@ class TestExperimentLogger:
         # Add some events first
         create_sample_events(mock_logger, fixed_timestamp)
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_experiment_end(100)
 
         assert len(mock_logger.events) == 6  # 5 sample + 1 end event
@@ -480,9 +458,7 @@ class TestExperimentLogger:
         timestamps = [1640995200.0, 1640995201.0, 1640995202.0]
         mock_time.side_effect = timestamps
 
-        with patch.object(mock_logger, "write_to_file"), patch.object(
-            mock_logger, "print_real_time_update"
-        ):
+        with patch.object(mock_logger, "write_to_file"), patch.object(mock_logger, "print_real_time_update"):
             mock_logger.log_experiment_start()
             mock_logger.log_epoch_progress(1, {"accuracy": 0.8})
             mock_logger.log_germination(5, "seed1")
@@ -501,9 +477,7 @@ class TestExperimentLogger:
     # Error handling tests
     @patch("morphogenetic_engine.logger.open", side_effect=PermissionError("Permission denied"))
     @patch("time.time")
-    def test_write_to_file_permission_error(
-        self, mock_time, mock_open, mock_logger, fixed_timestamp
-    ):
+    def test_write_to_file_permission_error(self, mock_time, mock_open, mock_logger, fixed_timestamp):
         """Test handling of file permission errors."""
         mock_time.return_value = fixed_timestamp
 
@@ -513,9 +487,7 @@ class TestExperimentLogger:
 
     @patch("morphogenetic_engine.logger.open", side_effect=OSError("Disk full"))
     @patch("time.time")
-    def test_write_to_file_disk_full_error(
-        self, mock_time, mock_open, mock_logger, fixed_timestamp
-    ):
+    def test_write_to_file_disk_full_error(self, mock_time, mock_open, mock_logger, fixed_timestamp):
         """Test handling of disk space errors."""
         mock_time.return_value = fixed_timestamp
 
@@ -532,9 +504,7 @@ class TestExperimentLogger:
         """Test handling of JSON serialization errors."""
         mock_time.return_value = fixed_timestamp
 
-        with patch.object(mock_logger, "print_real_time_update"), patch(
-            "builtins.open", mock_open()
-        ):
+        with patch.object(mock_logger, "print_real_time_update"), patch("builtins.open", mock_open()):
             with pytest.raises(TypeError):
                 mock_logger.log_epoch_progress(1, {"complex": complex(1, 2)})  # Non-serializable
 

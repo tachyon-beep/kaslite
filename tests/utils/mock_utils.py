@@ -114,9 +114,7 @@ class MockExperimentArgs:
 
         valid_problems = {"spirals", "moons", "complex_moons", "clusters", "spheres"}
         if self.problem_type not in valid_problems:
-            raise ValueError(
-                f"problem_type must be one of {valid_problems}, got {self.problem_type}"
-            )
+            raise ValueError(f"problem_type must be one of {valid_problems}, got {self.problem_type}")
 
         if self.lr <= 0.0:
             raise ValueError(f"lr must be positive, got {self.lr}")
@@ -147,9 +145,7 @@ class MockDataLoader:
     This class mimics the behavior of PyTorch DataLoader for testing purposes.
     """
 
-    def __init__(
-        self, batch_size: int = 32, num_batches: int = 10, input_dim: int = 2, num_classes: int = 2
-    ):
+    def __init__(self, batch_size: int = 32, num_batches: int = 10, input_dim: int = 2, num_classes: int = 2):
         """Initialize mock DataLoader.
 
         Args:

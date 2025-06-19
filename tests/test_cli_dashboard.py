@@ -57,9 +57,7 @@ class TestMetrics:
 def create_test_console(width: int = 80, no_color: bool = False) -> Tuple[Console, StringIO]:
     """Factory for creating test consoles with captured output."""
     string_io = StringIO()
-    console = Console(
-        file=string_io, force_terminal=True, width=width, no_color=no_color, legacy_windows=False
-    )
+    console = Console(file=string_io, force_terminal=True, width=width, no_color=no_color, legacy_windows=False)
     return console, string_io
 
 
@@ -84,13 +82,9 @@ def strip_ansi_codes(text: str) -> str:
 
 # Hypothesis Strategies for Property-Based Testing
 
-seed_id_strategy = st.text(min_size=1, max_size=50).filter(
-    lambda s: s.strip() and not any(ord(c) < 32 for c in s)
-)
+seed_id_strategy = st.text(min_size=1, max_size=50).filter(lambda s: s.strip() and not any(ord(c) < 32 for c in s))
 
-seed_state_strategy = st.sampled_from(["dormant", "active", "blending"]) | st.text(
-    min_size=1, max_size=20
-)
+seed_state_strategy = st.sampled_from(["dormant", "active", "blending"]) | st.text(min_size=1, max_size=20)
 
 alpha_strategy = st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False)
 
@@ -114,9 +108,7 @@ class TestSeedState:
             ("test_seed", "unknown", 0.0, "test_seed: unknown"),
         ],
     )
-    def test_styled_status_output(
-        self, seed_id: str, state: str, alpha: float, expected_content: str
-    ):
+    def test_styled_status_output(self, seed_id: str, state: str, alpha: float, expected_content: str):
         """Test styled status output for various states."""
         seed = SeedState(seed_id, state, alpha)
         styled_text = seed.get_styled_status()
@@ -190,9 +182,7 @@ class TestRichDashboardUnit:
             (False, True),  # No console provided, should create one
         ],
     )
-    def test_dashboard_initialization(
-        self, console_provided: bool, console_created: bool  # pylint: disable=unused-argument
-    ):
+    def test_dashboard_initialization(self, console_provided: bool, console_created: bool):  # pylint: disable=unused-argument
         """Test dashboard initialization with and without console parameter."""
         with patch("morphogenetic_engine.cli_dashboard.Live"):
             if console_provided:
@@ -261,9 +251,10 @@ class TestRichDashboardUnit:
 
     def test_phase_management(self, dashboard):
         """Test phase transitions and task management."""
-        with patch.object(dashboard.progress, "add_task") as mock_add_task, patch.object(
-            dashboard.progress, "stop_task"
-        ) as mock_stop_task:
+        with (
+            patch.object(dashboard.progress, "add_task") as mock_add_task,
+            patch.object(dashboard.progress, "stop_task") as mock_stop_task,
+        ):
 
             mock_add_task.return_value = "task_123"
 
@@ -323,9 +314,7 @@ class TestRichDashboardIntegration:
             assert "seed_beta" in dashboard.seeds
 
             # Metrics updates
-            test_metrics = TestMetrics(
-                epoch=5, val_loss=0.25, val_acc=0.85, best_acc=0.90, train_loss=0.20
-            )
+            test_metrics = TestMetrics(epoch=5, val_loss=0.25, val_acc=0.85, best_acc=0.90, train_loss=0.20)
             dashboard.update_progress(5, test_metrics.to_dict())
 
             # Verify final state

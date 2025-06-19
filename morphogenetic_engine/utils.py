@@ -128,9 +128,7 @@ def write_experiment_log_footer(log_f, final_stats: Dict[str, Any], seed_manager
     log_f.write(f"# Final best accuracy: {final_stats['best_acc']:.4f}\n")
 
     if final_stats.get("seeds_activated", False):
-        active_seeds = sum(
-            1 for info in seed_manager.seeds.values() if info["module"].state == "active"
-        )
+        active_seeds = sum(1 for info in seed_manager.seeds.values() if info["module"].state == "active")
         log_f.write(f"# Seeds activated: {active_seeds}/{len(seed_manager.seeds)}\n")
     else:
         log_f.write(f"# Seeds activated: 0/{len(seed_manager.seeds)}\n")
@@ -152,8 +150,6 @@ def export_metrics_for_dvc(final_stats: Dict[str, Any], slug: str, project_root:
 
     # Save metrics JSON
     metrics_path = project_root / "results" / f"metrics_{slug}.json"
-    metrics_path.parent.mkdir(
-        parents=True, exist_ok=True
-    )  # Create results directory if it doesn't exist
+    metrics_path.parent.mkdir(parents=True, exist_ok=True)  # Create results directory if it doesn't exist
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)

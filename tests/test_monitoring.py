@@ -168,9 +168,7 @@ class TestPrometheusMonitorRealMetrics:
         monitor_with_mocked_server.record_epoch_completion("phase_1", 12.5)
 
         # Verify counter increment
-        counter_value = metric_validator.get_counter_value(
-            EPOCHS_TOTAL, {"phase": "phase_1", "experiment_id": "test_exp_123"}
-        )
+        counter_value = metric_validator.get_counter_value(EPOCHS_TOTAL, {"phase": "phase_1", "experiment_id": "test_exp_123"})
         assert counter_value is not None and abs(counter_value - 1.0) < 1e-10
 
     def test_update_training_metrics_real_prometheus(
@@ -186,9 +184,7 @@ class TestPrometheusMonitorRealMetrics:
         train_loss = metric_validator.get_gauge_value(TRAINING_LOSS, labels)
         val_loss = metric_validator.get_gauge_value(VALIDATION_LOSS, labels)
         val_acc = metric_validator.get_gauge_value(VALIDATION_ACCURACY, labels)
-        best_acc = metric_validator.get_gauge_value(
-            BEST_ACCURACY, {"experiment_id": "test_exp_123"}
-        )
+        best_acc = metric_validator.get_gauge_value(BEST_ACCURACY, {"experiment_id": "test_exp_123"})
 
         assert train_loss is not None and abs(train_loss - 0.25) < 1e-10
         assert val_loss is not None and abs(val_loss - 0.30) < 1e-10
@@ -205,9 +201,7 @@ class TestPrometheusMonitorRealMetrics:
         monitor_with_mocked_server.record_germination()
 
         # Verify counter value
-        germination_count = metric_validator.get_counter_value(
-            GERMINATIONS_TOTAL, {"experiment_id": "test_exp_123"}
-        )
+        germination_count = metric_validator.get_counter_value(GERMINATIONS_TOTAL, {"experiment_id": "test_exp_123"})
         assert germination_count is not None and abs(germination_count - 3.0) < 1e-10
 
     def test_record_phase_transition_real_metrics(
@@ -276,9 +270,7 @@ class TestPrometheusMonitorRealMetrics:
 
         monitor_with_mocked_server.update_experiment_duration()
 
-        duration_value = metric_validator.get_gauge_value(
-            EXPERIMENT_DURATION, {"experiment_id": "test_exp_123"}
-        )
+        duration_value = metric_validator.get_gauge_value(EXPERIMENT_DURATION, {"experiment_id": "test_exp_123"})
         assert duration_value is not None and abs(duration_value - 100.0) < 1e-10  # 1000 - 900
 
 
@@ -293,15 +285,11 @@ class TestPrometheusMonitorErrorHandling:
             float("-inf"),
         ],
     )
-    def test_invalid_metric_values_handling(
-        self, monitor_with_mocked_server: PrometheusMonitor, invalid_value: float
-    ) -> None:
+    def test_invalid_metric_values_handling(self, monitor_with_mocked_server: PrometheusMonitor, invalid_value: float) -> None:
         """Test handling of invalid metric values (NaN, infinity)."""
         # This should not raise an exception but should handle gracefully
         try:
-            monitor_with_mocked_server.update_training_metrics(
-                "phase_1", invalid_value, 0.5, 0.8, 0.9
-            )
+            monitor_with_mocked_server.update_training_metrics("phase_1", invalid_value, 0.5, 0.8, 0.9)
             # Prometheus client should handle these values appropriately
         except (ValueError, TypeError) as e:
             # If exceptions are raised, they should be meaningful
@@ -334,9 +322,7 @@ class TestPrometheusMonitorErrorHandling:
                 monitor.record_germination()
         except (ValueError, TypeError, KeyError) as e:
             # If exceptions occur, they should be related to Prometheus label validation
-            assert any(
-                word in str(e).lower() for word in ["label", "metric", "invalid", "character"]
-            )
+            assert any(word in str(e).lower() for word in ["label", "metric", "invalid", "character"])
 
     @pytest.mark.parametrize(
         "malformed_seed_id",
@@ -349,48 +335,32 @@ class TestPrometheusMonitorErrorHandling:
             "seed[id]",  # Square brackets
         ],
     )
-    def test_malformed_seed_ids(
-        self, monitor_with_mocked_server: PrometheusMonitor, malformed_seed_id: str
-    ) -> None:
+    def test_malformed_seed_ids(self, monitor_with_mocked_server: PrometheusMonitor, malformed_seed_id: str) -> None:
         """Test behavior with malformed seed IDs."""
         # Operations should handle malformed seed IDs gracefully
         try:
-            monitor_with_mocked_server.update_seed_metrics(
-                seed_id=malformed_seed_id, state="active", alpha=0.5
-            )
+            monitor_with_mocked_server.update_seed_metrics(seed_id=malformed_seed_id, state="active", alpha=0.5)
         except (ValueError, TypeError, KeyError) as e:
             # If exceptions occur, they should be related to Prometheus label validation
-            assert any(
-                word in str(e).lower() for word in ["label", "metric", "invalid", "character"]
-            )
+            assert any(word in str(e).lower() for word in ["label", "metric", "invalid", "character"])
 
-    def test_unknown_seed_state_handling(
-        self, monitor_with_mocked_server: PrometheusMonitor
-    ) -> None:
+    def test_unknown_seed_state_handling(self, monitor_with_mocked_server: PrometheusMonitor) -> None:
         """Test behavior with unknown seed states."""
-        monitor_with_mocked_server.update_seed_metrics(
-            seed_id="test_seed", state="unknown_state", alpha=0.5  # Not in state_map
-        )
+        monitor_with_mocked_server.update_seed_metrics(seed_id="test_seed", state="unknown_state", alpha=0.5)  # Not in state_map
 
         # Should default to -1 for unknown states
         validator = MetricValidator()
-        state_value = validator.get_gauge_value(
-            SEED_STATE, {"seed_id": "test_seed", "experiment_id": "test_exp_123"}
-        )
+        state_value = validator.get_gauge_value(SEED_STATE, {"seed_id": "test_seed", "experiment_id": "test_exp_123"})
         assert state_value == -1.0
 
-    def test_negative_values_where_inappropriate(
-        self, monitor_with_mocked_server: PrometheusMonitor
-    ) -> None:
+    def test_negative_values_where_inappropriate(self, monitor_with_mocked_server: PrometheusMonitor) -> None:
         """Test handling of negative values where they shouldn't be allowed."""
         # Some metrics shouldn't have negative values in real scenarios
         monitor_with_mocked_server.update_training_metrics("phase_1", -0.5, -0.3, -0.1, -0.9)
 
         # Prometheus itself doesn't prevent negative values, but we can verify they're recorded
         validator = MetricValidator()
-        train_loss = validator.get_gauge_value(
-            TRAINING_LOSS, {"phase": "phase_1", "experiment_id": "test_exp_123"}
-        )
+        train_loss = validator.get_gauge_value(TRAINING_LOSS, {"phase": "phase_1", "experiment_id": "test_exp_123"})
         assert train_loss == -0.5  # Value is recorded as-is
 
     def test_extremely_large_values(self, monitor_with_mocked_server: PrometheusMonitor) -> None:
@@ -399,9 +369,7 @@ class TestPrometheusMonitorErrorHandling:
         monitor_with_mocked_server.update_training_metrics("phase_1", large_value, 0.5, 0.8, 0.9)
 
         validator = MetricValidator()
-        train_loss = validator.get_gauge_value(
-            TRAINING_LOSS, {"phase": "phase_1", "experiment_id": "test_exp_123"}
-        )
+        train_loss = validator.get_gauge_value(TRAINING_LOSS, {"phase": "phase_1", "experiment_id": "test_exp_123"})
         assert train_loss is not None and abs(train_loss - large_value) < 1e-10
 
 
@@ -411,9 +379,7 @@ class TestPrometheusMonitorPropertyBased:
     @given(
         experiment_id=st.text(min_size=1, max_size=100),
         phase=st.text(min_size=1, max_size=50),
-        train_loss=st.floats(
-            min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False
-        ),
+        train_loss=st.floats(min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False),
         val_loss=st.floats(min_value=0.0, max_value=1000.0, allow_nan=False, allow_infinity=False),
         val_acc=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
         best_acc=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
@@ -436,9 +402,7 @@ class TestPrometheusMonitorPropertyBased:
 
                 # Verify metrics can be retrieved
                 validator = MetricValidator()
-                recorded_loss = validator.get_gauge_value(
-                    TRAINING_LOSS, {"phase": phase, "experiment_id": experiment_id}
-                )
+                recorded_loss = validator.get_gauge_value(TRAINING_LOSS, {"phase": phase, "experiment_id": experiment_id})
 
                 # If no exception was raised, the value should be recorded correctly
                 if recorded_loss is not None:
@@ -454,9 +418,7 @@ class TestPrometheusMonitorPropertyBased:
         alpha=st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
         drift=st.floats(min_value=-1.0, max_value=1.0, allow_nan=False, allow_infinity=False),
     )
-    def test_seed_metrics_property_based(
-        self, seed_id: str, state: str, alpha: float, drift: float
-    ) -> None:
+    def test_seed_metrics_property_based(self, seed_id: str, state: str, alpha: float, drift: float) -> None:
         """Property-based test for seed metrics."""
         with patch("morphogenetic_engine.monitoring.start_http_server"):
             monitor = PrometheusMonitor(experiment_id="prop_test")
@@ -467,9 +429,7 @@ class TestPrometheusMonitorPropertyBased:
                 # Verify state mapping
                 expected_state_value = monitor.state_map.get(state, -1)
                 validator = MetricValidator()
-                recorded_state = validator.get_gauge_value(
-                    SEED_STATE, {"seed_id": seed_id, "experiment_id": "prop_test"}
-                )
+                recorded_state = validator.get_gauge_value(SEED_STATE, {"seed_id": seed_id, "experiment_id": "prop_test"})
 
                 if recorded_state is not None:
                     assert recorded_state == expected_state_value
@@ -484,9 +444,10 @@ class TestMonitoringUtilities:
 
     def test_initialize_monitoring(self) -> None:
         """Test monitoring initialization utility."""
-        with patch(
-            "morphogenetic_engine.monitoring.PrometheusMonitor"
-        ) as mock_monitor_class, patch("morphogenetic_engine.monitoring.start_http_server"):
+        with (
+            patch("morphogenetic_engine.monitoring.PrometheusMonitor") as mock_monitor_class,
+            patch("morphogenetic_engine.monitoring.start_http_server"),
+        ):
 
             mock_monitor = Mock()
             mock_monitor_class.return_value = mock_monitor
@@ -525,9 +486,7 @@ class TestMonitoringIntegration:
             for i in range(50):  # More iterations for stress testing
                 monitor.update_training_metrics(f"phase_{worker_id}", 0.1 * i, 0.2 * i, 0.8, 0.9)
                 monitor.record_germination()
-                monitor.update_seed_metrics(
-                    seed_id=f"seed_{worker_id}_{i}", state="training", alpha=0.5, drift=0.1
-                )
+                monitor.update_seed_metrics(seed_id=f"seed_{worker_id}_{i}", state="training", alpha=0.5, drift=0.1)
 
         # Run concurrent updates with more threads
         threads = [threading.Thread(target=update_metrics_worker, args=(i,)) for i in range(5)]
@@ -559,9 +518,7 @@ class TestMonitoringIntegration:
         """Test that metric labels are consistent across operations."""
         # Update same metrics multiple times
         monitor_with_mocked_server.update_training_metrics("phase_1", 0.1, 0.2, 0.8, 0.9)
-        monitor_with_mocked_server.update_training_metrics(
-            "phase_1", 0.05, 0.15, 0.85, 0.95
-        )  # Should overwrite
+        monitor_with_mocked_server.update_training_metrics("phase_1", 0.05, 0.15, 0.85, 0.95)  # Should overwrite
 
         validator = MetricValidator()
         labels = {"phase": "phase_1", "experiment_id": "test_exp_123"}
@@ -583,9 +540,7 @@ class TestMonitoringIntegration:
                 monitor.record_germination()
 
             validator = MetricValidator()
-            germination_count = validator.get_counter_value(
-                GERMINATIONS_TOTAL, {"experiment_id": "persistence_test"}
-            )
+            germination_count = validator.get_counter_value(GERMINATIONS_TOTAL, {"experiment_id": "persistence_test"})
 
             assert germination_count is not None and abs(germination_count - 10.0) < 1e-10
 
@@ -594,9 +549,7 @@ class TestMonitoringIntegration:
                 monitor.record_germination()
 
             # Count should be cumulative
-            final_count = validator.get_counter_value(
-                GERMINATIONS_TOTAL, {"experiment_id": "persistence_test"}
-            )
+            final_count = validator.get_counter_value(GERMINATIONS_TOTAL, {"experiment_id": "persistence_test"})
             assert final_count is not None and abs(final_count - 15.0) < 1e-10
 
 
@@ -624,9 +577,7 @@ class TestMonitoringPerformance:
 
             # Verify final metrics are correct
             validator = MetricValidator()
-            germination_count = validator.get_counter_value(
-                GERMINATIONS_TOTAL, {"experiment_id": "perf_test"}
-            )
+            germination_count = validator.get_counter_value(GERMINATIONS_TOTAL, {"experiment_id": "perf_test"})
             assert germination_count is not None and abs(germination_count - 10.0) < 1e-10
 
     def test_concurrent_metric_updates_stress(self) -> None:
@@ -660,12 +611,8 @@ class TestMonitoringPerformance:
 
             # Verify metrics were recorded
             validator = MetricValidator()
-            germination_count = validator.get_counter_value(
-                GERMINATIONS_TOTAL, {"experiment_id": "stress_test"}
-            )
-            assert (
-                germination_count is not None and abs(germination_count - 1000.0) < 1e-10
-            )  # 10 threads * 100 operations each
+            germination_count = validator.get_counter_value(GERMINATIONS_TOTAL, {"experiment_id": "stress_test"})
+            assert germination_count is not None and abs(germination_count - 1000.0) < 1e-10  # 10 threads * 100 operations each
 
 
 class TestPrometheusCompliance:
@@ -688,29 +635,21 @@ class TestPrometheusCompliance:
         for metric in metrics_to_check:
             # pylint: disable=protected-access
             metric_name = metric._name
-            assert metric_name.startswith(
-                "kaslite_"
-            ), f"Metric {metric_name} should start with kaslite_"
+            assert metric_name.startswith("kaslite_"), f"Metric {metric_name} should start with kaslite_"
             assert "_" in metric_name, f"Metric {metric_name} should use underscores"
-            assert (
-                metric_name.islower() or "_" in metric_name
-            ), f"Metric {metric_name} should be lowercase"
+            assert metric_name.islower() or "_" in metric_name, f"Metric {metric_name} should be lowercase"
 
     def test_label_cardinality_limits(self, monitor_with_mocked_server: PrometheusMonitor) -> None:
         """Test that label cardinality stays within reasonable limits."""
         # Create many different seed metrics to test cardinality
         for i in range(100):  # Reasonable number of seeds
-            monitor_with_mocked_server.update_seed_metrics(
-                seed_id=f"seed_{i}", state="training", alpha=0.5
-            )
+            monitor_with_mocked_server.update_seed_metrics(seed_id=f"seed_{i}", state="training", alpha=0.5)
 
         # Should not raise any cardinality warnings or errors
         validator = MetricValidator()
 
         # Verify last metric is recorded correctly
-        state_value = validator.get_gauge_value(
-            SEED_STATE, {"seed_id": "seed_99", "experiment_id": "test_exp_123"}
-        )
+        state_value = validator.get_gauge_value(SEED_STATE, {"seed_id": "seed_99", "experiment_id": "test_exp_123"})
         assert state_value is not None and abs(state_value - 1.0) < 1e-10  # training state
 
     def test_metric_help_strings(self) -> None:
@@ -760,9 +699,7 @@ class TestMonitoringMemoryManagement:
             memory_growth = final_memory - initial_memory
 
             # Allow some growth but not unbounded (< 50MB for 1000 metrics)
-            assert (
-                memory_growth < 50 * 1024 * 1024
-            ), f"Memory grew by {memory_growth / (1024*1024):.1f} MB"
+            assert memory_growth < 50 * 1024 * 1024, f"Memory grew by {memory_growth / (1024*1024):.1f} MB"
 
     def test_prometheus_export_format_validation(self) -> None:
         """Test that metrics export in valid Prometheus format."""
@@ -778,62 +715,36 @@ class TestMonitoringMemoryManagement:
             assert len(output) > 0, "Prometheus output should not be empty"
 
             # Look for kaslite metrics
-            kaslite_metrics = [
-                line
-                for line in output.split("\n")
-                if "kaslite_" in line and not line.startswith("#")
-            ]
+            kaslite_metrics = [line for line in output.split("\n") if "kaslite_" in line and not line.startswith("#")]
             assert len(kaslite_metrics) > 0, "No kaslite metrics found in output"
 
             # Validate format contains expected metrics (flexible pattern matching)
             training_loss_found = any(
-                "kaslite_training_loss" in line and "export_test" in line and "phase_1" in line
-                for line in kaslite_metrics
+                "kaslite_training_loss" in line and "export_test" in line and "phase_1" in line for line in kaslite_metrics
             )
-            germination_found = any(
-                "kaslite_germinations_total" in line and "export_test" in line
-                for line in kaslite_metrics
-            )
+            germination_found = any("kaslite_germinations_total" in line and "export_test" in line for line in kaslite_metrics)
 
-            assert (
-                training_loss_found
-            ), f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
-            assert (
-                germination_found
-            ), f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
+            assert training_loss_found, f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
+            assert germination_found, f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
 
             # Look for kaslite metrics
-            kaslite_metrics = [
-                line
-                for line in output.split("\n")
-                if "kaslite_" in line and not line.startswith("#")
-            ]
+            kaslite_metrics = [line for line in output.split("\n") if "kaslite_" in line and not line.startswith("#")]
             assert len(kaslite_metrics) > 0, "No kaslite metrics found in output"
 
             # Validate format contains expected metrics (flexible pattern matching)
             training_loss_found = any(
-                "kaslite_training_loss" in line and "export_test" in line and "phase_1" in line
-                for line in kaslite_metrics
+                "kaslite_training_loss" in line and "export_test" in line and "phase_1" in line for line in kaslite_metrics
             )
-            germination_found = any(
-                "kaslite_germinations_total" in line and "export_test" in line
-                for line in kaslite_metrics
-            )
+            germination_found = any("kaslite_germinations_total" in line and "export_test" in line for line in kaslite_metrics)
 
-            assert (
-                training_loss_found
-            ), f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
-            assert (
-                germination_found
-            ), f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
+            assert training_loss_found, f"Training loss metric not found. Available kaslite metrics: {kaslite_metrics}"
+            assert germination_found, f"Germination metric not found. Available kaslite metrics: {kaslite_metrics}"
 
             # Validate no malformed lines
             for line in kaslite_metrics:
                 if line.strip():
                     # Valid metric line should have format: metric_name{labels} value
-                    assert (
-                        "{" in line and "}" in line and " " in line
-                    ), f"Malformed metric line: {line}"
+                    assert "{" in line and "}" in line and " " in line, f"Malformed metric line: {line}"
 
     def test_label_cardinality_monitoring(self) -> None:
         """Test monitoring of label cardinality to prevent explosion."""
@@ -853,9 +764,7 @@ class TestMonitoringMemoryManagement:
 
             # Verify metrics are recorded correctly
             validator = MetricValidator()
-            state_value = validator.get_gauge_value(
-                SEED_STATE, {"seed_id": "seed_99", "experiment_id": "cardinality_test"}
-            )
+            state_value = validator.get_gauge_value(SEED_STATE, {"seed_id": "seed_99", "experiment_id": "cardinality_test"})
             assert state_value is not None and abs(state_value - 1.0) < 1e-10  # training state
 
 
@@ -928,9 +837,7 @@ class TestMonitoringPerformanceBaselines:
             operations_per_second = 1000 / (end_time - start_time)
 
             # Should handle at least 5,000 operations per second (conservative baseline)
-            assert (
-                operations_per_second > 5_000
-            ), f"Performance regression: {operations_per_second:.1f} ops/sec"
+            assert operations_per_second > 5_000, f"Performance regression: {operations_per_second:.1f} ops/sec"
 
     def test_concurrent_operations_performance(self) -> None:
         """Test performance under concurrent load."""
@@ -963,9 +870,7 @@ class TestMonitoringPerformanceBaselines:
             operations_per_second = total_operations / duration
 
             # Conservative baseline: should handle at least 2,000 concurrent ops/sec
-            assert (
-                operations_per_second > 2_000
-            ), f"Concurrent performance regression: {operations_per_second:.1f} ops/sec"
+            assert operations_per_second > 2_000, f"Concurrent performance regression: {operations_per_second:.1f} ops/sec"
             assert duration < 2.0, f"Concurrent operations took too long: {duration:.2f}s"
 
     def test_metric_timestamp_accuracy(self) -> None:
@@ -981,9 +886,7 @@ class TestMonitoringPerformanceBaselines:
             monitor.update_experiment_duration()
 
             validator = MetricValidator()
-            duration = validator.get_gauge_value(
-                EXPERIMENT_DURATION, {"experiment_id": "timestamp_test"}
-            )
+            duration = validator.get_gauge_value(EXPERIMENT_DURATION, {"experiment_id": "timestamp_test"})
 
             # Duration should be reasonable (within measurement window)
             assert duration is not None

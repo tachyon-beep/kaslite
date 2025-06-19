@@ -58,9 +58,7 @@ class SweepCLI:
 
         # Bayesian search command (placeholder for future implementation)
         bayesian_parser = subparsers.add_parser("bayesian", help="Run Bayesian optimization sweep")
-        bayesian_parser.add_argument(
-            "--config", "-c", type=Path, required=True, help="Path to sweep configuration file"
-        )
+        bayesian_parser.add_argument("--config", "-c", type=Path, required=True, help="Path to sweep configuration file")
         bayesian_parser.add_argument(
             "--trials",
             "-t",
@@ -68,9 +66,7 @@ class SweepCLI:
             default=50,
             help="Number of optimization trials (default: 50)",
         )
-        bayesian_parser.add_argument(
-            "--timeout", type=int, default=3600, help="Timeout per trial in seconds (default: 3600)"
-        )
+        bayesian_parser.add_argument("--timeout", type=int, default=3600, help="Timeout per trial in seconds (default: 3600)")
 
         # Quick test command
         quick_parser = subparsers.add_parser("quick", help="Run a quick test sweep")
@@ -80,9 +76,7 @@ class SweepCLI:
             default="spirals",
             help="Problem type to test (default: spirals)",
         )
-        quick_parser.add_argument(
-            "--trials", type=int, default=10, help="Number of quick trials (default: 10)"
-        )
+        quick_parser.add_argument("--trials", type=int, default=10, help="Number of quick trials (default: 10)")
 
         # Resume command (placeholder)
         resume_parser = subparsers.add_parser("resume", help="Resume interrupted sweep")
@@ -100,9 +94,7 @@ class SweepCLI:
             else:
                 configs = load_sweep_configs(args.config)
 
-            self.console.print(
-                f"[bold green]Loading {len(configs)} sweep configuration(s)[/bold green]"
-            )
+            self.console.print(f"[bold green]Loading {len(configs)} sweep configuration(s)[/bold green]")
 
             # Override execution settings from CLI args
             for config in configs:
@@ -120,17 +112,13 @@ class SweepCLI:
             all_results = []
             for i, config in enumerate(configs):
                 if len(configs) > 1:
-                    self.console.print(
-                        f"\n[bold cyan]Running configuration {i+1}/{len(configs)}[/bold cyan]"
-                    )
+                    self.console.print(f"\n[bold cyan]Running configuration {i+1}/{len(configs)}[/bold cyan]")
 
                 runner = GridSearchRunner(config, base_args)
                 results = runner.run_sweep()
                 all_results.append(results)
 
-            self.console.print(
-                f"\n[bold green]All sweeps completed! Processed {len(all_results)} configuration(s)[/bold green]"
-            )
+            self.console.print(f"\n[bold green]All sweeps completed! Processed {len(all_results)} configuration(s)[/bold green]")
             return 0
 
         except FileNotFoundError as e:
@@ -158,9 +146,7 @@ class SweepCLI:
             config = load_sweep_config(args.config)
 
             if config.sweep_type != "bayesian":
-                self.console.print(
-                    "[yellow]Warning: Configuration is not set for Bayesian optimization[/yellow]"
-                )
+                self.console.print("[yellow]Warning: Configuration is not set for Bayesian optimization[/yellow]")
                 self.console.print("Setting sweep_type to 'bayesian'")
                 config.sweep_type = "bayesian"
 

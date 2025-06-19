@@ -48,9 +48,7 @@ class GridSearchRunner:
         """Execute the grid search sweep."""
         combinations = self.config.get_grid_combinations()
 
-        self.console.print(
-            f"[bold green]Starting grid search with {len(combinations)} combinations[/bold green]"
-        )
+        self.console.print(f"[bold green]Starting grid search with {len(combinations)} combinations[/bold green]")
         self.console.print(f"Results will be saved to: {self.sweep_dir}")
 
         # Create progress tracking
@@ -82,8 +80,7 @@ class GridSearchRunner:
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             # Submit all jobs
             future_to_combo = {
-                executor.submit(self._run_single_experiment, combo, i): (combo, i)
-                for i, combo in enumerate(combinations)
+                executor.submit(self._run_single_experiment, combo, i): (combo, i) for i, combo in enumerate(combinations)
             }
 
             # Collect results as they complete
@@ -257,9 +254,7 @@ class GridSearchRunner:
         # Generate final summary
         self.results.finalize()
 
-        self.console.print(
-            f"[bold green]Sweep completed! Results saved to: {self.sweep_dir}[/bold green]"
-        )
+        self.console.print(f"[bold green]Sweep completed! Results saved to: {self.sweep_dir}[/bold green]")
 
     def _register_best_models(self) -> None:
         """Register the best performing models from the sweep."""
@@ -286,9 +281,7 @@ class GridSearchRunner:
                         # Note: For sweep registration, we'd need to modify the sweep to capture
                         # MLflow run IDs. For now, we'll add this as a framework.
 
-                        self.console.print(
-                            f"[green]Registering model #{i+1}: Val Acc {val_acc:.4f}[/green]"
-                        )
+                        self.console.print(f"[green]Registering model #{i+1}: Val Acc {val_acc:.4f}[/green]")
 
                         # Note: For sweep registration, we'd need to modify the sweep to capture
                         # MLflow run IDs. For now, we'll add this as a framework.

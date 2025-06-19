@@ -230,9 +230,7 @@ class TestSoftLandingGradientIsolation:
         seed.initialize_child()
 
         # Create input with gradient tracking
-        input_tensor = torch.randn(
-            TestConstants.SMALL_TENSOR_BATCH, TestConstants.DEFAULT_DIM, requires_grad=True
-        )
+        input_tensor = torch.randn(TestConstants.SMALL_TENSOR_BATCH, TestConstants.DEFAULT_DIM, requires_grad=True)
 
         # Add to buffer and train
         seed.seed_manager.seeds[seed.seed_id]["buffer"].append(input_tensor)
@@ -255,9 +253,7 @@ class TestSoftLandingGradientIsolation:
         seed._set_state("active")
 
         # Forward pass with gradient tracking
-        input_tensor = torch.randn(
-            TestConstants.SMALL_TENSOR_BATCH, model.input_layer.in_features, requires_grad=True
-        )
+        input_tensor = torch.randn(TestConstants.SMALL_TENSOR_BATCH, model.input_layer.in_features, requires_grad=True)
         output = model(input_tensor)
 
         # Compute loss and backward pass
@@ -285,9 +281,7 @@ class TestSoftLandingGradientIsolation:
         seeds[1]._set_state("active")  # active state
 
         # Forward pass
-        input_tensor = torch.randn(
-            TestConstants.SMALL_TENSOR_BATCH, model.input_layer.in_features, requires_grad=True
-        )
+        input_tensor = torch.randn(TestConstants.SMALL_TENSOR_BATCH, model.input_layer.in_features, requires_grad=True)
         output = model(input_tensor)
 
         # Loss and backward
@@ -297,9 +291,7 @@ class TestSoftLandingGradientIsolation:
         # Training seed should not affect backbone gradients
         # Active seed should contribute to gradients
         backbone_has_grads = any(
-            p.grad is not None
-            for name, p in model.named_parameters()
-            if "seed" not in name and "child" not in name
+            p.grad is not None for name, p in model.named_parameters() if "seed" not in name and "child" not in name
         )
 
         # Should have gradients due to active seed
@@ -354,9 +346,7 @@ class TestSoftLandingBufferManagement:
 
         # Ensure batch doesn't exceed limit
         if batch.size(0) > TestConstants.BUFFER_SIZE_LIMIT:
-            idx = torch.randperm(batch.size(0), device=batch.device)[
-                : TestConstants.BUFFER_SIZE_LIMIT
-            ]
+            idx = torch.randperm(batch.size(0), device=batch.device)[: TestConstants.BUFFER_SIZE_LIMIT]
             batch = batch[idx]
 
         assert batch.shape[0] <= TestConstants.BUFFER_SIZE_LIMIT
@@ -427,9 +417,7 @@ class TestSoftLandingErrorHandling:
         seed = configured_seed
         seed.initialize_child()
 
-        nan_input = torch.full(
-            (TestConstants.DEFAULT_BATCH_SIZE, TestConstants.DEFAULT_DIM), float("nan")
-        )
+        nan_input = torch.full((TestConstants.DEFAULT_BATCH_SIZE, TestConstants.DEFAULT_DIM), float("nan"))
 
         # Training should handle NaN input gracefully
         try:
@@ -446,9 +434,7 @@ class TestSoftLandingErrorHandling:
         seed._set_state("active")  # State where child network is used
 
         # Create input with wrong dimensions
-        wrong_dim_input = torch.randn(
-            TestConstants.DEFAULT_BATCH_SIZE, TestConstants.DEFAULT_DIM + 5
-        )
+        wrong_dim_input = torch.randn(TestConstants.DEFAULT_BATCH_SIZE, TestConstants.DEFAULT_DIM + 5)
 
         # Should raise appropriate error for dimension mismatch
         with pytest.raises(RuntimeError, match="size|dimension|shape"):
@@ -589,10 +575,7 @@ class TestSoftLandingIntegration:
 
     def test_concurrent_state_transitions(self, seed_manager):
         """Test thread safety during concurrent state transitions."""
-        seeds = [
-            SentinelSeed(f"concurrent_seed_{i}", TestConstants.DEFAULT_DIM, seed_manager)
-            for i in range(3)
-        ]
+        seeds = [SentinelSeed(f"concurrent_seed_{i}", TestConstants.DEFAULT_DIM, seed_manager) for i in range(3)]
 
         results = []
 
@@ -607,10 +590,7 @@ class TestSoftLandingIntegration:
                 results.append(f"error_{seed.seed_id}_{e}")
 
         # Create concurrent transitions
-        threads = [
-            threading.Thread(target=transition_worker, args=(seeds[i], "training"))
-            for i in range(len(seeds))
-        ]
+        threads = [threading.Thread(target=transition_worker, args=(seeds[i], "training")) for i in range(len(seeds))]
 
         # Execute concurrently
         for t in threads:

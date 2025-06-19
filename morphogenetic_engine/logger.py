@@ -116,32 +116,29 @@ class ExperimentLogger:
                 {"seed_id": event.data.get("seed_id"), "epoch": event.epoch},
             ),
             EventType.BLENDING_PROGRESS: (
-                self.dashboard.update_seed, # Can reuse update_seed for this
+                self.dashboard.update_seed,  # Can reuse update_seed for this
                 {
                     "seed_id": event.data.get("seed_id"),
                     "state": "blending",
                     "alpha": event.data.get("alpha", 0.0),
-                    "from_state": "germinated"
-                }
+                    "from_state": "germinated",
+                },
             ),
             EventType.EXPERIMENT_END: (
                 self.dashboard.add_live_event,
                 {"event_type": "INFO", "message": "Experiment Finished", "data": {}},
-            )
+            ),
         }
 
         handler, kwargs = event_map.get(event.event_type, (None, None))
 
-        if handler:
+        if handler and kwargs and isinstance(kwargs, dict):
             # Filter out None values from kwargs to avoid passing them
             handler(**{k: v for k, v in kwargs.items() if v is not None})
-        
+
         # Also send the raw event for historical logging in the panel
-        self.dashboard.add_live_event(
-            event_type=event.event_type.value.upper(),
-            message=event.message,
-            data=event.data
-        )
+        if self.dashboard:
+            self.dashboard.add_live_event(event_type=event.event_type.value.upper(), message=event.message, data=event.data)
 
     # ------------------------------------------------------------------
     def log_experiment_start(self) -> None:
@@ -271,9 +268,9 @@ class ExperimentLogger:
         ts = datetime.fromtimestamp(event.timestamp).strftime("%Y-%m-%d %H:%M:%S")
         event_name = event.event_type.value.upper()
         message = f"[{ts}] {event_name}: {event.message} - {event.data}"
-        
+
         # If dashboard is available, send there instead of printing
-        if hasattr(self, 'dashboard') and self.dashboard is not None:
+        if hasattr(self, "dashboard") and self.dashboard is not None:
             self.dashboard.add_log_message(message)
         else:
             print(message)

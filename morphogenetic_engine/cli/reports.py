@@ -35,9 +35,7 @@ class ReportsCLI:
 
         # Summary command
         summary_parser = subparsers.add_parser("summary", help="Show experiment summary")
-        summary_parser.add_argument(
-            "--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP
-        )
+        summary_parser.add_argument("--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP)
         summary_parser.add_argument(
             "--metric",
             "-m",
@@ -45,15 +43,11 @@ class ReportsCLI:
             default="val_acc",
             help="Metric to focus on (default: val_acc)",
         )
-        summary_parser.add_argument(
-            "--top", "-t", type=int, default=10, help="Number of top results to show (default: 10)"
-        )
+        summary_parser.add_argument("--top", "-t", type=int, default=10, help="Number of top results to show (default: 10)")
 
         # Analysis command
         analysis_parser = subparsers.add_parser("analysis", help="Detailed parameter analysis")
-        analysis_parser.add_argument(
-            "--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP
-        )
+        analysis_parser.add_argument("--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP)
         analysis_parser.add_argument(
             "--metric",
             "-m",
@@ -81,9 +75,7 @@ class ReportsCLI:
 
         # Export command
         export_parser = subparsers.add_parser("export", help="Export results to different formats")
-        export_parser.add_argument(
-            "--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP
-        )
+        export_parser.add_argument("--sweep-dir", "-d", type=Path, required=True, help=PATH_TO_SWEEP_RESULTS_DIR_HELP)
         export_parser.add_argument(
             "--format",
             "-f",
@@ -91,9 +83,7 @@ class ReportsCLI:
             default="html",
             help="Export format (default: html)",
         )
-        export_parser.add_argument(
-            "--output", "-o", type=Path, help="Output file path (default: auto-generated)"
-        )
+        export_parser.add_argument("--output", "-o", type=Path, help="Output file path (default: auto-generated)")
 
         return parser
 
@@ -101,9 +91,7 @@ class ReportsCLI:
         """Show a summary of sweep results."""
         try:
             if not args.sweep_dir.exists():
-                self.console.print(
-                    f"[bold red]Sweep directory not found: {args.sweep_dir}[/bold red]"
-                )
+                self.console.print(f"[bold red]Sweep directory not found: {args.sweep_dir}[/bold red]")
                 return 1
 
             # Load results
@@ -116,9 +104,7 @@ class ReportsCLI:
                     summary_data = json.load(f)
                     results.results = summary_data.get("results", [])
             else:
-                self.console.print(
-                    "[yellow]No summary file found, looking for individual result files...[/yellow]"
-                )
+                self.console.print("[yellow]No summary file found, looking for individual result files...[/yellow]")
                 # Try to load individual result files
                 result_files = list(args.sweep_dir.glob("result_*.json"))
                 if result_files:
@@ -151,9 +137,7 @@ class ReportsCLI:
         """Show detailed parameter analysis."""
         try:
             if not args.sweep_dir.exists():
-                self.console.print(
-                    f"[bold red]Sweep directory not found: {args.sweep_dir}[/bold red]"
-                )
+                self.console.print(f"[bold red]Sweep directory not found: {args.sweep_dir}[/bold red]")
                 return 1
 
             results = SweepResults(args.sweep_dir)

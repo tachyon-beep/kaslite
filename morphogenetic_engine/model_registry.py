@@ -71,9 +71,7 @@ class ModelRegistry:
 
             # Update version description (non-critical, don't fail if this doesn't work)
             try:
-                self.client.update_model_version(
-                    name=model_name, version=model_version.version, description=description
-                )
+                self.client.update_model_version(name=model_name, version=model_version.version, description=description)
             except Exception as e:  # pylint: disable=broad-except
                 logger.warning("Failed to update model description: %s", e)
                 # Continue anyway - the model registration succeeded
@@ -120,9 +118,7 @@ class ModelRegistry:
                 logger.warning("No model versions found for %s", model_name)
                 return None
 
-            best_version, best_metric = self._find_best_version(
-                versions, metric_name, higher_is_better
-            )
+            best_version, best_metric = self._find_best_version(versions, metric_name, higher_is_better)
 
             if best_version:
                 logger.info(
@@ -158,9 +154,7 @@ class ModelRegistry:
 
         return versions
 
-    def _find_best_version(
-        self, versions: List[ModelVersion], metric_name: str, higher_is_better: bool
-    ):
+    def _find_best_version(self, versions: List[ModelVersion], metric_name: str, higher_is_better: bool):
         """Find the best version from a list based on a metric."""
         best_version = None
         best_metric = float("-inf") if higher_is_better else float("inf")
@@ -289,9 +283,7 @@ class ModelRegistry:
             )
             try:
                 # Try with string version first
-                self.client.set_registered_model_alias(
-                    name=model_name, alias=stage, version=version_str
-                )
+                self.client.set_registered_model_alias(name=model_name, alias=stage, version=version_str)
                 logger.debug(
                     "Successfully set alias %s for model %s version %s (string)",
                     stage,
@@ -301,9 +293,7 @@ class ModelRegistry:
             except (mlflow.exceptions.MlflowException, mlflow.exceptions.RestException) as e:
                 logger.debug("Failed with string version %s: %s. Trying integer...", version_str, e)
                 # Try with integer version
-                self.client.set_registered_model_alias(
-                    name=model_name, alias=stage, version=int(version_str)
-                )
+                self.client.set_registered_model_alias(name=model_name, alias=stage, version=int(version_str))
                 logger.debug(
                     "Successfully set alias %s for model %s version %s (integer)",
                     stage,
@@ -375,9 +365,7 @@ class ModelRegistry:
 
             # Get model version by alias instead of deprecated stage
             try:
-                model_version = self.client.get_model_version_by_alias(
-                    name=model_name, alias="Production"
-                )
+                model_version = self.client.get_model_version_by_alias(name=model_name, alias="Production")
                 return f"models:/{model_name}/{model_version.version}"
             except mlflow.exceptions.RestException:
                 # No Production alias exists

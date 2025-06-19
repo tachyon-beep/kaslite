@@ -37,9 +37,7 @@ def setup_experiment(args):
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     # Set device based on args and availability
-    device = torch.device(
-        args.device if args.device == "cpu" or torch.cuda.is_available() else "cpu"
-    )
+    device = torch.device(args.device if args.device == "cpu" or torch.cuda.is_available() else "cpu")
 
     # Create configuration
     config = create_experiment_config(args, device)
@@ -122,6 +120,7 @@ def get_dataloaders(args):
     # CIFAR-10 is already normalized to [0,1] in create_cifar10
     if args.problem_type != "cifar10":
         from sklearn.preprocessing import StandardScaler
+
         scaler = StandardScaler().fit(X)
         X = scaler.transform(X).astype(np.float32)
     else:
@@ -159,9 +158,7 @@ def setup_mlflow_logging(config: Dict[str, Any], slug: str) -> None:
         print(f"Warning: MLflow initialization failed: {e}")
 
 
-def log_mlflow_metrics_and_artifacts(
-    final_stats: Dict[str, Any], model, seed_manager, project_root: Path, slug: str
-) -> None:
+def log_mlflow_metrics_and_artifacts(final_stats: Dict[str, Any], model, seed_manager, project_root: Path, slug: str) -> None:
     """Log metrics, artifacts, and model to MLflow."""
     try:
         # Log metrics
@@ -172,9 +169,7 @@ def log_mlflow_metrics_and_artifacts(
             mlflow.log_metric("recovery_time", final_stats["recovery_time"])
 
         mlflow.log_metric("total_seeds", len(seed_manager.seeds))
-        active_seeds_count = sum(
-            1 for info in seed_manager.seeds.values() if info["module"].state == "active"
-        )
+        active_seeds_count = sum(1 for info in seed_manager.seeds.values() if info["module"].state == "active")
         mlflow.log_metric("active_seeds", active_seeds_count)
         mlflow.set_tag("seeds_activated", str(final_stats.get("seeds_activated", False)))
 
@@ -215,7 +210,7 @@ def _create_serializable_model(original_model):
             self.hidden_dim = hidden_dim
             self.output_dim = output_dim
             self.num_layers = num_layers
-            
+
             layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
             for _ in range(num_layers - 1):
                 layers.extend([nn.Linear(hidden_dim, hidden_dim), nn.ReLU()])
@@ -283,9 +278,7 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
                 total_epochs=args.warm_up_epochs,
             )
 
-            best_acc_phase1 = execute_phase_1(
-                config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f
-            )
+            best_acc_phase1 = execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f)
 
             logger.log_phase_transition(
                 epoch=args.warm_up_epochs,
@@ -302,15 +295,20 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
             log_final_summary(logger, final_stats, seed_manager, log_f)
             log_mlflow_metrics_and_artifacts(final_stats, model, seed_manager, project_root, slug)
             export_metrics_for_dvc(final_stats, slug, project_root)
-            
+
             print(f"Final best accuracy: {final_stats['best_acc']:.4f}")
             if final_stats.get("seeds_activated"):
                 print("Seeds were activated during this experiment.")
 
-            return {"run_id": run_id, "best_acc": final_stats["best_acc"], "seeds_activated": final_stats.get("seeds_activated", False)}
+            return {
+                "run_id": run_id,
+                "best_acc": final_stats["best_acc"],
+                "seeds_activated": final_stats.get("seeds_activated", False),
+            }
 
     except (RuntimeError, ValueError, KeyError) as e:
         import traceback
+
         traceback.print_exc()
         cleanup_monitoring()
         if mlflow.active_run():

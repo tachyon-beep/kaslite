@@ -13,13 +13,9 @@ from typing import Optional
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
 # Training Metrics
-EPOCHS_TOTAL = Counter(
-    "kaslite_epochs_total", "Number of training epochs completed", ["phase", "experiment_id"]
-)
+EPOCHS_TOTAL = Counter("kaslite_epochs_total", "Number of training epochs completed", ["phase", "experiment_id"])
 
-GERMINATIONS_TOTAL = Counter(
-    "kaslite_germinations_total", "Total seed germinations", ["experiment_id"]
-)
+GERMINATIONS_TOTAL = Counter("kaslite_germinations_total", "Total seed germinations", ["experiment_id"])
 
 PHASE_TRANSITIONS_TOTAL = Counter(
     "kaslite_phase_transitions_total",
@@ -28,24 +24,16 @@ PHASE_TRANSITIONS_TOTAL = Counter(
 )
 
 # Performance Metrics
-VALIDATION_LOSS = Gauge(
-    "kaslite_validation_loss", "Current validation loss", ["phase", "experiment_id"]
-)
+VALIDATION_LOSS = Gauge("kaslite_validation_loss", "Current validation loss", ["phase", "experiment_id"])
 
-VALIDATION_ACCURACY = Gauge(
-    "kaslite_validation_accuracy", "Current validation accuracy", ["phase", "experiment_id"]
-)
+VALIDATION_ACCURACY = Gauge("kaslite_validation_accuracy", "Current validation accuracy", ["phase", "experiment_id"])
 
 TRAINING_LOSS = Gauge("kaslite_training_loss", "Current training loss", ["phase", "experiment_id"])
 
-BEST_ACCURACY = Gauge(
-    "kaslite_best_accuracy", "Best validation accuracy achieved", ["experiment_id"]
-)
+BEST_ACCURACY = Gauge("kaslite_best_accuracy", "Best validation accuracy achieved", ["experiment_id"])
 
 # Seed-specific Metrics
-SEED_ALPHA = Gauge(
-    "kaslite_seed_alpha", "Current alpha blending value for each seed", ["seed_id", "experiment_id"]
-)
+SEED_ALPHA = Gauge("kaslite_seed_alpha", "Current alpha blending value for each seed", ["seed_id", "experiment_id"])
 
 SEED_DRIFT = Gauge("kaslite_seed_drift", "Interface drift per seed", ["seed_id", "experiment_id"])
 
@@ -74,18 +62,12 @@ KASMINA_PLATEAU_COUNTER = Gauge(
     ["experiment_id"],
 )
 
-KASMINA_PATIENCE = Gauge(
-    "kaslite_kasmina_patience", "Patience threshold for Kasmina controller", ["experiment_id"]
-)
+KASMINA_PATIENCE = Gauge("kaslite_kasmina_patience", "Patience threshold for Kasmina controller", ["experiment_id"])
 
 # Training Duration Metrics
-EPOCH_DURATION = Histogram(
-    "kaslite_epoch_duration_seconds", "Time taken to complete an epoch", ["phase", "experiment_id"]
-)
+EPOCH_DURATION = Histogram("kaslite_epoch_duration_seconds", "Time taken to complete an epoch", ["phase", "experiment_id"])
 
-EXPERIMENT_DURATION = Gauge(
-    "kaslite_experiment_duration_seconds", "Total experiment duration", ["experiment_id"]
-)
+EXPERIMENT_DURATION = Gauge("kaslite_experiment_duration_seconds", "Total experiment duration", ["experiment_id"])
 
 
 class PrometheusMonitor:
@@ -124,9 +106,7 @@ class PrometheusMonitor:
         EPOCHS_TOTAL.labels(phase=phase, experiment_id=self.experiment_id).inc()
         EPOCH_DURATION.labels(phase=phase, experiment_id=self.experiment_id).observe(epoch_duration)
 
-    def update_training_metrics(
-        self, phase: str, train_loss: float, val_loss: float, val_acc: float, best_acc: float
-    ):
+    def update_training_metrics(self, phase: str, train_loss: float, val_loss: float, val_acc: float, best_acc: float):
         """Update training performance metrics."""
         TRAINING_LOSS.labels(phase=phase, experiment_id=self.experiment_id).set(train_loss)
         VALIDATION_LOSS.labels(phase=phase, experiment_id=self.experiment_id).set(val_loss)
@@ -139,9 +119,7 @@ class PrometheusMonitor:
 
     def record_phase_transition(self, from_phase: str, to_phase: str):
         """Record a phase transition."""
-        PHASE_TRANSITIONS_TOTAL.labels(
-            from_phase=from_phase, to_phase=to_phase, experiment_id=self.experiment_id
-        ).inc()
+        PHASE_TRANSITIONS_TOTAL.labels(from_phase=from_phase, to_phase=to_phase, experiment_id=self.experiment_id).inc()
 
     def update_seed_metrics(
         self,
@@ -159,12 +137,8 @@ class PrometheusMonitor:
         SEED_STATE.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(state_value)
         SEED_ALPHA.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(alpha)
         SEED_DRIFT.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(drift)
-        SEED_HEALTH_SIGNAL.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(
-            health_signal
-        )
-        SEED_TRAINING_PROGRESS.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(
-            training_progress
-        )
+        SEED_HEALTH_SIGNAL.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(health_signal)
+        SEED_TRAINING_PROGRESS.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(training_progress)
 
     def update_kasmina_metrics(self, plateau_counter: int, patience: int):
         """Update Kasmina controller metrics."""

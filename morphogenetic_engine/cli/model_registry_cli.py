@@ -41,9 +41,7 @@ def register_model(args):
     if args.seeds_activated is not None:
         metrics["seeds_activated"] = args.seeds_activated
 
-    model_version = registry.register_best_model(
-        run_id=args.run_id, metrics=metrics, description=args.description, tags=tags
-    )
+    model_version = registry.register_best_model(run_id=args.run_id, metrics=metrics, description=args.description, tags=tags)
 
     if model_version:
         print(f"✅ Successfully registered model version {model_version.version}")
@@ -60,9 +58,7 @@ def promote_model(args):
     """Promote a model to a specific alias."""
     registry = ModelRegistry(args.model_name)
 
-    success = registry.promote_model(
-        version=args.version, stage=args.stage, archive_existing=args.archive_existing
-    )
+    success = registry.promote_model(version=args.version, stage=args.stage, archive_existing=args.archive_existing)
 
     if success:
         print(f"✅ Successfully promoted model {args.model_name} v{args.version} to {args.stage}")
@@ -93,9 +89,7 @@ def list_models(args):
     for version in versions:
         created_time = version.creation_timestamp
         if created_time:
-            created_str = datetime.datetime.fromtimestamp(created_time / 1000).strftime(
-                "%Y-%m-%d %H:%M:%S"
-            )
+            created_str = datetime.datetime.fromtimestamp(created_time / 1000).strftime("%Y-%m-%d %H:%M:%S")
         else:
             created_str = "Unknown"
 
@@ -174,9 +168,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument(
-        "--model-name", default="KasminaModel", help="Model name (default: KasminaModel)"
-    )
+    parser.add_argument("--model-name", default="KasminaModel", help="Model name (default: KasminaModel)")
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -186,16 +178,12 @@ def main():
     register_parser.add_argument("--description", help="Model description")
     register_parser.add_argument("--val-acc", type=float, help="Validation accuracy")
     register_parser.add_argument("--train-loss", type=float, help="Training loss")
-    register_parser.add_argument(
-        "--seeds-activated", type=bool, help="Whether seeds were activated"
-    )
+    register_parser.add_argument("--seeds-activated", type=bool, help="Whether seeds were activated")
     register_parser.add_argument("--tags", nargs="*", help="Tags in key=value format")
 
     # Promote command
     promote_parser = subparsers.add_parser("promote", help="Promote model to alias")
-    promote_parser.add_argument(
-        "stage", choices=["Staging", "Production", "Archived"], help="Target alias"
-    )
+    promote_parser.add_argument("stage", choices=["Staging", "Production", "Archived"], help="Target alias")
     promote_parser.add_argument("--version", help="Model version (defaults to best)")
     promote_parser.add_argument(
         "--no-archive",
@@ -211,9 +199,7 @@ def main():
 
     # Best command
     best_parser = subparsers.add_parser("best", help="Find best model by metric")
-    best_parser.add_argument(
-        "--metric", default="val_acc", help="Metric to optimize (default: val_acc)"
-    )
+    best_parser.add_argument("--metric", default="val_acc", help="Metric to optimize (default: val_acc)")
     best_parser.add_argument("--alias", help="Filter by alias")
     best_parser.add_argument("--stage", help="Filter by stage (deprecated, use --alias)")
     best_parser.add_argument(

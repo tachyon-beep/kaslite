@@ -149,9 +149,7 @@ class TestBaseNet:
 
         # Assert
         assert x.grad is not None, "Input tensor should have gradients"
-        assert not torch.allclose(
-            x.grad, torch.zeros_like(x.grad)
-        ), "Input gradients should not be all zero"
+        assert not torch.allclose(x.grad, torch.zeros_like(x.grad)), "Input gradients should not be all zero"
 
         # Check that backbone parameters (input_layer, layers, out) receive gradients
         backbone_params_with_grads = 0
@@ -160,18 +158,14 @@ class TestBaseNet:
         for name, param in net.named_parameters():
             if param.requires_grad:
                 if "seed" not in name:  # Backbone parameters
-                    assert (
-                        param.grad is not None
-                    ), f"Backbone parameter {name} should have gradients"
+                    assert param.grad is not None, f"Backbone parameter {name} should have gradients"
                     assert not torch.allclose(
                         param.grad, torch.zeros_like(param.grad)
                     ), f"Backbone gradient for {name} should not be all zero"
                     backbone_params_with_grads += 1
                 else:  # Seed parameters
                     # Dormant seeds should not receive gradients since they don't participate in forward pass
-                    if param.grad is not None and not torch.allclose(
-                        param.grad, torch.zeros_like(param.grad)
-                    ):
+                    if param.grad is not None and not torch.allclose(param.grad, torch.zeros_like(param.grad)):
                         seed_params_with_grads += 1
 
         assert backbone_params_with_grads > 0, "Backbone parameters should receive gradients"
@@ -198,9 +192,7 @@ class TestBaseNet:
 
         # Assert
         assert x.grad is not None, "Input tensor should have gradients"
-        assert not torch.allclose(
-            x.grad, torch.zeros_like(x.grad)
-        ), "Input gradients should not be all zero"
+        assert not torch.allclose(x.grad, torch.zeros_like(x.grad)), "Input gradients should not be all zero"
 
         # Check that both backbone and seed parameters receive gradients
         backbone_params_with_grads = 0
@@ -209,24 +201,18 @@ class TestBaseNet:
         for name, param in net.named_parameters():
             if param.requires_grad:
                 if "seed" not in name:  # Backbone parameters
-                    assert (
-                        param.grad is not None
-                    ), f"Backbone parameter {name} should have gradients"
+                    assert param.grad is not None, f"Backbone parameter {name} should have gradients"
                     backbone_params_with_grads += 1
                 elif "child" in name:  # Seed child network parameters
                     # Active seeds should receive gradients since they participate in forward pass
-                    assert (
-                        param.grad is not None
-                    ), f"Active seed parameter {name} should have gradients"
+                    assert param.grad is not None, f"Active seed parameter {name} should have gradients"
                     assert not torch.allclose(
                         param.grad, torch.zeros_like(param.grad)
                     ), f"Active seed gradient for {name} should not be all zero"
                     seed_child_params_with_grads += 1
 
         assert backbone_params_with_grads > 0, "Backbone parameters should receive gradients"
-        assert (
-            seed_child_params_with_grads > 0
-        ), "Active seed child parameters should receive gradients"
+        assert seed_child_params_with_grads > 0, "Active seed child parameters should receive gradients"
 
     def test_seed_integration_and_independence(self, default_base_net: BaseNet):
         """Test seed integration and that seed instances are distinct."""
@@ -253,12 +239,8 @@ class TestBaseNet:
                 if i != j:
                     seed1 = cast(SentinelSeed, seed1_module)
                     seed2 = cast(SentinelSeed, seed2_module)
-                    assert (
-                        seed1 is not seed2
-                    ), f"Seeds at index {i} and {j} should be different instances"
-                    assert (
-                        seed1.seed_id != seed2.seed_id
-                    ), f"Seed IDs {seed1.seed_id} and {seed2.seed_id} should be unique"
+                    assert seed1 is not seed2, f"Seeds at index {i} and {j} should be different instances"
+                    assert seed1.seed_id != seed2.seed_id, f"Seed IDs {seed1.seed_id} and {seed2.seed_id} should be unique"
 
     def test_architecture_consistency(self, default_base_net: BaseNet):
         """Test network architecture consistency."""
@@ -349,9 +331,7 @@ class TestMultiSeedBaseNet:
     """Test BaseNet with multiple seeds per layer using comprehensive parameterization."""
 
     @pytest.fixture
-    def multi_seed_net(
-        self, seed_manager: SeedManager, num_layers: int, seeds_per_layer: int
-    ) -> BaseNet:
+    def multi_seed_net(self, seed_manager: SeedManager, num_layers: int, seeds_per_layer: int) -> BaseNet:
         """Fixture for BaseNet with varying multi-seed configurations."""
         # Use larger hidden_dim for large configurations to test scalability
         hidden_dim = 128 if num_layers >= 20 else 32
@@ -405,9 +385,7 @@ class TestMultiSeedBaseNet:
             for i, seed1 in enumerate(all_seeds):
                 for j, seed2 in enumerate(all_seeds):
                     if i != j:
-                        assert (
-                            seed1 is not seed2
-                        ), f"Seeds at index {i} and {j} should be different instances"
+                        assert seed1 is not seed2, f"Seeds at index {i} and {j} should be different instances"
                         assert seed1.seed_id != seed2.seed_id, "Seed IDs should be unique"
 
     def test_get_seeds_for_layer_out_of_bounds(
@@ -488,13 +466,9 @@ class TestBaseNetArchitecturalProperties:
         def count_parameters(net):
             return sum(p.numel() for p in net.parameters())
 
-        net1 = BaseNet(
-            seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=1, hidden_dim=4
-        )
+        net1 = BaseNet(seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=1, hidden_dim=4)
 
-        net2 = BaseNet(
-            seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=3, hidden_dim=4
-        )
+        net2 = BaseNet(seed_manager=seed_manager, input_dim=2, num_layers=2, seeds_per_layer=3, hidden_dim=4)
 
         # Act
         params1 = count_parameters(net1)
@@ -507,9 +481,7 @@ class TestBaseNetArchitecturalProperties:
     def test_various_input_dimensions(self, seed_manager: SeedManager, input_dim: int):
         """Test networks with different input dimensions."""
         # Arrange
-        net = BaseNet(
-            seed_manager=seed_manager, input_dim=input_dim, num_layers=2, seeds_per_layer=2
-        )
+        net = BaseNet(seed_manager=seed_manager, input_dim=input_dim, num_layers=2, seeds_per_layer=2)
 
         # Act
         x = torch.randn(4, input_dim)
@@ -666,9 +638,7 @@ class TestMultiSeedBaseNetGradientFlow:
     """
 
     @pytest.fixture
-    def multi_seed_net(
-        self, seed_manager: SeedManager, num_layers: int, seeds_per_layer: int
-    ) -> BaseNet:
+    def multi_seed_net(self, seed_manager: SeedManager, num_layers: int, seeds_per_layer: int) -> BaseNet:
         """Fixture for BaseNet with varying multi-seed configurations for gradient flow testing."""
         return BaseNet(
             hidden_dim=32,  # Smaller hidden_dim for gradient flow testing
@@ -706,9 +676,7 @@ class TestMultiSeedBaseNetGradientFlow:
         # Assert
         assert x.grad is not None, "Input tensor should have gradients"
         # Use a more reasonable tolerance for large networks where gradients can be very small
-        assert not torch.allclose(
-            x.grad, torch.zeros_like(x.grad), atol=1e-8
-        ), "Input gradients should not be all zero"
+        assert not torch.allclose(x.grad, torch.zeros_like(x.grad), atol=1e-8), "Input gradients should not be all zero"
 
         # Check backbone parameters receive gradients, seed parameters should not
         backbone_params_with_grads = 0
@@ -717,24 +685,18 @@ class TestMultiSeedBaseNetGradientFlow:
         for name, param in net.named_parameters():
             if param.requires_grad:
                 if "seed" not in name:  # Backbone parameters
-                    assert (
-                        param.grad is not None
-                    ), f"Backbone parameter {name} should have gradients"
+                    assert param.grad is not None, f"Backbone parameter {name} should have gradients"
                     assert not torch.allclose(
                         param.grad, torch.zeros_like(param.grad), atol=1e-8
                     ), f"Backbone gradient for {name} should not be all zero"
                     backbone_params_with_grads += 1
                 else:  # Seed parameters
                     # Dormant seeds should not receive meaningful gradients
-                    if param.grad is not None and not torch.allclose(
-                        param.grad, torch.zeros_like(param.grad), atol=1e-8
-                    ):
+                    if param.grad is not None and not torch.allclose(param.grad, torch.zeros_like(param.grad), atol=1e-8):
                         seed_params_with_grads += 1
 
         assert backbone_params_with_grads > 0, "Backbone parameters should receive gradients"
-        assert (
-            seed_params_with_grads == 0
-        ), "Dormant seed parameters should not receive meaningful gradients"
+        assert seed_params_with_grads == 0, "Dormant seed parameters should not receive meaningful gradients"
 
     def test_gradient_flow_active_seeds(
         self,
@@ -770,9 +732,7 @@ class TestMultiSeedBaseNetGradientFlow:
 
         # Assert
         assert x.grad is not None, "Input tensor should have gradients"
-        assert not torch.allclose(
-            x.grad, torch.zeros_like(x.grad), atol=1e-8
-        ), "Input gradients should not be all zero"
+        assert not torch.allclose(x.grad, torch.zeros_like(x.grad), atol=1e-8), "Input gradients should not be all zero"
 
         # Check both backbone and activated seed parameters receive gradients
         backbone_params_with_grads = 0
@@ -781,21 +741,15 @@ class TestMultiSeedBaseNetGradientFlow:
         for name, param in net.named_parameters():
             if param.requires_grad:
                 if "seed" not in name:  # Backbone parameters
-                    assert (
-                        param.grad is not None
-                    ), f"Backbone parameter {name} should have gradients"
+                    assert param.grad is not None, f"Backbone parameter {name} should have gradients"
                     backbone_params_with_grads += 1
                 elif "child" in name:  # Seed child network parameters
                     # Active seeds should receive gradients
-                    assert (
-                        param.grad is not None
-                    ), f"Active seed parameter {name} should have gradients"
+                    assert param.grad is not None, f"Active seed parameter {name} should have gradients"
                     assert not torch.allclose(
                         param.grad, torch.zeros_like(param.grad), atol=1e-8
                     ), f"Active seed gradient for {name} should not be all zero"
                     seed_child_params_with_grads += 1
 
         assert backbone_params_with_grads > 0, "Backbone parameters should receive gradients"
-        assert (
-            seed_child_params_with_grads > 0
-        ), "Active seed child parameters should receive gradients"
+        assert seed_child_params_with_grads > 0, "Active seed child parameters should receive gradients"

@@ -28,13 +28,7 @@ from hypothesis import strategies as st
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
-from morphogenetic_engine.datasets import (
-    create_clusters,
-    create_complex_moons,
-    create_moons,
-    create_spheres,
-    create_spirals,
-)
+from morphogenetic_engine.datasets import create_clusters, create_complex_moons, create_moons, create_spheres, create_spirals
 
 # Constants to replace magic numbers
 DEFAULT_SAMPLES = 2000
@@ -55,9 +49,7 @@ def dataset_shape_validator() -> Callable:
             expected_samples,
             expected_dims,
         ), f"Expected X shape ({expected_samples}, {expected_dims}), got {X.shape}"
-        assert y.shape == (
-            expected_samples,
-        ), f"Expected y shape ({expected_samples},), got {y.shape}"
+        assert y.shape == (expected_samples,), f"Expected y shape ({expected_samples},), got {y.shape}"
         assert X.dtype == np.float32, f"Expected X dtype float32, got {X.dtype}"
         assert y.dtype == np.int64, f"Expected y dtype int64, got {y.dtype}"
 
@@ -82,9 +74,7 @@ def classification_validator() -> Callable:
     def _validate(y: np.ndarray, allow_single_class: bool = False) -> None:
         unique_labels = set(y)
         if allow_single_class:
-            assert unique_labels.issubset(
-                {0, 1}
-            ), f"Expected labels from {{0, 1}}, got {unique_labels}"
+            assert unique_labels.issubset({0, 1}), f"Expected labels from {{0, 1}}, got {unique_labels}"
             assert len(unique_labels) >= 1, f"Expected at least one class, got {unique_labels}"
         else:
             assert unique_labels == {0, 1}, f"Expected binary labels {{0, 1}}, got {unique_labels}"
@@ -169,12 +159,8 @@ class TestCreateSpirals:
         X, _ = create_spirals(n_samples=500, noise=0.1)
 
         # Data should be centered around origin with reasonable range
-        assert (
-            np.abs(X.mean()) < MAX_DATA_RANGE
-        ), f"Data mean {X.mean():.3f} should be within ±{MAX_DATA_RANGE}"
-        assert (
-            np.std(X) > MIN_VARIANCE_THRESHOLD
-        ), f"Data std {np.std(X):.3f} should be > {MIN_VARIANCE_THRESHOLD}"
+        assert np.abs(X.mean()) < MAX_DATA_RANGE, f"Data mean {X.mean():.3f} should be within ±{MAX_DATA_RANGE}"
+        assert np.std(X) > MIN_VARIANCE_THRESHOLD, f"Data std {np.std(X):.3f} should be > {MIN_VARIANCE_THRESHOLD}"
 
     def test_spiral_structure(self):
         """Test that generated data has spiral structure."""
@@ -289,9 +275,7 @@ class TestCreateComplexMoons:
 
         # Should have reasonable spread (combination of moons and clusters)
         assert X.std() > 0.5, f"Data std {X.std():.3f} should be > 0.5 for reasonable variance"
-        assert (
-            np.abs(X.mean()) < 2.0
-        ), f"Data mean {np.abs(X.mean()):.3f} should be < 2.0, not too far from origin"
+        assert np.abs(X.mean()) < 2.0, f"Data mean {np.abs(X.mean()):.3f} should be < 2.0, not too far from origin"
 
 
 class TestNewDatasets:
@@ -308,9 +292,7 @@ class TestNewDatasets:
         X, y = create_moons(n_samples=100, input_dim=4)
         dataset_shape_validator(X, y, 100, 4)
 
-    def test_create_moons_boundary_conditions(
-        self, dataset_shape_validator, binary_classification_validator
-    ):
+    def test_create_moons_boundary_conditions(self, dataset_shape_validator, binary_classification_validator):
         """Test moons dataset generation with boundary conditions."""
         # Test minimum samples
         X, y = create_moons(n_samples=2, input_dim=2)
@@ -402,9 +384,7 @@ class TestNewDatasets:
 
         # Test invalid radii format
         with pytest.raises(ValueError):
-            create_spheres(
-                sphere_count=2, sphere_size=50, sphere_radii="invalid,format", input_dim=3
-            )
+            create_spheres(sphere_count=2, sphere_size=50, sphere_radii="invalid,format", input_dim=3)
 
         # Test empty radii
         with pytest.raises(ValueError):
@@ -605,9 +585,7 @@ class TestParameterizedDatasets:
     def test_high_dimensional_padding(self, dataset_func, params, dataset_shape_validator):
         """Test high-dimensional padding across all dataset functions."""
         X, y = dataset_func(**params)
-        expected_samples = params.get(
-            "n_samples", params.get("cluster_count", 2) * params.get("cluster_size", 25)
-        )
+        expected_samples = params.get("n_samples", params.get("cluster_count", 2) * params.get("cluster_size", 25))
         dataset_shape_validator(X, y, expected_samples, params["input_dim"])
 
     @pytest.mark.parametrize(
@@ -646,9 +624,7 @@ class TestParameterizedDatasets:
         X2, y2 = dataset_func(**params)
 
         np.testing.assert_array_equal(X1, X2, f"{dataset_func.__name__} should be reproducible")
-        np.testing.assert_array_equal(
-            y1, y2, f"{dataset_func.__name__} labels should be reproducible"
-        )
+        np.testing.assert_array_equal(y1, y2, f"{dataset_func.__name__} labels should be reproducible")
 
 
 class TestAdvancedErrorHandling:
@@ -757,9 +733,7 @@ class TestPropertyBasedDatasets:
         # Ensure we have at least 2 total samples
         assume(cluster_count * cluster_size >= 2)
 
-        X, y = create_clusters(
-            cluster_count=cluster_count, cluster_size=cluster_size, input_dim=input_dim
-        )
+        X, y = create_clusters(cluster_count=cluster_count, cluster_size=cluster_size, input_dim=input_dim)
 
         # Shape properties
         expected_samples = cluster_count * cluster_size
@@ -839,16 +813,12 @@ class TestDocumentationExamples:
         assert X_multi.shape == (150, 2), "Shape should match total samples"
 
         # Example 3: Single sphere produces single-class output
-        X_sphere_single, y_sphere_single = create_spheres(
-            sphere_count=1, sphere_size=80, sphere_radii="2.0", input_dim=3
-        )
+        X_sphere_single, y_sphere_single = create_spheres(sphere_count=1, sphere_size=80, sphere_radii="2.0", input_dim=3)
         assert set(y_sphere_single) == {0}, "Single sphere always produces class 0"
         assert X_sphere_single.shape == (80, 3), "Shape should match expected"
 
         # Example 4: Multiple spheres produce binary classification
-        X_sphere_multi, y_sphere_multi = create_spheres(
-            sphere_count=4, sphere_size=25, sphere_radii="1,2,3,4", input_dim=3
-        )
+        X_sphere_multi, y_sphere_multi = create_spheres(sphere_count=4, sphere_size=25, sphere_radii="1,2,3,4", input_dim=3)
         assert set(y_sphere_multi) == {0, 1}, "Multiple spheres produce binary via modulo"
         assert X_sphere_multi.shape == (100, 3), "Shape should match total samples"
 

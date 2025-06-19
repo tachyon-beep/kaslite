@@ -3,29 +3,27 @@ Rich-powered CLI dashboard for real-time progress and metrics during morphogenet
 
 This is a simplified version, designed to be rebuilt.
 """
+
 from __future__ import annotations
+
 import time
 from collections import deque
-from typing import Any
+from typing import Any, cast
 
+from rich import box
 from rich.align import Align
 from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    TextColumn,
-    TimeRemainingColumn,
-)
+from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
 from rich.text import Text
-from rich import box
 
 
 class RichDashboard:
     """A Rich CLI dashboard for experiment monitoring with progress bars."""
+
     GRID_SIZE = 16
 
     # Seed Emojis
@@ -53,7 +51,7 @@ class RichDashboard:
         self.live: Live | None = None
         self._layout_initialized = False
         self.last_events: deque[str] = deque(maxlen=20)
-        self.seed_log_events: deque[str] = deque(maxlen=40) # Larger buffer for seed events
+        self.seed_log_events: deque[str] = deque(maxlen=40)  # Larger buffer for seed events
         self.seed_states: dict[str, dict[str, Any]] = {}
         self.latest_metrics: dict[str, Any] = {}
         self.previous_metrics: dict[str, Any] = {}
@@ -185,9 +183,7 @@ class RichDashboard:
 
     def _create_info_panel(self) -> Panel:
         """Generate the panel for experiment parameters."""
-        info_table = Table(
-            show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
-        )
+        info_table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1))
         info_table.add_column("Param", style="bold yellow")
         info_table.add_column("Value")
 
@@ -219,9 +215,7 @@ class RichDashboard:
             current_val = self.latest_metrics.get(metric)
             last_val = self.previous_metrics.get(metric)
 
-            current_str = (
-                f"{current_val:.4f}" if isinstance(current_val, float) else str(current_val)
-            )
+            current_str = f"{current_val:.4f}" if isinstance(current_val, float) else str(current_val)
             last_str = f"{last_val:.4f}" if isinstance(last_val, float) else "N/A"
 
             metrics_table.add_row(metric, current_str, last_str)
@@ -230,9 +224,7 @@ class RichDashboard:
 
     def _create_sparkline_panel(self) -> Panel:
         """Generate the panel for metric sparklines."""
-        sparkline_table = Table(
-            show_header=True, header_style="bold cyan", expand=True, box=box.MINIMAL
-        )
+        sparkline_table = Table(show_header=True, header_style="bold cyan", expand=True, box=box.MINIMAL)
         sparkline_table.add_column("Metric", style="cyan", no_wrap=True)
         sparkline_table.add_column("Trend / Sparkline", style="green", ratio=2)
         sparkline_table.add_column("Average", justify="right")
@@ -258,13 +250,9 @@ class RichDashboard:
         content = Text.from_markup(f"[bold]Experiment Log:[/bold]\n{event_text}")
         return Panel(content, title="Event Log", border_style="blue")
 
-    def _get_seed_states_by_layer(
-        self, num_layers: int, seeds_per_layer: int
-    ) -> dict[int, list[str | None]]:
+    def _get_seed_states_by_layer(self, num_layers: int, seeds_per_layer: int) -> dict[int, list[str | None]]:
         """Parse seed_states and organize them by layer and seed index."""
-        layer_seeds: dict[int, list[str | None]] = {
-            i: [None] * seeds_per_layer for i in range(num_layers)
-        }
+        layer_seeds: dict[int, list[str | None]] = {i: [None] * seeds_per_layer for i in range(num_layers)}
         for seed_id, data in self.seed_states.items():
             if not seed_id.startswith("L") or "_" not in seed_id:
                 continue
@@ -278,9 +266,7 @@ class RichDashboard:
                 continue  # Ignore malformed IDs
         return layer_seeds
 
-    def _get_network_strain_states_by_layer(
-        self, num_layers: int, seeds_per_layer: int
-    ) -> dict[int, list[str | None]]:
+    def _get_network_strain_states_by_layer(self, num_layers: int, seeds_per_layer: int) -> dict[int, list[str | None]]:
         """
         Parse and organize network strain data by layer and seed index.
         NOTE: This is a placeholder. It currently returns the same data as
@@ -332,14 +318,10 @@ class RichDashboard:
         grid_table.add_column("L#", style="dim", width=3, justify="center")
         grid_table.add_column("│", width=1, no_wrap=True, style="dim")
         for i in range(self.GRID_SIZE):
-            grid_table.add_column(
-                str(i + 1), justify="center", no_wrap=True, style="bold"
-            )
+            grid_table.add_column(str(i + 1), justify="center", no_wrap=True, style="bold")
 
         for i in range(self.GRID_SIZE):
-            row = self._create_grid_row(
-                i, num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji
-            )
+            row = self._create_grid_row(i, num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji)
             grid_table.add_row(*row)
         return grid_table
 
@@ -365,9 +347,7 @@ class RichDashboard:
         empty_emoji = self.EMPTY_CELL_EMOJI
         layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        grid_table = self._create_grid_table(
-            num_layers, seeds_per_layer, layer_seeds, emoji_map, empty_emoji
-        )
+        grid_table = self._create_grid_table(num_layers, seeds_per_layer, layer_seeds, emoji_map, empty_emoji)
 
         return Panel(
             Align.center(grid_table, vertical="middle"),
@@ -377,19 +357,13 @@ class RichDashboard:
 
     def _create_seeds_training_table(self) -> Table:
         """Generate the table for seeds currently in training."""
-        seeds_table = Table(
-            show_header=True, header_style="bold green", expand=True, box=box.MINIMAL
-        )
+        seeds_table = Table(show_header=True, header_style="bold green", expand=True, box=box.MINIMAL)
         seeds_table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=4)
         seeds_table.add_column("Train Loss", justify="center", ratio=5)
         seeds_table.add_column("Val Loss", justify="center", ratio=5)
         seeds_table.add_column("Val Acc", justify="center", ratio=5)
 
-        high_perf_seeds = {
-            sid: d
-            for sid, d in self.seed_states.items()
-            if d.get("state") in ["active", "blending"]
-        }
+        high_perf_seeds = {sid: d for sid, d in self.seed_states.items() if d.get("state") in ["active", "blending"]}
 
         # Sort by validation accuracy (descending) if available, otherwise by ID
         sorted_seeds = sorted(
@@ -401,9 +375,9 @@ class RichDashboard:
         for seed_id, data in sorted_seeds:
             seeds_table.add_row(
                 seed_id[:12] + "...",
-                (f"{data.get('train_loss'):.4f}" if data.get('train_loss') is not None else "N/A"),
-                (f"{data.get('val_loss'):.4f}" if data.get('val_loss') is not None else "N/A"),
-                (f"{data.get('val_acc') * 100:.1f}%" if data.get('val_acc') is not None else "N/A"),
+                (f"{data.get('train_loss'):.4f}" if data.get("train_loss") is not None else "N/A"),
+                (f"{data.get('val_loss'):.4f}" if data.get("val_loss") is not None else "N/A"),
+                (f"{(val_acc * 100):.1f}%" if (val_acc := data.get("val_acc")) is not None else "N/A"),
             )
 
         return seeds_table
@@ -423,9 +397,7 @@ class RichDashboard:
 
     def _create_tamiyo_panel(self) -> Panel:
         """Generate the panel for Tamiyo's status."""
-        tamiyo_table = Table(
-            show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
-        )
+        tamiyo_table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1))
         tamiyo_table.add_column("Metric", style=self.STYLE_BOLD_BLUE)
         tamiyo_table.add_column("Value")
 
@@ -444,9 +416,7 @@ class RichDashboard:
 
     def _create_karn_panel(self) -> Panel:
         """Generate the panel for Karn's status."""
-        karn_table = Table(
-            show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
-        )
+        karn_table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1))
         karn_table.add_column("Metric", style=self.STYLE_BOLD_BLUE)
         karn_table.add_column("Value")
 
@@ -461,9 +431,7 @@ class RichDashboard:
 
     def _create_crucible_panel(self) -> Panel:
         """Generate the panel for Crucible's status."""
-        crucible_table = Table(
-            show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
-        )
+        crucible_table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1))
         crucible_table.add_column("Metric", style=self.STYLE_BOLD_BLUE)
         crucible_table.add_column("Value")
 
@@ -497,20 +465,16 @@ class RichDashboard:
             "fired": self.STRAIN_FIRED_EMOJI,
             # Mapping seed states to strain for placeholder visualization
             "active": self.STRAIN_LOW_EMOJI,  # Low strain
-            "blending": self.STRAIN_MEDIUM_EMOJI, # Medium strain
-            "germinated": self.STRAIN_NONE_EMOJI, # No strain
-            "dormant": self.STRAIN_NONE_EMOJI, # No strain
+            "blending": self.STRAIN_MEDIUM_EMOJI,  # Medium strain
+            "germinated": self.STRAIN_NONE_EMOJI,  # No strain
+            "dormant": self.STRAIN_NONE_EMOJI,  # No strain
         }
         empty_emoji = self.EMPTY_CELL_EMOJI
 
         # NOTE: This currently uses seed data as a placeholder for strain data.
-        layer_data = self._get_network_strain_states_by_layer(
-            num_layers, seeds_per_layer
-        )
+        layer_data = self._get_network_strain_states_by_layer(num_layers, seeds_per_layer)
 
-        grid_table = self._create_grid_table(
-            num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji
-        )
+        grid_table = self._create_grid_table(num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji)
 
         return Panel(
             Align.center(grid_table, vertical="middle"),
@@ -617,9 +581,7 @@ class RichDashboard:
         log_data = {"alpha": f"{alpha:.2f}"}
         if grad_norm is not None:
             log_data["grad"] = f"{grad_norm:.2e}"
-        self.add_seed_log_event(
-            "seed", f"Seed {seed_id[:12]}...: {from_state} -> {state}", log_data
-        )
+        self.add_seed_log_event("seed", f"Seed {seed_id[:12]}...: {from_state} -> {state}", log_data)
 
         # Update the internal state for the right panels
         new_data = {
@@ -631,18 +593,14 @@ class RichDashboard:
             "patience": patience,
         }
         # Merge with existing data to preserve fields that aren't updated in this event
-        self.seed_states.setdefault(seed_id, {}).update(
-            {k: v for k, v in new_data.items() if v is not None}
-        )
+        self.seed_states.setdefault(seed_id, {}).update({k: v for k, v in new_data.items() if v is not None})
 
         if self.layout:
             self.layout["kasima_panel"].update(self._create_kasima_panel())
             self.layout["seed_box_panel"].update(self._create_seed_box_panel())
             self.layout["network_strain_panel"].update(self._create_network_strain_panel())
 
-    def show_phase_transition(
-        self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None
-    ):
+    def show_phase_transition(self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None):
         """Handle phase transition event and reset phase progress bar."""
         self.add_live_event("phase_transition", f"Moving to {to_phase}", {"from": from_phase, "epoch": epoch})
 
@@ -695,8 +653,8 @@ def demo_dashboard():
         "learning_rate": 0.001,
         "seed": 42,
     }
-    num_layers: int = params.get("num_layers", 0)
-    seeds_per_layer: int = params.get("seeds_per_layer", 0)
+    num_layers: int = cast(int, params.get("num_layers", 0))
+    seeds_per_layer: int = cast(int, params.get("seeds_per_layer", 0))
     print("Starting dashboard demo...")
     with RichDashboard(console, experiment_params=params) as dashboard:
         dashboard.add_live_event("INFO", "Dashboard Initialized", {"run_id": "demo_run_123"})
@@ -730,9 +688,7 @@ def demo_dashboard():
         time.sleep(0.5)
 
         for i in range(50, 100):
-            dashboard.update_progress(
-                i, {"train_loss": 0.5 - (i - 50) * 0.008, "val_acc": 0.7 + (i - 50) * 0.003}
-            )
+            dashboard.update_progress(i, {"train_loss": 0.5 - (i - 50) * 0.008, "val_acc": 0.7 + (i - 50) * 0.003})
             if i == 75:
                 dashboard.update_seed("L1_S1", "blending", from_state="blending", alpha=0.8)
                 dashboard.add_seed_log_event("blending", "Seed L1_S1 blend factor increased.", {"alpha": 0.8})
@@ -744,7 +700,7 @@ def demo_dashboard():
 
         # Germinate a seed
         dashboard.update_seed("L1_S1", "germinated", from_state="blending")
-        dashboard.show_germination_event("L1_S1", epoch=101) # Specific event for seed log
+        dashboard.show_germination_event("L1_S1", epoch=101)  # Specific event for seed log
         time.sleep(0.5)
 
         # Prune a seed
@@ -757,11 +713,8 @@ def demo_dashboard():
         dashboard.add_seed_log_event("error", "Seed L0_S0 failed during update.", {"details": "NaN loss detected"})
         time.sleep(0.5)
 
-
         for i in range(100, 200):
-            dashboard.update_progress(
-                i, {"train_loss": 0.1 - (i - 100) * 0.0005, "val_acc": 0.85 + (i - 100) * 0.0001}
-            )
+            dashboard.update_progress(i, {"train_loss": 0.1 - (i - 100) * 0.0005, "val_acc": 0.85 + (i - 100) * 0.0001})
             time.sleep(0.02)
 
     console.print("\n[bold green]✅ Demo completed![/bold green]")

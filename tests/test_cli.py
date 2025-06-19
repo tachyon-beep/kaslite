@@ -196,9 +196,7 @@ class TestModelIntegration:
         assert len(model.layers) == 5
         assert len(model.all_seeds) == 15
 
-    @pytest.mark.parametrize(
-        "dataset_type", ["moons", "spirals", "clusters", "complex_moons", "spheres"]
-    )
+    @pytest.mark.parametrize("dataset_type", ["moons", "spirals", "clusters", "complex_moons", "spheres"])
     def test_model_building_across_datasets(self, dataset_type: str, device: torch.device):
         """Test that model building works consistently across dataset types."""
         args = MockArgs.for_dataset(dataset_type)

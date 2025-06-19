@@ -25,9 +25,7 @@ def assert_seed_state(seed_manager: SeedManager, seed_id: str, expected_state: s
         raise KeyError(f"Seed {seed_id} not found in manager")
 
     actual_state = seed_manager.seeds[seed_id]["module"].state
-    assert (
-        actual_state == expected_state
-    ), f"Expected seed {seed_id} state {expected_state}, got {actual_state}"
+    assert actual_state == expected_state, f"Expected seed {seed_id} state {expected_state}, got {actual_state}"
 
 
 def assert_valid_experiment_slug(slug: str) -> None:
@@ -61,9 +59,7 @@ def assert_valid_experiment_slug(slug: str) -> None:
     parts = remaining.split("_")
 
     # Now we should have: dim{N}, {device}, h{hidden}, bs{batch}, lr{lr}, pt{thresh}, dw{drift}
-    assert (
-        len(parts) >= 7
-    ), f"Slug should have at least 7 parts after problem type, got {len(parts)}: {slug}"
+    assert len(parts) >= 7, f"Slug should have at least 7 parts after problem type, got {len(parts)}: {slug}"
 
     assert parts[0].startswith("dim"), f"Expected dim prefix, got: {parts[0]}"
 
@@ -104,16 +100,12 @@ def assert_valid_metrics_json(metrics: dict[str, Any]) -> None:
     # Validate optional fields if present
     if "final_acc" in metrics:
         final_acc = metrics["final_acc"]
-        assert isinstance(
-            final_acc, (int, float)
-        ), f"final_acc should be numeric, got {type(final_acc)}"
+        assert isinstance(final_acc, (int, float)), f"final_acc should be numeric, got {type(final_acc)}"
         assert 0.0 <= final_acc <= 1.0, f"final_acc should be between 0 and 1, got: {final_acc}"
 
     if "training_time" in metrics:
         training_time = metrics["training_time"]
-        assert isinstance(
-            training_time, (int, float)
-        ), f"training_time should be numeric, got {type(training_time)}"
+        assert isinstance(training_time, (int, float)), f"training_time should be numeric, got {type(training_time)}"
         assert training_time >= 0.0, f"training_time should be non-negative, got: {training_time}"
 
 
@@ -134,9 +126,7 @@ def assert_log_file_format(log_content: str) -> None:
     assert len(lines) > 0, "Log file should not be empty"
 
     # Check for header
-    assert lines[0].startswith(
-        "# Morphogenetic Architecture Experiment Log"
-    ), "Log should start with experiment header"
+    assert lines[0].startswith("# Morphogenetic Architecture Experiment Log"), "Log should start with experiment header"
 
     # Check for CSV header
     csv_header_found = False
@@ -162,14 +152,10 @@ def assert_accuracy_range(accuracy: float, min_acc: float = 0.0, max_acc: float 
     if not isinstance(accuracy, (int, float)):
         raise TypeError(f"Expected numeric accuracy, got {type(accuracy)}")
 
-    assert (
-        min_acc <= accuracy <= max_acc
-    ), f"Accuracy {accuracy} not in range [{min_acc}, {max_acc}]"
+    assert min_acc <= accuracy <= max_acc, f"Accuracy {accuracy} not in range [{min_acc}, {max_acc}]"
 
 
-def assert_convergence_behavior(
-    accuracies: list[float], min_final_acc: float = 0.8, tolerance: float = 0.05
-) -> None:
+def assert_convergence_behavior(accuracies: list[float], min_final_acc: float = 0.8, tolerance: float = 0.05) -> None:
     """Assert that training shows proper convergence behavior.
 
     Args:
@@ -194,6 +180,4 @@ def assert_convergence_behavior(
     if len(accuracies) >= 10:
         early_avg = sum(accuracies[:5]) / 5
         late_avg = sum(accuracies[-5:]) / 5
-        assert (
-            late_avg >= early_avg - tolerance
-        ), f"No improvement detected: early={early_avg:.3f}, late={late_avg:.3f}"
+        assert late_avg >= early_avg - tolerance, f"No improvement detected: early={early_avg:.3f}, late={late_avg:.3f}"

@@ -42,9 +42,7 @@ def create_test_tensor(
     return torch.randn(shape, dtype=dtype, device=device, requires_grad=requires_grad)
 
 
-def create_test_input(
-    batch_size: int = 4, input_dim: int = 2, seed: int | None = None
-) -> torch.Tensor:
+def create_test_input(batch_size: int = 4, input_dim: int = 2, seed: int | None = None) -> torch.Tensor:
     """Create test input tensor.
 
     Args:
@@ -66,9 +64,7 @@ def create_test_input(
     return create_test_tensor((batch_size, input_dim), seed=seed)
 
 
-def create_test_target(
-    batch_size: int = 4, num_classes: int = 2, seed: int | None = None
-) -> torch.Tensor:
+def create_test_target(batch_size: int = 4, num_classes: int = 2, seed: int | None = None) -> torch.Tensor:
     """Create test target tensor for classification.
 
     Args:
@@ -130,18 +126,14 @@ def assert_tensor_properties(
         assert_tensor_shape(tensor, expected_shape)
 
     if expected_dtype is not None:
-        assert (
-            tensor.dtype == expected_dtype
-        ), f"Expected dtype {expected_dtype}, got {tensor.dtype}"
+        assert tensor.dtype == expected_dtype, f"Expected dtype {expected_dtype}, got {tensor.dtype}"
 
     if expected_device is not None:
         device_str = str(tensor.device)
         assert device_str == expected_device, f"Expected device {expected_device}, got {device_str}"
 
     if requires_grad is not None:
-        assert (
-            tensor.requires_grad == requires_grad
-        ), f"Expected requires_grad {requires_grad}, got {tensor.requires_grad}"
+        assert tensor.requires_grad == requires_grad, f"Expected requires_grad {requires_grad}, got {tensor.requires_grad}"
 
 
 def assert_tensors_close(

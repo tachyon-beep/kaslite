@@ -96,9 +96,7 @@ class SeedManager:
             }
         )
 
-    def record_transition(
-        self, seed_id: str, old_state: str, new_state: str, epoch: int = 0
-    ) -> None:
+    def record_transition(self, seed_id: str, old_state: str, new_state: str, epoch: int = 0) -> None:
         """Record a state change for analytics and log the event."""
         self.germination_log.append(
             {

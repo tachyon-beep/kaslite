@@ -162,9 +162,7 @@ class TestExperimentConfiguration:
 
     def test_create_experiment_config_preserves_args_values(self):
         """Test that configuration preserves all argument values correctly."""
-        args = create_mock_args(
-            problem_type="clusters", n_samples=2000, lr=0.01, hidden_dim=256, acc_threshold=0.99
-        )
+        args = create_mock_args(problem_type="clusters", n_samples=2000, lr=0.01, hidden_dim=256, acc_threshold=0.99)
         device = "cuda"
 
         config = utils.create_experiment_config(args, device)

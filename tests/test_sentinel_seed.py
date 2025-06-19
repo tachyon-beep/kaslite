@@ -174,9 +174,7 @@ class TestSentinelSeedInitialization:
         deadline=None,  # Disable deadline for this test
         max_examples=10,  # Reduce number of examples for performance
     )
-    def test_initialization_property_based(
-        self, dim, blend_steps, progress_thresh, mock_seed_manager
-    ):
+    def test_initialization_property_based(self, dim, blend_steps, progress_thresh, mock_seed_manager):
         """Test initialization works correctly for any valid parameters."""
         seed = SentinelSeed(
             "test_seed",
@@ -242,9 +240,7 @@ class TestSentinelSeedStateTransitions:
             ("training", "training", False),  # Redundant transition
         ],
     )
-    def test_state_transitions_parametrized(
-        self, configured_seed, mock_seed_manager, initial_state, target_state, should_log
-    ):
+    def test_state_transitions_parametrized(self, configured_seed, mock_seed_manager, initial_state, target_state, should_log):
         """Test various state transitions systematically."""
         seed = configured_seed
         seed.state = initial_state  # Set initial state directly
@@ -334,9 +330,7 @@ class TestSentinelSeedTraining:
         # Progress should not change with empty input
         assert seed.training_progress == initial_progress
 
-    def test_training_progress_and_state_transition(
-        self, configured_seed, sample_tensor, mock_seed_manager
-    ):
+    def test_training_progress_and_state_transition(self, configured_seed, sample_tensor, mock_seed_manager):
         """Test training progress tracking and automatic state transitions."""
         seed = configured_seed
         seed.initialize_child()
@@ -362,9 +356,7 @@ class TestSentinelSeedTraining:
         seed.initialize_child()
 
         # Mock optimizer step to raise exception
-        with mocker.patch.object(
-            seed.child_optim, "step", side_effect=RuntimeError("Optimizer failed")
-        ):
+        with mocker.patch.object(seed.child_optim, "step", side_effect=RuntimeError("Optimizer failed")):
             with pytest.raises(RuntimeError, match="Optimizer failed"):
                 seed.train_child_step(sample_tensor)
 
@@ -430,9 +422,7 @@ class TestSentinelSeedForwardPass:
             ("active", "returns_residual_output"),
         ],
     )
-    def test_forward_behavior_by_state(
-        self, configured_seed_real_manager, sample_tensor, state, expected_behavior
-    ):
+    def test_forward_behavior_by_state(self, configured_seed_real_manager, sample_tensor, state, expected_behavior):
         """Test forward pass behavior across all states."""
         seed = configured_seed_real_manager
 
@@ -458,9 +448,7 @@ class TestSentinelSeedForwardPass:
             # Output should be different from input
             assert not torch.allclose(output, sample_tensor, atol=1e-6)
 
-    def test_drift_monitoring_and_recording(
-        self, configured_seed, sample_tensor, mock_seed_manager
-    ):
+    def test_drift_monitoring_and_recording(self, configured_seed, sample_tensor, mock_seed_manager):
         """Test drift computation and telemetry recording."""
         seed = configured_seed
         seed.initialize_child()
@@ -636,9 +624,7 @@ class TestSentinelSeedConcurrency:
         seed.initialize_child()
 
         results = []
-        sample_inputs = [
-            torch.randn(4, TestConstants.DEFAULT_DIM) for _ in range(TestConstants.THREAD_COUNT)
-        ]
+        sample_inputs = [torch.randn(4, TestConstants.DEFAULT_DIM) for _ in range(TestConstants.THREAD_COUNT)]
 
         def forward_worker(inputs, worker_id):
             try:
@@ -649,9 +635,7 @@ class TestSentinelSeedConcurrency:
 
         # Execute concurrent forward passes
         with ThreadPoolExecutor(max_workers=TestConstants.THREAD_COUNT) as executor:
-            futures = [
-                executor.submit(forward_worker, inputs, i) for i, inputs in enumerate(sample_inputs)
-            ]
+            futures = [executor.submit(forward_worker, inputs, i) for i, inputs in enumerate(sample_inputs)]
 
             for future in as_completed(futures):
                 future.result()  # Wait for completion
@@ -677,10 +661,7 @@ class TestSentinelSeedConcurrency:
                 results.append(f"error_{worker_id}_{e}")
 
         # Execute concurrent training
-        threads = [
-            threading.Thread(target=training_worker, args=(i,))
-            for i in range(TestConstants.THREAD_COUNT)
-        ]
+        threads = [threading.Thread(target=training_worker, args=(i,)) for i in range(TestConstants.THREAD_COUNT)]
 
         for t in threads:
             t.start()
@@ -722,11 +703,7 @@ class TestSentinelSeedErrorHandling:
             pytest.fail("Expected RuntimeError for dimension mismatch, but none was raised")
         except RuntimeError as e:
             # Verify it's the expected dimension error
-            assert (
-                "size" in str(e).lower()
-                or "dimension" in str(e).lower()
-                or "shape" in str(e).lower()
-            )
+            assert "size" in str(e).lower() or "dimension" in str(e).lower() or "shape" in str(e).lower()
 
     def test_extreme_parameter_values(self, mock_seed_manager):
         """Test behavior with extreme but valid parameter values."""
@@ -735,15 +712,11 @@ class TestSentinelSeedErrorHandling:
         assert seed_small.dim == 1
 
         # Test with very large blend_steps
-        seed_large_blend = SentinelSeed(
-            "large_blend", dim=32, seed_manager=mock_seed_manager, blend_steps=1000
-        )
+        seed_large_blend = SentinelSeed("large_blend", dim=32, seed_manager=mock_seed_manager, blend_steps=1000)
         assert seed_large_blend.blend_steps == 1000
 
         # Test with extreme progress threshold
-        seed_high_thresh = SentinelSeed(
-            "high_thresh", dim=32, seed_manager=mock_seed_manager, progress_thresh=0.99
-        )
+        seed_high_thresh = SentinelSeed("high_thresh", dim=32, seed_manager=mock_seed_manager, progress_thresh=0.99)
         assert seed_high_thresh.progress_thresh == pytest.approx(0.99)
 
     def test_resource_exhaustion_simulation(self, configured_seed_real_manager, mocker):
@@ -806,9 +779,7 @@ class TestSentinelSeedIntegrationScenarios:
         assert "drift" in telemetry
         assert isinstance(telemetry["drift"], float)
 
-    def test_buffer_integration_and_health_monitoring(
-        self, configured_seed_real_manager, sample_tensor
-    ):
+    def test_buffer_integration_and_health_monitoring(self, configured_seed_real_manager, sample_tensor):
         """Test integration between buffer management and health monitoring."""
         seed = configured_seed_real_manager
 

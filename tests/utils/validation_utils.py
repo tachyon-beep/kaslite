@@ -4,8 +4,9 @@ This module provides utilities for validating the test environment
 and setting up logging configurations for tests.
 """
 
-import torch
 from unittest.mock import MagicMock
+
+import torch
 
 
 def validate_test_environment() -> None:
