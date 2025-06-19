@@ -2,7 +2,7 @@
 Tests for the sweep configuration module.
 """
 
-# pylint: disable=redefined-outer-name  # pytest fixtures pattern
+# pylint: disable=redefined-outer-name
 
 import tempfile
 from pathlib import Path
@@ -323,6 +323,7 @@ class TestParseValueList:
 
         # Test with custom object
         class CustomObject:
+            """Test helper class for custom object parsing."""
             def __init__(self, value):
                 self.value = value
 

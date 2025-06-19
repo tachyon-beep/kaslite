@@ -4,6 +4,8 @@ Test suite for the hyperparameter sweep functionality.
 This module tests all aspects of the YAML-driven hyperparameter sweep feature,
 including YAML parsing, grid expansion, parameter validation, and sweep execution.
 """
+# pylint: disable=protected-access
+# pylint: disable=redefined-outer-name
 
 import argparse
 import os

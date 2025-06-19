@@ -114,7 +114,7 @@ disable = [
 ]
 
 [tool.pylint.format]
-max-line-length = 120
+max-line-length = 130
 
 [tool.pylint.design]
 max-args = 15
@@ -128,8 +128,8 @@ good-names = ["X", "y", "i", "j", "k", "n", "x", "z", "lr", "w", "b"]
 
 # Black code formatting
 [tool.black]
-line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+line-length = 130
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(

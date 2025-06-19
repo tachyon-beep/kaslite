@@ -152,6 +152,8 @@ def export_metrics_for_dvc(final_stats: Dict[str, Any], slug: str, project_root:
 
     # Save metrics JSON
     metrics_path = project_root / "results" / f"metrics_{slug}.json"
-    metrics_path.parent.mkdir(parents=True, exist_ok=True)  # Create results directory if it doesn't exist
+    metrics_path.parent.mkdir(
+        parents=True, exist_ok=True
+    )  # Create results directory if it doesn't exist
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)

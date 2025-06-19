@@ -1,9 +1,10 @@
 """Tests for TensorBoard integration in the morphogenetic experiment pipeline."""
 
+# pylint: disable=redefined-outer-name
+
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from morphogenetic_engine.core import SeedManager
 from morphogenetic_engine.runners import setup_experiment
 from morphogenetic_engine.training import clear_seed_report_cache, log_seed_updates
 
+# pylint: disable=protected-access
 
 # Test Fixtures
 @pytest.fixture
@@ -103,7 +105,9 @@ class TestTensorBoardIntegration:
                                 mock_writer.assert_called_once()
                                 assert tb_writer is not None
 
-    def test_log_seed_updates_with_tensorboard(self, seed_manager_with_blending_seed, mock_tensorboard_components):
+    def test_log_seed_updates_with_tensorboard(
+        self, seed_manager_with_blending_seed, mock_tensorboard_components
+    ):
         """Test that log_seed_updates correctly logs to TensorBoard."""
         # Arrange
         epoch = 5
@@ -118,7 +122,9 @@ class TestTensorBoardIntegration:
         # Verify logger was called
         logger.log_blending_progress.assert_called_with(epoch, "test_seed", 0.75)
 
-    def test_log_seed_updates_state_transition_tensorboard(self, seed_manager_with_active_seed, mock_tensorboard_components):
+    def test_log_seed_updates_state_transition_tensorboard(
+        self, seed_manager_with_active_seed, mock_tensorboard_components
+    ):
         """Test that state transitions are logged to TensorBoard as text."""
         # Arrange
         epoch = 10
@@ -140,19 +146,19 @@ class TestTensorBoardIntegration:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch("morphogenetic_engine.runners.Path") as mock_path:
                 mock_path.return_value.parent.parent = Path(temp_dir)
-                
+
                 with patch("morphogenetic_engine.runners.ExperimentLogger"):
                     with patch("morphogenetic_engine.runners.SummaryWriter") as mock_writer:
                         with patch("morphogenetic_engine.runners.initialize_monitoring"):
                             with patch("morphogenetic_engine.runners.mlflow"):
                                 mock_tb_writer = Mock()
                                 mock_writer.return_value = mock_tb_writer
-                                
+
                                 _, tb_writer, _, _, _, _, _ = setup_experiment(mock_args)
-                                
+
                                 # Simulate cleanup (this would be in actual experiment code)
                                 tb_writer.close()
-                                
+
                                 # Verify close was called
                                 mock_tb_writer.close.assert_called_once()
 
@@ -162,23 +168,23 @@ class TestTensorBoardIntegration:
         mock_args.input_dim = 3
         mock_args.device = "cpu"
         mock_args.hidden_dim = 128
-        
+
         with tempfile.TemporaryDirectory() as temp_dir:
             project_root = Path(temp_dir)
-            
+
             with patch("morphogenetic_engine.runners.Path") as mock_path:
                 mock_path.return_value.parent.parent = project_root
-                
+
                 with patch("morphogenetic_engine.runners.ExperimentLogger"):
                     with patch("morphogenetic_engine.runners.SummaryWriter") as mock_writer:
                         with patch("morphogenetic_engine.runners.initialize_monitoring"):
                             with patch("morphogenetic_engine.runners.mlflow"):
                                 setup_experiment(mock_args)
-                                
+
                                 # Verify SummaryWriter was called with correct path structure
                                 call_args = mock_writer.call_args
-                                log_dir = call_args[1]['log_dir']
-                                
+                                log_dir = call_args[1]["log_dir"]
+
                                 # Should contain runs directory and slug components
                                 assert "runs/" in log_dir
                                 assert "spirals" in log_dir
@@ -189,14 +195,18 @@ class TestTensorBoardIntegration:
         with tempfile.TemporaryDirectory() as temp_dir:
             with patch("morphogenetic_engine.runners.Path") as mock_path:
                 mock_path.return_value.parent.parent = Path(temp_dir)
-                
+
                 with patch("morphogenetic_engine.runners.ExperimentLogger"):
                     with patch("morphogenetic_engine.runners.SummaryWriter") as mock_writer:
                         with patch("morphogenetic_engine.runners.initialize_monitoring"):
                             with patch("morphogenetic_engine.runners.mlflow"):
-                                mock_writer.side_effect = Exception("TensorBoard initialization failed")
-                                
-                                with pytest.raises(Exception, match="TensorBoard initialization failed"):
+                                mock_writer.side_effect = Exception(
+                                    "TensorBoard initialization failed"
+                                )
+
+                                with pytest.raises(
+                                    Exception, match="TensorBoard initialization failed"
+                                ):
                                     setup_experiment(mock_args)
 
     def test_log_seed_updates_tensorboard_write_failure(self, seed_manager_with_blending_seed):
@@ -222,24 +232,24 @@ class TestTensorBoardIntegration:
         clear_seed_report_cache()
         epoch = 15
         seed_manager = SeedManager()
-        
+
         # Create seeds in different states
         blending_seed = Mock()
         blending_seed.state = "blending"
         blending_seed.alpha = 0.6
-        
+
         active_seed = Mock()
         active_seed.state = "active"
         active_seed.alpha = 0.0
-        
+
         dormant_seed = Mock()
         dormant_seed.state = "dormant"
         dormant_seed.alpha = 0.0
-        
+
         seed_manager.seeds["blending_seed"] = {"module": blending_seed, "status": "active"}
         seed_manager.seeds["active_seed"] = {"module": active_seed, "status": "active"}
         seed_manager.seeds["dormant_seed"] = {"module": dormant_seed, "status": "active"}
-        
+
         logger, tb_writer, log_f = Mock(), Mock(), Mock()
 
         # Act
@@ -248,7 +258,7 @@ class TestTensorBoardIntegration:
         # Assert
         # Should have logged scalar for blending seed
         tb_writer.add_scalar.assert_any_call("seed/blending_seed/alpha", 0.6, epoch)
-        
+
         # Should have logged text for state transitions
         tb_writer.add_text.assert_any_call(
             "seed/active_seed/events", "Epoch 15: unknown → active", epoch
@@ -280,12 +290,12 @@ class TestTensorBoardIntegration:
         clear_seed_report_cache()
         epoch = 5
         seed_manager = SeedManager()
-        
+
         # Create seed with invalid alpha
         mock_seed = Mock()
         mock_seed.state = "blending"
         mock_seed.alpha = "invalid"  # Non-numeric alpha
-        
+
         seed_manager.seeds["test_seed"] = {"module": mock_seed, "status": "active"}
         logger, tb_writer, log_f = Mock(), Mock(), Mock()
 
@@ -300,10 +310,10 @@ class TestTensorBoardIntegration:
         """Test complete workflow from setup to logging to cleanup."""
         with tempfile.TemporaryDirectory() as temp_dir:
             project_root = Path(temp_dir)
-            
+
             with patch("morphogenetic_engine.runners.Path") as mock_path:
                 mock_path.return_value.parent.parent = project_root
-                
+
                 with patch("morphogenetic_engine.runners.ExperimentLogger") as mock_logger_cls:
                     with patch("morphogenetic_engine.runners.SummaryWriter") as mock_writer:
                         with patch("morphogenetic_engine.runners.initialize_monitoring"):
@@ -313,25 +323,28 @@ class TestTensorBoardIntegration:
                                 mock_logger_cls.return_value = mock_logger_instance
                                 mock_tb_writer = Mock()
                                 mock_writer.return_value = mock_tb_writer
-                                
+
                                 logger, tb_writer, log_f, _, _, _, _ = setup_experiment(mock_args)
-                                
+
                                 # Create seed manager and simulate changing alpha values to trigger logging
                                 seed_manager = SeedManager()
                                 seed_manager.reset()
                                 blending_seed = Mock()
                                 blending_seed.state = "blending"
-                                seed_manager.seeds["test_seed"] = {"module": blending_seed, "status": "active"}
-                                
+                                seed_manager.seeds["test_seed"] = {
+                                    "module": blending_seed,
+                                    "status": "active",
+                                }
+
                                 # Simulate logging over multiple epochs with changing alpha values
                                 alpha_values = [0.1, 0.2, 0.3, 0.4, 0.5]
                                 for epoch, alpha in enumerate(alpha_values, 1):
                                     blending_seed.alpha = alpha
                                     log_seed_updates(epoch, seed_manager, logger, tb_writer, log_f)
-                                
+
                                 # Verify multiple logging calls were made (should be 5 since alpha changes each time)
                                 assert mock_tb_writer.add_scalar.call_count >= 5
-                                
+
                                 # Test cleanup
                                 tb_writer.close()
                                 mock_tb_writer.close.assert_called_once()
@@ -342,14 +355,14 @@ class TestTensorBoardIntegration:
         clear_seed_report_cache()
         seed_manager = SeedManager()
         seed_manager.reset()
-        
+
         # Create exactly 100 seeds with the same state to avoid extra logging
         for i in range(100):
             mock_seed = Mock()
             mock_seed.state = "blending"
             mock_seed.alpha = 0.5
             seed_manager.seeds[f"seed_{i}"] = {"module": mock_seed, "status": "active"}
-        
+
         logger, tb_writer, log_f = Mock(), Mock(), Mock()
 
         # Act
@@ -360,7 +373,7 @@ class TestTensorBoardIntegration:
         # Assert
         # Should complete quickly even with many seeds
         assert execution_time < 1.0
-        
+
         # Verify all seeds were logged exactly once (first time seeing them)
         assert tb_writer.add_scalar.call_count == 100
 
@@ -370,12 +383,12 @@ class TestTensorBoardIntegration:
         clear_seed_report_cache()
         seed_manager = SeedManager()
         seed_manager.reset()
-        
+
         mock_seed = Mock()
         mock_seed.state = "blending"
         mock_seed.alpha = 0.8
         seed_manager.seeds["test_seed"] = {"module": mock_seed, "status": "active"}
-        
+
         logger, tb_writer, log_f = Mock(), Mock(), Mock()
 
         # Act - Simulate rapid epoch updates
@@ -394,28 +407,28 @@ class TestTensorBoardIntegration:
         # Arrange
         clear_seed_report_cache()
         seed_manager = SeedManager()
-        
+
         mock_seed = Mock()
         mock_seed.state = "dormant"
         mock_seed.alpha = 0.0
         seed_manager.seeds["changing_seed"] = {"module": mock_seed, "status": "active"}
-        
+
         logger, tb_writer, log_f = Mock(), Mock(), Mock()
 
         # Act - First epoch with dormant state
         log_seed_updates(1, seed_manager, logger, tb_writer, log_f)
-        
+
         # Change state to blending
         mock_seed.state = "blending"
         mock_seed.alpha = 0.3
-        
+
         # Second epoch with blending state
         log_seed_updates(2, seed_manager, logger, tb_writer, log_f)
-        
+
         # Change state to active
-        mock_seed.state = "active" 
+        mock_seed.state = "active"
         mock_seed.alpha = 0.0
-        
+
         # Third epoch with active state
         log_seed_updates(3, seed_manager, logger, tb_writer, log_f)
 

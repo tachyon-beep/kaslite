@@ -4,11 +4,12 @@ Comprehensive tests for the sweep CLI module.
 This test suite covers argument parsing, error handling, user experience,
 and integration testing with proper mocking strategies.
 """
+# pylint: disable=redefined-outer-name
+# pylint: disable=protected-access
 
 import argparse
 import os
 import stat
-import sys
 import time
 from pathlib import Path
 from unittest.mock import Mock, patch
