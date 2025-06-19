@@ -97,8 +97,8 @@ class RichDashboard:
         # Split the right column (top/bottom)
         top_right_area = Layout(name="top_right_area")
         top_right_area.split_row(
-            Layout(name="seed_grid_panel", ratio=2),  # 2/3 of the space
-            Layout(name="status_panel", ratio=1),     # 1/3 of the space
+            Layout(name="seed_metrics_panel", ratio=1),  # Swapped and renamed
+            Layout(name="seed_box_panel", ratio=2),      # Swapped and renamed
         )
         right_column.split_column(
             top_right_area,
@@ -112,8 +112,8 @@ class RichDashboard:
         self.layout["info_panel"].update(self._create_info_panel())
         self.layout["metrics_panel"].update(self._create_metrics_panel())
         self.layout["event_log_panel"].update(self._create_event_log_panel())
-        self.layout["seed_grid_panel"].update(self._create_seed_grid_panel())
-        self.layout["status_panel"].update(self._create_status_panel())
+        self.layout["seed_box_panel"].update(self._create_seed_box_panel())
+        self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
         self.layout["seed_log_panel"].update(self._create_seed_log_panel())
 
         self._layout_initialized = True
@@ -178,7 +178,7 @@ class RichDashboard:
                 continue  # Ignore malformed IDs
         return layer_seeds
 
-    def _create_seed_grid_panel(self) -> Panel:
+    def _create_seed_box_panel(self) -> Panel:
         """Generate the panel for the seed status grid."""
         num_layers = self.experiment_params.get("num_layers", 0)
         seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
@@ -209,29 +209,36 @@ class RichDashboard:
 
         if num_layers == 0 or seeds_per_layer == 0:
             return Panel(
-                Align.center("Seed grid data unavailable.", vertical="middle"),
-                title="Seed Grid",
+                Align.center("Seed box data unavailable.", vertical="middle"),
+                title="Seed Box",
                 border_style="magenta",
             )
 
         layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        # Display up to 16 layers
-        for i in range(min(num_layers, 16)):
-            states = layer_seeds.get(i, [])
-            # Start row with layer number and the separator
-            row = [f"{i}", "│"]
-            for j in range(16):  # Populate 16 seed columns
-                emoji = empty_emoji
-                if j < seeds_per_layer and j < len(states):
-                    state = states[j]
-                    emoji = emoji_map.get(state, empty_emoji)
-                row.append(emoji)
+        # Always display 16 layer rows
+        for i in range(16):
+            # Start row with layer number (1-indexed) and the separator
+            row = [f"{i + 1}", "│"]
+
+            # Check if the current layer index is valid for the experiment
+            if i < num_layers:
+                states = layer_seeds.get(i, [])
+                for j in range(16):  # Populate 16 seed columns
+                    emoji = empty_emoji
+                    if j < seeds_per_layer and j < len(states):
+                        state = states[j]
+                        emoji = emoji_map.get(state, empty_emoji)
+                    row.append(emoji)
+            else:
+                # If layer does not exist, fill row with empty emojis
+                row.extend([empty_emoji] * 16)
+
             grid_table.add_row(*row)
 
-        return Panel(grid_table, title="Seed Grid", border_style="magenta")
+        return Panel(grid_table, title="Seed Box", border_style="magenta")
 
-    def _create_status_panel(self) -> Panel:
+    def _create_seed_metrics_panel(self) -> Panel:
         """Generate the panel for displaying detailed seed statuses."""
         if not self.seed_states:
             content = Align.center("Waiting for seed data...", vertical="middle")
@@ -248,7 +255,7 @@ class RichDashboard:
                     status_text += f"• {seed_id[:12]}...: {state}\n"
             content = Text.from_markup(status_text)
 
-        return Panel(content, title="Seed Status", border_style="green")
+        return Panel(content, title="Seed Metrics", border_style="green")
 
     def _create_seed_log_panel(self) -> Panel:
         """Generate the panel for the scrolling seed-specific event log."""
@@ -310,8 +317,8 @@ class RichDashboard:
         # Update the internal state for the right panels
         self.seed_states[seed_id] = {"state": state, "alpha": alpha}
         if self.layout:
-            self.layout["status_panel"].update(self._create_status_panel())
-            self.layout["seed_grid_panel"].update(self._create_seed_grid_panel())
+            self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
+            self.layout["seed_box_panel"].update(self._create_seed_box_panel())
 
     def show_phase_transition(
         self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None
