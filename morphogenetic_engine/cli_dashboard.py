@@ -97,8 +97,8 @@ class RichDashboard:
         # Split the right column (top/bottom)
         top_right_area = Layout(name="top_right_area")
         top_right_area.split_row(
-            Layout(name="seed_grid_panel", ratio=1),
-            Layout(name="status_panel", ratio=2),
+            Layout(name="seed_grid_panel", ratio=2),  # 2/3 of the space
+            Layout(name="status_panel", ratio=1),     # 1/3 of the space
         )
         right_column.split_column(
             top_right_area,
@@ -158,6 +158,26 @@ class RichDashboard:
         content = Text.from_markup(f"[bold]Experiment Log:[/bold]\n{event_text}")
         return Panel(content, title="Event Log", border_style="blue")
 
+    def _get_seed_states_by_layer(
+        self, num_layers: int, seeds_per_layer: int
+    ) -> dict[int, list[str | None]]:
+        """Parse seed_states and organize them by layer and seed index."""
+        layer_seeds: dict[int, list[str | None]] = {
+            i: [None] * seeds_per_layer for i in range(num_layers)
+        }
+        for seed_id, data in self.seed_states.items():
+            if not seed_id.startswith("L") or "_" not in seed_id:
+                continue
+            try:
+                parts = seed_id.split("_")
+                layer_idx = int(parts[0][1:])
+                seed_idx = int(parts[1])
+                if layer_idx < num_layers and seed_idx < seeds_per_layer:
+                    layer_seeds[layer_idx][seed_idx] = data.get("state")
+            except (ValueError, IndexError):
+                continue  # Ignore malformed IDs
+        return layer_seeds
+
     def _create_seed_grid_panel(self) -> Panel:
         """Generate the panel for the seed status grid."""
         num_layers = self.experiment_params.get("num_layers", 0)
@@ -171,10 +191,14 @@ class RichDashboard:
         }
         empty_emoji = "⚫"
 
-        grid_table = Table(show_header=True, header_style="bold magenta", expand=True)
-        grid_table.add_column("L#", style="cyan")
-        for i in range(seeds_per_layer):
-            grid_table.add_column(str(i), justify="center", max_width=3, no_wrap=True)
+        grid_table = Table(
+            show_header=True, header_style="bold magenta", expand=False, box=box.SIMPLE_HEAD
+        )
+        grid_table.add_column("L#", style="dim", width=3, justify="center")
+        for i in range(8):
+            grid_table.add_column(
+                str(i + 1), justify="center", no_wrap=True, style="bold"
+            )
 
         if num_layers == 0 or seeds_per_layer == 0:
             return Panel(
@@ -183,25 +207,17 @@ class RichDashboard:
                 border_style="magenta",
             )
 
-        # Group seeds by layer from their ID
-        layer_seeds: dict[int, list[str]] = {i: [] for i in range(num_layers)}
-        for seed_id, data in self.seed_states.items():
-            if seed_id.startswith("L") and "_" in seed_id:
-                try:
-                    layer_str = seed_id.split("_")[0][1:]
-                    layer_idx = int(layer_str)
-                    if layer_idx in layer_seeds:
-                        layer_seeds[layer_idx].append(data["state"])
-                except (ValueError, IndexError):
-                    continue  # Ignore malformed IDs
+        layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        # Populate table with emojis
         for i in range(num_layers):
             states = layer_seeds.get(i, [])
             row = [f"{i}"]
-            for j in range(seeds_per_layer):
-                emoji = emoji_map.get(states[j]) if j < len(states) else empty_emoji
-                row.append(emoji or "❓")
+            for j in range(8):
+                emoji = empty_emoji
+                if j < seeds_per_layer and j < len(states):
+                    state = states[j]
+                    emoji = emoji_map.get(state, empty_emoji)
+                row.append(emoji)
             grid_table.add_row(*row)
 
         return Panel(grid_table, title="Seed Grid", border_style="magenta")
@@ -334,9 +350,9 @@ def demo_dashboard():
     """Demo function to showcase the dashboard's new layout."""
     console = Console()
     params = {
-        "epochs": 100,
-        "num_layers": 4,
-        "seeds_per_layer": 10,
+        "epochs": 200,
+        "num_layers": 5,
+        "seeds_per_layer": 8,  # Match the grid columns
         "problem_type": "spirals",
         "n_samples": 1000,
         "input_dim": 3,
@@ -345,34 +361,72 @@ def demo_dashboard():
     }
     print("Starting dashboard demo...")
     with RichDashboard(console, experiment_params=params) as dashboard:
-        dashboard.add_live_event("INFO", "Dashboard Initialized", {})
+        dashboard.add_live_event("INFO", "Dashboard Initialized", {"run_id": "demo_run_123"})
         time.sleep(1)
 
-        dashboard.show_phase_transition("Phase 1", 0, total_epochs=50)
+        # --- Phase 1: Seeding and Initial Training ---
+        dashboard.show_phase_transition("SEEDING", 0, total_epochs=50)
         for i in range(50):
             dashboard.update_progress(i, {"train_loss": 1.0 - i * 0.01, "val_acc": 0.5 + i * 0.005})
-            if i % 5 == 0:
-                layer = (i // 5) % params["num_layers"]
-                # Create a unique seed ID that includes the layer
-                seed_id = f"L{layer}_seed_{i}"
-                dashboard.update_seed(seed_id, "dormant")
-            time.sleep(0.05)
+            if i < params["num_layers"] * params["seeds_per_layer"]:
+                layer = i // params["seeds_per_layer"]
+                seed_idx = i % params["seeds_per_layer"]
+                if layer < params["num_layers"]:
+                    seed_id = f"L{layer}_S{seed_idx}"
+                    dashboard.update_seed(seed_id, "dormant")
+            time.sleep(0.02)
+        dashboard.add_live_event("INFO", "Seeding complete", {"seeded_count": 40})
 
-        dashboard.update_seed("L1_seed_10", "active", from_state="dormant")
+        # --- Phase 2: Activation and Blending ---
+        dashboard.show_phase_transition("ACTIVATION", 50, from_phase="SEEDING", total_epochs=50)
         time.sleep(1)
-        dashboard.update_seed("L2_seed_20", "blending", from_state="active", alpha=0.5)
-        time.sleep(1)
-        dashboard.update_seed("L3_seed_30", "germinated", from_state="active")
-        time.sleep(1)
+        # Activate some seeds
+        for i in range(4):
+            dashboard.update_seed(f"L{i}_S{i}", "active", from_state="dormant")
+            dashboard.add_seed_log_event("activation", f"Seed L{i}_S{i} activated.", {"epoch": 50 + i})
+            time.sleep(0.2)
 
-        dashboard.show_phase_transition("Phase 2", 50, from_phase="Phase 1", total_epochs=50)
+        # Blend a seed
+        dashboard.update_seed("L1_S1", "blending", from_state="active", alpha=0.3)
+        dashboard.add_seed_log_event("blending", "Seed L1_S1 starts blending.", {"alpha": 0.3})
+        time.sleep(0.5)
+
         for i in range(50, 100):
             dashboard.update_progress(
-                i, {"train_loss": 0.5 - (i - 50) * 0.01, "val_acc": 0.75 + (i - 50) * 0.002}
+                i, {"train_loss": 0.5 - (i - 50) * 0.008, "val_acc": 0.7 + (i - 50) * 0.003}
             )
-            time.sleep(0.05)
+            if i == 75:
+                dashboard.update_seed("L1_S1", "blending", from_state="blending", alpha=0.8)
+                dashboard.add_seed_log_event("blending", "Seed L1_S1 blend factor increased.", {"alpha": 0.8})
+            time.sleep(0.02)
 
-    console.print("\n✅ Demo completed!")
+        # --- Phase 3: Germination and Pruning ---
+        dashboard.show_phase_transition("EVOLUTION", 100, from_phase="ACTIVATION", total_epochs=100)
+        time.sleep(1)
+
+        # Germinate a seed
+        dashboard.update_seed("L1_S1", "germinated", from_state="blending")
+        dashboard.show_germination_event("L1_S1", epoch=101) # Specific event for seed log
+        time.sleep(0.5)
+
+        # Prune a seed
+        dashboard.update_seed("L3_S3", "pruned", from_state="active")
+        dashboard.add_seed_log_event("pruning", "Seed L3_S3 pruned due to low performance.", {"reason": "low_val_acc"})
+        time.sleep(0.5)
+
+        # A seed fails
+        dashboard.update_seed("L0_S0", "failed", from_state="active")
+        dashboard.add_seed_log_event("error", "Seed L0_S0 failed during update.", {"details": "NaN loss detected"})
+        time.sleep(0.5)
+
+
+        for i in range(100, 200):
+            dashboard.update_progress(
+                i, {"train_loss": 0.1 - (i - 100) * 0.0005, "val_acc": 0.85 + (i - 100) * 0.0001}
+            )
+            time.sleep(0.02)
+
+    console.print("\n[bold green]✅ Demo completed![/bold green]")
 
 
 if __name__ == "__main__":
