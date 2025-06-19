@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from tests.test_utils import (
+from tests.utils import (
     MockDataLoader,
     MockExperimentArgs,
     assert_accuracy_range,
@@ -504,7 +504,7 @@ class TestValidationUtilities:
     def test_validate_test_environment_mock_failure(self, mocker):
         """Test environment validation failure handling."""
         # Mock torch import failure
-        mocker.patch("tests.test_utils.torch", side_effect=ImportError("No module named 'torch'"))
+        mocker.patch("tests.utils.validation_utils.torch", side_effect=ImportError("No module named 'torch'"))
 
         # This will fail because we're importing torch at module level
         # In a real scenario, we'd need to restructure the imports

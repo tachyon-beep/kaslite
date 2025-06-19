@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from morphogenetic_engine import utils
-from tests.test_utils import (
+from tests.utils import (
     assert_log_file_format,
     assert_valid_experiment_slug,
     assert_valid_metrics_json,
