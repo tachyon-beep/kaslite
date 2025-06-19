@@ -145,9 +145,10 @@ class RichDashboard:
 
         # --- Center Column ---
         self.layout["center_column"].split_column(
-            Layout(name="kasima_panel", ratio=1),
-            Layout(name="tamiyo_panel", ratio=1),
-            Layout(name="karn_panel", ratio=1),
+            Layout(name="kasima_panel"),
+            Layout(name="tamiyo_panel", size=12),
+            Layout(name="karn_panel", size=9),
+            Layout(name="crucible_panel", size=8),
         )
 
         # --- Right Column ---
@@ -172,6 +173,7 @@ class RichDashboard:
         self.layout["kasima_panel"].update(self._create_kasima_panel())
         self.layout["tamiyo_panel"].update(self._create_tamiyo_panel())
         self.layout["karn_panel"].update(self._create_karn_panel())
+        self.layout["crucible_panel"].update(self._create_crucible_panel())
         self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
         self.layout["seed_box_panel"].update(self._create_seed_box_panel())
         self.layout["seed_legend_panel"].update(self._create_seed_legend_panel())
@@ -381,7 +383,6 @@ class RichDashboard:
         table.add_column("Act. Epoch", justify="center", ratio=5)
         table.add_column("Grad Norm", justify="center", ratio=5)
         table.add_column("Weight Norm", justify="center", ratio=5)
-        table.add_column("Patience", justify="center", ratio=5)
 
         high_perf_seeds = {
             sid: d
@@ -395,7 +396,6 @@ class RichDashboard:
                 str(data.get("activation_epoch", "N/A")),
                 (f"{data.get('grad_norm'):.2e}" if data.get('grad_norm') is not None else "N/A"),
                 (f"{data.get('weight_norm'):.2f}" if data.get('weight_norm') is not None else "N/A"),
-                str(data.get("patience", "N/A")),
             )
 
         return Panel(table, title="High Performing Seeds", border_style="green")
@@ -409,7 +409,6 @@ class RichDashboard:
         table.add_column("Act. Epoch", justify="center", ratio=5)
         table.add_column("Grad Norm", justify="center", ratio=5)
         table.add_column("Weight Norm", justify="center", ratio=5)
-        table.add_column("Patience", justify="center", ratio=5)
 
         low_perf_seeds = {
             sid: d
@@ -423,7 +422,6 @@ class RichDashboard:
                 str(data.get("activation_epoch", "N/A")),
                 (f"{data.get('grad_norm'):.2e}" if data.get('grad_norm') is not None else "N/A"),
                 (f"{data.get('weight_norm'):.2f}" if data.get('weight_norm') is not None else "N/A"),
-                str(data.get("patience", "N/A")),
             )
 
         return Panel(table, title="Poorly Performing Seeds", border_style="red")
@@ -479,6 +477,22 @@ class RichDashboard:
         karn_table.add_row("Exploration/Exploitation", "Exploiting (80%)")
 
         return Panel(karn_table, title="Karn", border_style="blue")
+
+    def _create_crucible_panel(self) -> Panel:
+        """Generate the panel for Crucible's status."""
+        crucible_table = Table(
+            show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
+        )
+        crucible_table.add_column("Metric", style="bold blue")
+        crucible_table.add_column("Value")
+
+        crucible_table.add_row("Match Status", "In Progress (75%)")
+        crucible_table.add_row("Challenger ID", "bp_9f1a (Novel Mixer)")
+        crucible_table.add_row("Incumbent ID", "bp_3c5d (Keystone)")
+        crucible_table.add_row("Live ELO Change", "+12.5 (Challenger)")
+        crucible_table.add_row("Key Metric Δ", "Latency: -15%")
+
+        return Panel(crucible_table, title="Crucible", border_style="blue")
 
     def _create_network_strain_panel(self) -> Panel:
         """Generate the panel for the network strain visualization."""
