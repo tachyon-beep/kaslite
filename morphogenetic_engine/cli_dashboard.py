@@ -105,8 +105,14 @@ class RichDashboard:
         # --- Center Column is the seed_metrics_panel, populated later ---
 
         # --- Right Column ---
+        bottom_right_area = Layout(name="bottom_right_area")
+        bottom_right_area.split_row(
+            Layout(name="architecture_panel"),
+            Layout(name="seed_timeline_panel"),
+        )
         right_column.split_column(
-            Layout(name="seed_box_panel"), Layout(name="seed_log_panel")
+            Layout(name="seed_box_panel"),
+            bottom_right_area,
         )
 
         main_area.split_row(left_column, center_column, right_column)
@@ -117,9 +123,10 @@ class RichDashboard:
         self.layout["metrics_table_panel"].update(self._create_metrics_table_panel())
         self.layout["sparkline_panel"].update(self._create_sparkline_panel())
         self.layout["event_log_panel"].update(self._create_event_log_panel())
-        self.layout["seed_box_panel"].update(self._create_seed_box_panel())
         self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
-        self.layout["seed_log_panel"].update(self._create_seed_log_panel())
+        self.layout["seed_box_panel"].update(self._create_seed_box_panel())
+        self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
+        self.layout["architecture_panel"].update(self._create_architecture_panel())
 
         self._layout_initialized = True
 
@@ -350,11 +357,45 @@ class RichDashboard:
         )
         return Panel(metrics_layout, title="Seed Metrics", border_style="green")
 
-    def _create_seed_log_panel(self) -> Panel:
+    def _create_architecture_panel(self) -> Panel:
+        """Generate the panel for the network architecture visualization."""
+        num_layers = self.experiment_params.get("num_layers", 0)
+        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
+
+        if num_layers == 0:
+            return Panel(
+                Align.center("Architecture data unavailable.", vertical="middle"),
+                title="Network Architecture",
+                border_style="yellow",
+            )
+
+        layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
+
+        content = Text()
+        emoji_map = {
+            "active": "[bold green]●[/bold green]",
+            "dormant": "[dim]○[/dim]",
+            "blending": "[yellow]●[/yellow]",
+            "germinated": "[cyan]🌱[/cyan]",
+        }
+        default_emoji = "[grey37]○[/grey37]"
+
+        for i in range(num_layers):
+            content.append(f"Layer {i+1:02d}: ", style="bold yellow")
+            states = layer_seeds.get(i, [])
+            for j in range(seeds_per_layer):
+                state = states[j] if j < len(states) else "dormant"
+                emoji = emoji_map.get(state, default_emoji)
+                content.append_text(Text.from_markup(f"{emoji} "))
+            content.append("\n")
+
+        return Panel(content, title="Network Architecture", border_style="yellow")
+
+    def _create_seed_timeline_panel(self) -> Panel:
         """Generate the panel for the scrolling seed-specific event log."""
         event_text = "\n".join(self.seed_log_events)
         content = Text.from_markup(f"[bold]Seed Events:[/bold]\n{event_text}")
-        return Panel(content, title="Seed Log", border_style="red")
+        return Panel(content, title="Seed Timeline", border_style="red")
 
     def add_live_event(self, event_type: str, message: str, data: dict[str, Any]):
         """Add a new event to be displayed in the main experiment log."""
@@ -376,7 +417,7 @@ class RichDashboard:
                 event_str += f" ({data_str})"
         self.seed_log_events.append(event_str)
         if self.layout:
-            self.layout["seed_log_panel"].update(self._create_seed_log_panel())
+            self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
 
     def update_progress(self, epoch: int, metrics: dict[str, Any]):
         """Handle epoch progress event and update progress bars."""
@@ -440,6 +481,7 @@ class RichDashboard:
         if self.layout:
             self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
             self.layout["seed_box_panel"].update(self._create_seed_box_panel())
+            self.layout["architecture_panel"].update(self._create_architecture_panel())
 
     def show_phase_transition(
         self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None
