@@ -192,10 +192,17 @@ class RichDashboard:
         empty_emoji = "⚫"
 
         grid_table = Table(
-            show_header=True, header_style="bold magenta", expand=False, box=box.SIMPLE_HEAD
+            show_header=True,
+            header_style="bold magenta",
+            expand=False,
+            box=box.SIMPLE_HEAD,  # A box style without internal vertical lines
         )
+        # L# column
         grid_table.add_column("L#", style="dim", width=3, justify="center")
-        for i in range(8):
+        # Visual separator column
+        grid_table.add_column("│", width=1, no_wrap=True, style="dim")
+        # Seed columns
+        for i in range(16):
             grid_table.add_column(
                 str(i + 1), justify="center", no_wrap=True, style="bold"
             )
@@ -209,10 +216,12 @@ class RichDashboard:
 
         layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        for i in range(num_layers):
+        # Display up to 16 layers
+        for i in range(min(num_layers, 16)):
             states = layer_seeds.get(i, [])
-            row = [f"{i}"]
-            for j in range(8):
+            # Start row with layer number and the separator
+            row = [f"{i}", "│"]
+            for j in range(16):  # Populate 16 seed columns
                 emoji = empty_emoji
                 if j < seeds_per_layer and j < len(states):
                     state = states[j]
