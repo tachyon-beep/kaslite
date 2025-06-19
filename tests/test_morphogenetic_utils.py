@@ -6,15 +6,12 @@ experiment configuration, logging, metrics export, and testing mode detection.
 
 import json
 import sys
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from morphogenetic_engine import utils
 from tests.test_utils import (
-    MockExperimentArgs,
     create_mock_args,
     create_test_experiment_config,
     create_test_final_stats,
@@ -161,9 +158,9 @@ class TestExperimentConfiguration:
         
         assert config["problem_type"] == "clusters"
         assert config["n_samples"] == 2000
-        assert config["lr"] == 0.01
+        assert abs(config["lr"] - 0.01) < 1e-9
         assert config["hidden_dim"] == 256
-        assert config["acc_threshold"] == 0.99
+        assert abs(config["acc_threshold"] - 0.99) < 1e-9
 
 
 class TestExperimentLogging:
@@ -175,10 +172,10 @@ class TestExperimentLogging:
             config = create_test_experiment_config()
             args = create_mock_args()
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_header(log_f, config, args)
             
-            with open(log_path, 'r') as log_f:
+            with open(log_path, 'r', encoding='utf-8') as log_f:
                 content = log_f.read()
             
             assert_log_file_format(content)
@@ -193,10 +190,10 @@ class TestExperimentLogging:
             config = create_test_experiment_config(problem_type="spirals")
             args = create_mock_args(problem_type="spirals", noise=0.2, rotations=2.0)
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_header(log_f, config, args)
             
-            with open(log_path, 'r') as log_f:
+            with open(log_path, 'r', encoding='utf-8') as log_f:
                 content = log_f.read()
             
             assert "# noise: 0.2" in content
@@ -212,10 +209,10 @@ class TestExperimentLogging:
                 moon_sep=1.5
             )
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_header(log_f, config, args)
             
-            with open(log_path, 'r') as log_f:
+            with open(log_path, 'r', encoding='utf-8') as log_f:
                 content = log_f.read()
             
             assert "# moon_noise: 0.15" in content
@@ -233,10 +230,10 @@ class TestExperimentLogging:
                 cluster_sep=3.0
             )
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_header(log_f, config, args)
             
-            with open(log_path, 'r') as log_f:
+            with open(log_path, 'r', encoding='utf-8') as log_f:
                 content = log_f.read()
             
             assert "# cluster_count: 5" in content
@@ -250,10 +247,10 @@ class TestExperimentLogging:
             final_stats = create_test_final_stats()
             seed_manager = create_configured_seed_manager(num_seeds=3)
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_footer(log_f, final_stats, seed_manager)
             
-            with open(log_path, 'r') as log_f:
+            with open(log_path, 'r', encoding='utf-8') as log_f:
                 content = log_f.read()
             
             assert "# Experiment completed successfully" in content
@@ -272,10 +269,10 @@ class TestExperimentLogging:
                 if i < 2:  # Activate first 2 seeds
                     info["module"].state = "active"
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_footer(log_f, final_stats, seed_manager)
             
-            with open(log_path, 'r') as log_f:
+            with open(log_path, 'r', encoding='utf-8') as log_f:
                 content = log_f.read()
             
             assert "# Seeds activated: 2/5" in content
@@ -286,10 +283,10 @@ class TestExperimentLogging:
             final_stats = create_test_final_stats(seeds_activated=False)
             seed_manager = create_configured_seed_manager(num_seeds=3)
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_footer(log_f, final_stats, seed_manager)
             
-            with open(log_path, 'r') as log_f:
+            with open(log_path, 'r', encoding='utf-8') as log_f:
                 content = log_f.read()
             
             assert "# Seeds activated: 0/3" in content
@@ -314,12 +311,12 @@ class TestMetricsExport:
             assert metrics_file.exists()
             
             # Check file contents
-            with open(metrics_file, 'r') as f:
+            with open(metrics_file, 'r', encoding='utf-8') as f:
                 metrics = json.load(f)
             
             assert_valid_metrics_json(metrics)
-            assert metrics["best_acc"] == 0.95
-            assert metrics["accuracy_dip"] == 0.05
+            assert abs(metrics["best_acc"] - 0.95) < 1e-9
+            assert abs(metrics["accuracy_dip"] - 0.05) < 1e-9
             assert metrics["recovery_time"] == 10
             assert metrics["seeds_activated"] is True
 
@@ -339,7 +336,7 @@ class TestMetricsExport:
             
             # Check file contents
             metrics_file = results_dir / f"metrics_{slug}.json"
-            with open(metrics_file, 'r') as f:
+            with open(metrics_file, 'r', encoding='utf-8') as f:
                 metrics = json.load(f)
             
             # None values should be filtered out
@@ -378,7 +375,7 @@ class TestMetricsExport:
             
             # Check JSON formatting
             metrics_file = results_dir / f"metrics_{slug}.json"
-            with open(metrics_file, 'r') as f:
+            with open(metrics_file, 'r', encoding='utf-8') as f:
                 content = f.read()
             
             # Should be indented (pretty-printed)
@@ -408,7 +405,7 @@ class TestIntegration:
             
             # Create log file
             log_file = temp_dir / f"{slug}.log"
-            with open(log_file, 'w') as log_f:
+            with open(log_file, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_header(log_f, config, args)
                 
                 # Simulate some experiment data
@@ -431,12 +428,12 @@ class TestIntegration:
             assert metrics_file.exists()
             
             # Verify log content
-            with open(log_file, 'r') as f:
+            with open(log_file, 'r', encoding='utf-8') as f:
                 log_content = f.read()
             assert_log_file_format(log_content)
             
             # Verify metrics content
-            with open(metrics_file, 'r') as f:
+            with open(metrics_file, 'r', encoding='utf-8') as f:
                 metrics = json.load(f)
             assert_valid_metrics_json(metrics)
 
@@ -447,7 +444,7 @@ class TestIntegration:
             config = create_test_experiment_config()
             args = create_mock_args()
             
-            with open(log_path, 'w') as log_f:
+            with open(log_path, 'w', encoding='utf-8') as log_f:
                 utils.write_experiment_log_header(log_f, config, args)
             
             mock_clear_cache.assert_called_once()

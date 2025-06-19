@@ -782,25 +782,41 @@ def assert_valid_experiment_slug(slug: str) -> None:
     if not isinstance(slug, str):
         raise TypeError(f"Expected string, got {type(slug)}")
     
-    parts = slug.split('_')
-    assert len(parts) >= 8, (
-        f"Slug should have at least 8 parts, got {len(parts)}: {slug}"
+    # Handle compound problem types by finding the known problem types
+    problem_types = ["complex_moons", "spirals", "moons", "clusters", "spheres"]
+    
+    # Find which problem type this slug starts with
+    problem_type = None
+    for pt in problem_types:
+        if slug.startswith(pt + "_"):
+            problem_type = pt
+            break
+    
+    if problem_type is None:
+        assert False, f"Slug doesn't start with a known problem type: {slug}"
+    
+    # Split the remaining part after the problem type
+    remaining = slug[len(problem_type) + 1:]  # +1 to skip the underscore
+    parts = remaining.split('_')
+    
+    # Now we should have: dim{N}, {device}, h{hidden}, bs{batch}, lr{lr}, pt{thresh}, dw{drift}
+    assert len(parts) >= 7, (
+        f"Slug should have at least 7 parts after problem type, got {len(parts)}: {slug}"
     )
     
-    # Check for expected patterns using match statement
-    match parts[0]:
-        case "spirals" | "moons" | "complex_moons" | "clusters" | "spheres":
-            pass  # Valid problem type
-        case _:
-            assert False, f"Invalid problem type in slug: {parts[0]}"
+    assert parts[0].startswith("dim"), f"Expected dim prefix, got: {parts[0]}"
     
-    assert parts[1].startswith("dim"), f"Expected dim prefix, got: {parts[1]}"
-    
-    match parts[2]:
+    match parts[1]:
         case "cpu" | "cuda":
             pass  # Valid device
         case _:
-            assert False, f"Invalid device in slug: {parts[2]}"
+            assert False, f"Invalid device in slug: {parts[1]}"
+    
+    assert parts[2].startswith("h"), f"Expected h prefix for hidden dim, got: {parts[2]}"
+    assert parts[3].startswith("bs"), f"Expected bs prefix for batch size, got: {parts[3]}"
+    assert parts[4].startswith("lr"), f"Expected lr prefix for learning rate, got: {parts[4]}"
+    assert parts[5].startswith("pt"), f"Expected pt prefix for progress thresh, got: {parts[5]}"
+    assert parts[6].startswith("dw"), f"Expected dw prefix for drift warn, got: {parts[6]}"
 
 
 def assert_valid_metrics_json(metrics: dict[str, Any]) -> None:
