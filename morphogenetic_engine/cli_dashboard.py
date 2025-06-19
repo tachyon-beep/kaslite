@@ -238,24 +238,77 @@ class RichDashboard:
 
         return Panel(grid_table, title="Seed Box", border_style="magenta")
 
-    def _create_seed_metrics_panel(self) -> Panel:
-        """Generate the panel for displaying detailed seed statuses."""
-        if not self.seed_states:
-            content = Align.center("Waiting for seed data...", vertical="middle")
-        else:
-            status_text = ""
-            for seed_id, data in sorted(self.seed_states.items()):
-                state = data.get("state", "unknown")
-                alpha = data.get("alpha")
-                if state == "blending":
-                    status_text += f"• {seed_id[:12]}...: [yellow]{state}[/yellow] (α={alpha:.2f})\n"
-                elif state == "active":
-                    status_text += f"• {seed_id[:12]}...: [bold green]{state}[/bold green]\n"
-                else:
-                    status_text += f"• {seed_id[:12]}...: {state}\n"
-            content = Text.from_markup(status_text)
+    def _create_high_perf_seeds_panel(self) -> Panel:
+        """Generate the panel for high-performing seeds."""
+        table = Table(
+            show_header=True, header_style="bold green", expand=True, box=box.MINIMAL
+        )
+        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=2)
+        table.add_column("Act. Epoch", justify="center", ratio=1)
+        table.add_column("Grad Norm", justify="center", ratio=1)
+        table.add_column("Weight Norm", justify="center", ratio=1)
+        table.add_column("Patience", justify="center", ratio=1)
 
-        return Panel(content, title="Seed Metrics", border_style="green")
+        high_perf_seeds = {
+            sid: d
+            for sid, d in self.seed_states.items()
+            if d.get("state") in ["active", "blending"]
+        }
+
+        for seed_id, data in sorted(high_perf_seeds.items()):
+            table.add_row(
+                seed_id[:12] + "...",
+                str(data.get("activation_epoch", "N/A")),
+                (f"{data.get('grad_norm'):.2e}" if data.get('grad_norm') is not None else "N/A"),
+                (f"{data.get('weight_norm'):.2f}" if data.get('weight_norm') is not None else "N/A"),
+                str(data.get("patience", "N/A")),
+            )
+
+        return Panel(table, title="High Performing Seeds", border_style="green")
+
+    def _create_low_perf_seeds_panel(self) -> Panel:
+        """Generate the panel for poorly-performing seeds."""
+        table = Table(
+            show_header=True, header_style="bold red", expand=True, box=box.MINIMAL
+        )
+        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=2)
+        table.add_column("Act. Epoch", justify="center", ratio=1)
+        table.add_column("Grad Norm", justify="center", ratio=1)
+        table.add_column("Weight Norm", justify="center", ratio=1)
+        table.add_column("Patience", justify="center", ratio=1)
+
+        low_perf_seeds = {
+            sid: d
+            for sid, d in self.seed_states.items()
+            if d.get("state") not in ["active", "blending"]
+        }
+
+        for seed_id, data in sorted(low_perf_seeds.items()):
+            table.add_row(
+                seed_id[:12] + "...",
+                str(data.get("activation_epoch", "N/A")),
+                (f"{data.get('grad_norm'):.2e}" if data.get('grad_norm') is not None else "N/A"),
+                (f"{data.get('weight_norm'):.2f}" if data.get('weight_norm') is not None else "N/A"),
+                str(data.get("patience", "N/A")),
+            )
+
+        return Panel(table, title="Poorly Performing Seeds", border_style="red")
+
+    def _create_seed_metrics_panel(self) -> Panel:
+        """Generate the panel containing high and poor performing seed tables."""
+        if not self.seed_states:
+            return Panel(
+                Align.center("Waiting for seed data...", vertical="middle"),
+                title="Seed Metrics",
+                border_style="green",
+            )
+
+        metrics_layout = Layout(name="seed_metrics_split")
+        metrics_layout.split_column(
+            Layout(self._create_high_perf_seeds_panel()),
+            Layout(self._create_low_perf_seeds_panel()),
+        )
+        return Panel(metrics_layout, title="Seed Metrics", border_style="green")
 
     def _create_seed_log_panel(self) -> Panel:
         """Generate the panel for the scrolling seed-specific event log."""
@@ -307,15 +360,40 @@ class RichDashboard:
 
         # The metrics panel is not updated here yet, per user request.
 
-    def update_seed(self, seed_id: str, state: str, alpha: float = 0.0, from_state: str = "unknown"):
+    def update_seed(
+        self,
+        seed_id: str,
+        state: str,
+        alpha: float = 0.0,
+        from_state: str = "unknown",
+        activation_epoch: int | None = None,
+        grad_norm: float | None = None,
+        weight_norm: float | None = None,
+        patience: int | None = None,
+    ):
         """Handle seed state change event and update the status panel."""
         # Log the event to the dedicated seed log
+        log_data = {"alpha": f"{alpha:.2f}"}
+        if grad_norm is not None:
+            log_data["grad"] = f"{grad_norm:.2e}"
         self.add_seed_log_event(
-            "seed", f"Seed {seed_id[:12]}...: {from_state} -> {state}", {"alpha": f"{alpha:.2f}"}
+            "seed", f"Seed {seed_id[:12]}...: {from_state} -> {state}", log_data
         )
 
         # Update the internal state for the right panels
-        self.seed_states[seed_id] = {"state": state, "alpha": alpha}
+        new_data = {
+            "state": state,
+            "alpha": alpha,
+            "activation_epoch": activation_epoch,
+            "grad_norm": grad_norm,
+            "weight_norm": weight_norm,
+            "patience": patience,
+        }
+        # Merge with existing data to preserve fields that aren't updated in this event
+        self.seed_states.setdefault(seed_id, {}).update(
+            {k: v for k, v in new_data.items() if v is not None}
+        )
+
         if self.layout:
             self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
             self.layout["seed_box_panel"].update(self._create_seed_box_panel())
