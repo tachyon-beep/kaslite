@@ -74,49 +74,46 @@ class RichDashboard:
         progress_layout = Layout()
         progress_layout.split_row(
             Layout(self.total_progress, name="total", ratio=2),
-            Layout(name="spacer", ratio=1),  # This is the gap
+            Layout(name="spacer", ratio=1),
             Layout(self.phase_progress, name="phase", ratio=2),
         )
         header.update(progress_layout)
 
-        # --- Main Area Setup: 3 Columns ---
-        main_area = Layout(name="main")
-        left_column = Layout(name="left_column", ratio=7)         # Adjusted
-        center_column = Layout(name="seed_metrics_panel", ratio=5) # Adjusted
-        right_column = Layout(name="right_column", ratio=8)        # Adjusted
+        # Main Area
+        self.layout.split(header, Layout(name="main"))
+
+        # 3 Columns in Main
+        self.layout["main"].split_row(
+            Layout(name="left_column", ratio=7),
+            Layout(name="center_column", ratio=5),
+            Layout(name="right_column", ratio=8),
+        )
 
         # --- Left Column ---
-        top_left_area = Layout(name="top_left_area")
-        top_row = Layout(name="top_row")
-        top_row.split_row(
-            Layout(name="info_panel"),
-            Layout(name="metrics_table_panel"),  # The top-half metrics table
-        )
-        top_left_area.split_column(
-            top_row,
-            Layout(name="sparkline_panel"),  # The bottom-half trends panel
-        )
-
-        left_column.split_column(
-            top_left_area,
+        self.layout["left_column"].split_column(
+            Layout(name="top_left_area"),
             Layout(name="event_log_panel", ratio=1),
         )
+        self.layout["top_left_area"].split_column(
+            Layout(name="top_row"),
+            Layout(name="sparkline_panel"),
+        )
+        self.layout["top_row"].split_row(
+            Layout(name="info_panel"),
+            Layout(name="metrics_table_panel"),
+        )
 
-        # --- Center Column is the seed_metrics_panel, populated later ---
+        # --- Center Column ---
+        self.layout["center_column"].split_column(
+            Layout(name="seed_metrics_panel", ratio=2),
+            Layout(name="seed_timeline_panel", ratio=1),
+        )
 
         # --- Right Column ---
-        bottom_right_area = Layout(name="bottom_right_area")
-        bottom_right_area.split_row(
-            Layout(name="architecture_panel"),
-            Layout(name="seed_timeline_panel"),
-        )
-        right_column.split_column(
+        self.layout["right_column"].split_column(
             Layout(name="seed_box_panel"),
-            bottom_right_area,
+            Layout(name="architecture_panel"),
         )
-
-        main_area.split_row(left_column, center_column, right_column)
-        self.layout.split(header, main_area)
 
         # --- Populate Panels ---
         self.layout["info_panel"].update(self._create_info_panel())
@@ -124,8 +121,8 @@ class RichDashboard:
         self.layout["sparkline_panel"].update(self._create_sparkline_panel())
         self.layout["event_log_panel"].update(self._create_event_log_panel())
         self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
-        self.layout["seed_box_panel"].update(self._create_seed_box_panel())
         self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
+        self.layout["seed_box_panel"].update(self._create_seed_box_panel())
         self.layout["architecture_panel"].update(self._create_architecture_panel())
 
         self._layout_initialized = True
@@ -290,11 +287,11 @@ class RichDashboard:
         table = Table(
             show_header=True, header_style="bold green", expand=True, box=box.MINIMAL
         )
-        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=2)
-        table.add_column("Act. Epoch", justify="center", ratio=1)
-        table.add_column("Grad Norm", justify="center", ratio=1)
-        table.add_column("Weight Norm", justify="center", ratio=1)
-        table.add_column("Patience", justify="center", ratio=1)
+        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=1)  # Halved
+        table.add_column("Act. Epoch", justify="center", ratio=1.25)
+        table.add_column("Grad Norm", justify="center", ratio=1.25)
+        table.add_column("Weight Norm", justify="center", ratio=1.25)
+        table.add_column("Patience", justify="center", ratio=1.25)
 
         high_perf_seeds = {
             sid: d
@@ -318,11 +315,11 @@ class RichDashboard:
         table = Table(
             show_header=True, header_style="bold red", expand=True, box=box.MINIMAL
         )
-        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=2)
-        table.add_column("Act. Epoch", justify="center", ratio=1)
-        table.add_column("Grad Norm", justify="center", ratio=1)
-        table.add_column("Weight Norm", justify="center", ratio=1)
-        table.add_column("Patience", justify="center", ratio=1)
+        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=1)  # Halved
+        table.add_column("Act. Epoch", justify="center", ratio=1.25)
+        table.add_column("Grad Norm", justify="center", ratio=1.25)
+        table.add_column("Weight Norm", justify="center", ratio=1.25)
+        table.add_column("Patience", justify="center", ratio=1.25)
 
         low_perf_seeds = {
             sid: d
