@@ -87,9 +87,16 @@ class RichDashboard:
 
         # --- Left Column ---
         top_left_area = Layout(name="top_left_area")
-        top_left_area.split_row(
-            Layout(name="info_panel"), Layout(name="metrics_panel")
+        top_row = Layout(name="top_row")
+        top_row.split_row(
+            Layout(name="info_panel"),
+            Layout(name="metrics_table_panel"),  # The top-half metrics table
         )
+        top_left_area.split_column(
+            top_row,
+            Layout(name="sparkline_panel"),  # The bottom-half trends panel
+        )
+
         left_column.split_column(
             top_left_area,
             Layout(name="event_log_panel", ratio=1),
@@ -107,7 +114,8 @@ class RichDashboard:
 
         # --- Populate Panels ---
         self.layout["info_panel"].update(self._create_info_panel())
-        self.layout["metrics_panel"].update(self._create_metrics_panel())
+        self.layout["metrics_table_panel"].update(self._create_metrics_table_panel())
+        self.layout["sparkline_panel"].update(self._create_sparkline_panel())
         self.layout["event_log_panel"].update(self._create_event_log_panel())
         self.layout["seed_box_panel"].update(self._create_seed_box_panel())
         self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
@@ -138,16 +146,51 @@ class RichDashboard:
 
         return Panel(info_table, title="Info", border_style="yellow")
 
-    def _create_metrics_panel(self) -> Panel:
+    def _create_metrics_table_panel(self) -> Panel:
         """Generate the panel for the live metrics table."""
         metrics_table = Table(show_header=True, header_style="bold magenta", expand=True)
-        metrics_table.add_column("Metric", justify="center", style="cyan", no_wrap=True)
-        metrics_table.add_column("Value", justify="center", style="green")
-        metrics_table.add_column("Trend", justify="center")
+        metrics_table.add_column("Metric", justify="left", style="cyan", no_wrap=True)
+        metrics_table.add_column("Current", justify="center", style="green")
+        metrics_table.add_column("Last", justify="center", style="yellow")
 
-        # The table is left blank for now, as requested.
+        # Populate with latest and previous metrics
+        metrics_to_show = sorted(self.latest_metrics.keys())
+        for metric in metrics_to_show:
+            current_val = self.latest_metrics.get(metric)
+            last_val = self.previous_metrics.get(metric)
+
+            current_str = (
+                f"{current_val:.4f}" if isinstance(current_val, float) else str(current_val)
+            )
+            last_str = f"{last_val:.4f}" if isinstance(last_val, float) else "N/A"
+
+            metrics_table.add_row(metric, current_str, last_str)
 
         return Panel(metrics_table, title="Live Metrics", border_style="cyan")
+
+    def _create_sparkline_panel(self) -> Panel:
+        """Generate the panel for metric sparklines."""
+        sparkline_table = Table(
+            show_header=True, header_style="bold cyan", expand=True, box=box.MINIMAL
+        )
+        sparkline_table.add_column("Metric", style="cyan", no_wrap=True)
+        sparkline_table.add_column("Trend / Sparkline", style="green", ratio=2)
+        sparkline_table.add_column("Average", justify="right")
+
+        # Add rows for key metrics with placeholders
+        metrics_to_track = ["train_loss", "val_acc"]
+        for metric in metrics_to_track:
+            latest_val = self.latest_metrics.get(metric)
+            # For now, "Average" will just show the latest value.
+            avg_val_str = f"{latest_val:.4f}" if isinstance(latest_val, float) else "N/A"
+
+            sparkline_table.add_row(
+                metric,
+                "[dim]...plotting area...[/dim]",
+                avg_val_str,
+            )
+
+        return Panel(sparkline_table, title="Trends", border_style="cyan")
 
     def _create_event_log_panel(self) -> Panel:
         """Generate the panel for the scrolling event log."""
@@ -355,7 +398,10 @@ class RichDashboard:
         }
         self.add_live_event("epoch", f"Epoch {epoch} complete", simple_metrics)
 
-        # The metrics panel is not updated here yet, per user request.
+        # Update the metrics panels with the latest data
+        if self.layout:
+            self.layout["metrics_table_panel"].update(self._create_metrics_table_panel())
+            self.layout["sparkline_panel"].update(self._create_sparkline_panel())
 
     def update_seed(
         self,
