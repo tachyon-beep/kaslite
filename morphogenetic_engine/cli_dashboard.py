@@ -6,7 +6,7 @@ This is a simplified version, designed to be rebuilt.
 from __future__ import annotations
 import time
 from collections import deque
-from typing import Any, Deque, Optional
+from typing import Any
 
 from rich.align import Align
 from rich.console import Console
@@ -26,15 +26,16 @@ from rich import box
 
 class RichDashboard:
     """A Rich CLI dashboard for experiment monitoring with progress bars."""
+    GRID_SIZE = 16
 
-    def __init__(self, console: Optional[Console] = None, experiment_params: Optional[dict[str, Any]] = None):
+    def __init__(self, console: Console | None = None, experiment_params: dict[str, Any] | None = None):
         self.console = console or Console()
         self.experiment_params = experiment_params or {}
-        self.layout: Optional[Layout] = None
-        self.live: Optional[Live] = None
+        self.layout: Layout | None = None
+        self.live: Live | None = None
         self._layout_initialized = False
-        self.last_events: Deque[str] = deque(maxlen=20)
-        self.seed_log_events: Deque[str] = deque(maxlen=40) # Larger buffer for seed events
+        self.last_events: deque[str] = deque(maxlen=20)
+        self.seed_log_events: deque[str] = deque(maxlen=40) # Larger buffer for seed events
         self.seed_states: dict[str, dict[str, Any]] = {}
         self.latest_metrics: dict[str, Any] = {}
         self.previous_metrics: dict[str, Any] = {}
@@ -69,18 +70,28 @@ class RichDashboard:
 
         self.layout = Layout(name="root")
 
-        # Create a header for progress bars
-        header = Layout(name="header", size=3)
-        progress_layout = Layout()
-        progress_layout.split_row(
-            Layout(self.total_progress, name="total", ratio=2),
-            Layout(name="spacer", ratio=1),
-            Layout(self.phase_progress, name="phase", ratio=2),
+        # --- Title Header ---
+        title_header = Layout(
+            Panel(Align.center("[bold]QUICKSILVER[/bold]"), box=box.MINIMAL),
+            name="title",
+            size=3,
         )
-        header.update(progress_layout)
 
-        # Main Area
-        self.layout.split(header, Layout(name="main"))
+        # --- Main Area Setup ---
+        main_area = Layout(name="main")
+
+        # --- Footer Setup for Progress Bars ---
+        footer = Layout(name="footer", size=3)
+        progress_layout = Layout()
+        # Spacer removed, bars take equal space
+        progress_layout.split_row(
+            Layout(self.phase_progress, name="phase", ratio=1),
+            Layout(self.total_progress, name="total", ratio=1),
+        )
+        footer.update(progress_layout)
+
+        # Root layout splits into title, main content, and the footer
+        self.layout.split(title_header, main_area, footer)
 
         # 3 Columns in Main
         self.layout["main"].split_row(
@@ -232,34 +243,59 @@ class RichDashboard:
                 continue  # Ignore malformed IDs
         return layer_seeds
 
-    def _create_seed_box_panel(self) -> Panel:
-        """Generate the panel for the seed status grid."""
-        num_layers = self.experiment_params.get("num_layers", 0)
-        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
+    def _get_network_strain_states_by_layer(
+        self, num_layers: int, seeds_per_layer: int
+    ) -> dict[int, list[str | None]]:
+        """
+        Parse and organize network strain data by layer and seed index.
+        NOTE: This is a placeholder. It currently returns the same data as
+        the seed states for visual demonstration.
+        """
+        # For now, just reuse the seed state logic.
+        # In the future, this should query a different data source for strain.
+        return self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        emoji_map = {
-            "active": "🟢",
-            "dormant": "⚪",
-            "blending": "🟡",
-            "germinated": "🌱",
-        }
-        empty_emoji = "⚫"
-
+    def _create_grid_table(
+        self,
+        num_layers: int,
+        seeds_per_layer: int,
+        layer_data: dict[int, list[str | None]],
+        emoji_map: dict[str, str],
+        empty_emoji: str,
+    ) -> Table:
+        """Creates the Rich Table for a grid display."""
         grid_table = Table(
             show_header=True,
             header_style="bold magenta",
             expand=False,
-            box=box.SIMPLE_HEAD,  # A box style without internal vertical lines
+            box=box.SIMPLE_HEAD,
         )
-        # L# column
         grid_table.add_column("L#", style="dim", width=3, justify="center")
-        # Visual separator column
         grid_table.add_column("│", width=1, no_wrap=True, style="dim")
-        # Seed columns
-        for i in range(16):
+        for i in range(self.GRID_SIZE):
             grid_table.add_column(
                 str(i + 1), justify="center", no_wrap=True, style="bold"
             )
+
+        for i in range(self.GRID_SIZE):
+            row = [f"{i + 1}", "│"]
+            if i < num_layers:
+                states = layer_data.get(i, [])
+                for j in range(self.GRID_SIZE):
+                    emoji = empty_emoji
+                    if j < seeds_per_layer and j < len(states):
+                        state = states[j]
+                        emoji = emoji_map.get(state, empty_emoji)
+                    row.append(emoji)
+            else:
+                row.extend([empty_emoji] * self.GRID_SIZE)
+            grid_table.add_row(*row)
+        return grid_table
+
+    def _create_seed_box_panel(self) -> Panel:
+        """Generate the panel for the seed status grid."""
+        num_layers = self.experiment_params.get("num_layers", 0)
+        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
 
         if num_layers == 0 or seeds_per_layer == 0:
             return Panel(
@@ -268,27 +304,18 @@ class RichDashboard:
                 border_style="magenta",
             )
 
+        emoji_map = {
+            "active": "🟢",
+            "dormant": "⚪",
+            "blending": "🟡",
+            "germinated": "🌱",
+        }
+        empty_emoji = "⚫"
         layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        # Always display 16 layer rows
-        for i in range(16):
-            # Start row with layer number (1-indexed) and the separator
-            row = [f"{i + 1}", "│"]
-
-            # Check if the current layer index is valid for the experiment
-            if i < num_layers:
-                states = layer_seeds.get(i, [])
-                for j in range(16):  # Populate 16 seed columns
-                    emoji = empty_emoji
-                    if j < seeds_per_layer and j < len(states):
-                        state = states[j]
-                        emoji = emoji_map.get(state, empty_emoji)
-                    row.append(emoji)
-            else:
-                # If layer does not exist, fill row with empty emojis
-                row.extend([empty_emoji] * 16)
-
-            grid_table.add_row(*row)
+        grid_table = self._create_grid_table(
+            num_layers, seeds_per_layer, layer_seeds, emoji_map, empty_emoji
+        )
 
         return Panel(
             Align.center(grid_table, vertical="middle"),
@@ -369,33 +396,9 @@ class RichDashboard:
         return Panel(metrics_layout, title="Seed Metrics", border_style="green")
 
     def _create_network_strain_panel(self) -> Panel:
-        """Generate the panel for the network strain visualization (clone of seed box)."""
+        """Generate the panel for the network strain visualization."""
         num_layers = self.experiment_params.get("num_layers", 0)
         seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
-
-        emoji_map = {
-            "active": "🟢",
-            "dormant": "⚪",
-            "blending": "🟡",
-            "germinated": "🌱",
-        }
-        empty_emoji = "⚫"
-
-        grid_table = Table(
-            show_header=True,
-            header_style="bold magenta",
-            expand=False,
-            box=box.SIMPLE_HEAD,
-        )
-        # L# column
-        grid_table.add_column("L#", style="dim", width=3, justify="center")
-        # Visual separator column
-        grid_table.add_column("│", width=1, no_wrap=True, style="dim")
-        # Seed columns
-        for i in range(16):
-            grid_table.add_column(
-                str(i + 1), justify="center", no_wrap=True, style="bold"
-            )
 
         if num_layers == 0 or seeds_per_layer == 0:
             return Panel(
@@ -404,27 +407,29 @@ class RichDashboard:
                 border_style="yellow",
             )
 
-        layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
+        # Emoji map corresponding to the strain legend
+        emoji_map = {
+            "none": "[blue]●[/blue]",
+            "low": "[green]●[/green]",
+            "medium": "[yellow]●[/yellow]",
+            "high": "[red]●[/red]",
+            "fired": "💥",
+            # Mapping seed states to strain for placeholder visualization
+            "active": "[green]●[/green]",  # Low strain
+            "blending": "[yellow]●[/yellow]", # Medium strain
+            "germinated": "[blue]●[/blue]", # No strain
+            "dormant": "[blue]●[/blue]", # No strain
+        }
+        empty_emoji = "⚫"
 
-        # Always display 16 layer rows
-        for i in range(16):
-            # Start row with layer number (1-indexed) and the separator
-            row = [f"{i + 1}", "│"]
+        # NOTE: This currently uses seed data as a placeholder for strain data.
+        layer_data = self._get_network_strain_states_by_layer(
+            num_layers, seeds_per_layer
+        )
 
-            # Check if the current layer index is valid for the experiment
-            if i < num_layers:
-                states = layer_seeds.get(i, [])
-                for j in range(16):  # Populate 16 seed columns
-                    emoji = empty_emoji
-                    if j < seeds_per_layer and j < len(states):
-                        state = states[j]
-                        emoji = emoji_map.get(state, empty_emoji)
-                    row.append(emoji)
-            else:
-                # If layer does not exist, fill row with empty emojis
-                row.extend([empty_emoji] * 16)
-
-            grid_table.add_row(*row)
+        grid_table = self._create_grid_table(
+            num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji
+        )
 
         return Panel(
             Align.center(grid_table, vertical="middle"),
