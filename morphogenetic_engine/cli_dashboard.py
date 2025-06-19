@@ -125,9 +125,14 @@ class RichDashboard:
         )
 
         # --- Left Column ---
+        bottom_left = Layout(name="bottom_left_area")
+        bottom_left.split_column(
+            Layout(name="event_log_panel"),
+            Layout(name="seed_timeline_panel"),
+        )
         self.layout["left_column"].split_column(
             Layout(name="top_left_area"),
-            Layout(name="event_log_panel", ratio=1),
+            bottom_left,
         )
         self.layout["top_left_area"].split_column(
             Layout(name="top_row"),
@@ -140,8 +145,9 @@ class RichDashboard:
 
         # --- Center Column ---
         self.layout["center_column"].split_column(
-            Layout(name="seed_metrics_panel", ratio=1),
-            Layout(name="seed_timeline_panel", ratio=1),
+            Layout(name="kasima_panel", ratio=1),
+            Layout(name="tamiyo_panel", ratio=1),
+            Layout(name="karn_panel", ratio=1),
         )
 
         # --- Right Column ---
@@ -163,7 +169,9 @@ class RichDashboard:
         self.layout["metrics_table_panel"].update(self._create_metrics_table_panel())
         self.layout["sparkline_panel"].update(self._create_sparkline_panel())
         self.layout["event_log_panel"].update(self._create_event_log_panel())
-        self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
+        self.layout["kasima_panel"].update(self._create_kasima_panel())
+        self.layout["tamiyo_panel"].update(self._create_tamiyo_panel())
+        self.layout["karn_panel"].update(self._create_karn_panel())
         self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
         self.layout["seed_box_panel"].update(self._create_seed_box_panel())
         self.layout["seed_legend_panel"].update(self._create_seed_legend_panel())
@@ -420,12 +428,12 @@ class RichDashboard:
 
         return Panel(table, title="Poorly Performing Seeds", border_style="red")
 
-    def _create_seed_metrics_panel(self) -> Panel:
+    def _create_kasima_panel(self) -> Panel:
         """Generate the panel containing high and poor performing seed tables."""
         if not self.seed_states:
             return Panel(
                 Align.center("Waiting for seed data...", vertical="middle"),
-                title="Seed Metrics",
+                title="Kasima",
                 border_style="green",
             )
 
@@ -434,7 +442,43 @@ class RichDashboard:
             Layout(self._create_high_perf_seeds_panel()),
             Layout(self._create_low_perf_seeds_panel()),
         )
-        return Panel(metrics_layout, title="Seed Metrics", border_style="green")
+        return Panel(metrics_layout, title="Kasima", border_style="green")
+
+    def _create_tamiyo_panel(self) -> Panel:
+        """Generate the panel for Tamiyo's status."""
+        tamiyo_table = Table(
+            show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
+        )
+        tamiyo_table.add_column("Metric", style="bold blue")
+        tamiyo_table.add_column("Value")
+
+        tamiyo_table.add_row("Status", "Selecting Blueprint")
+        tamiyo_table.add_row("Target Seed", "seed_4_layer_2")
+        tamiyo_table.add_row("Strain Signature", "[High Loss, Low Grad Norm]")
+        tamiyo_table.add_row("Candidate Blueprint", "[ID: 7b3d_v2] (Gated-SSM)")
+        tamiyo_table.add_row("Predicted Utility", "Δ-Accuracy: +2.1%")
+        tamiyo_table.add_row("Policy Loss", "0.198")
+        tamiyo_table.add_row("Critic Loss", "0.051")
+        tamiyo_table.add_row("Mean Reward (last 100)", "88.1")
+        tamiyo_table.add_row("Action Entropy", "0.55")
+
+        return Panel(tamiyo_table, title="Tamiyo", border_style="blue")
+
+    def _create_karn_panel(self) -> Panel:
+        """Generate the panel for Karn's status."""
+        karn_table = Table(
+            show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
+        )
+        karn_table.add_column("Metric", style="bold blue")
+        karn_table.add_column("Value")
+
+        karn_table.add_row("Status", "Exploiting Keystone Lineage")
+        karn_table.add_row("Archive Health", "81.2% Filled (21k blueprints)")
+        karn_table.add_row("Archive Quality (Mean)", "74.5 ELO")
+        karn_table.add_row("Critic Loss", "0.051")
+        karn_table.add_row("Exploration/Exploitation", "Exploiting (80%)")
+
+        return Panel(karn_table, title="Karn", border_style="blue")
 
     def _create_network_strain_panel(self) -> Panel:
         """Generate the panel for the network strain visualization."""
@@ -596,7 +640,7 @@ class RichDashboard:
         )
 
         if self.layout:
-            self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
+            self.layout["kasima_panel"].update(self._create_kasima_panel())
             self.layout["seed_box_panel"].update(self._create_seed_box_panel())
             self.layout["network_strain_panel"].update(self._create_network_strain_panel())
 
