@@ -187,6 +187,7 @@ class BaseNet(nn.Module):
         *,
         seed_manager: SeedManager,
         input_dim: int = 2,
+        output_dim: int = 2,
         num_layers: int = 8,
         seeds_per_layer: int = 1,
         blend_steps: int = 30,
@@ -203,12 +204,16 @@ class BaseNet(nn.Module):
             raise ValueError("input_dim must be positive")
         if hidden_dim <= 0:
             raise ValueError("hidden_dim must be positive")
+        if output_dim <= 0:
+            raise ValueError("output_dim must be positive")
         if seeds_per_layer <= 0:
             raise ValueError("seeds_per_layer must be positive")
 
         self.num_layers = num_layers
         self.seeds_per_layer = seeds_per_layer
         self.hidden_dim = hidden_dim
+        self.input_dim = input_dim
+        self.output_dim = output_dim
 
         # Create input layer
         self.input_layer = nn.Linear(input_dim, hidden_dim)
@@ -242,7 +247,7 @@ class BaseNet(nn.Module):
             self.activations.append(activation)
 
         # Output layer
-        self.out = nn.Linear(hidden_dim, 2)
+        self.out = nn.Linear(hidden_dim, output_dim)
 
     # ------------------------------------------------------------------
     def freeze_backbone(self):

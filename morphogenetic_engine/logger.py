@@ -51,10 +51,11 @@ class ExperimentLogger:
     """Lightweight experiment logger.
 
     This logger keeps an in-memory list of :class:`LogEvent` instances and
-    writes each event to both the console and a file on disk.
+    writes each event to both the console and a file on disk. It can also
+    integrate with a dashboard for live updates.
     """
 
-    def __init__(self, log_file_path: str | Path, config: Dict[str, Any]) -> None:
+    def __init__(self, log_file_path: str | Path, config: Dict[str, Any], dashboard=None) -> None:
         """Initialize the logger and ensure the results directory exists."""
         # Always place logs inside the project ``results`` directory
         results_dir = Path(__file__).resolve().parents[1] / "results"
@@ -62,6 +63,7 @@ class ExperimentLogger:
         self.log_file_path = results_dir / Path(log_file_path).name
         self.config = config
         self.events: List[LogEvent] = []
+        self.dashboard = dashboard  # Optional dashboard integration
         # Truncate any existing log file
         self.log_file_path.write_text("")
 
@@ -69,7 +71,25 @@ class ExperimentLogger:
     def _record_event(self, event: LogEvent) -> None:
         self.events.append(event)
         self.write_to_file(event)
-        self.print_real_time_update(event)
+        
+        # If we have a dashboard, send the event there instead of printing
+        if self.dashboard is not None:
+            self._send_to_dashboard(event)
+        else:
+            self.print_real_time_update(event)
+    
+    def _send_to_dashboard(self, event: LogEvent) -> None:
+        """Send event to dashboard for live display."""
+        if not self.dashboard:
+            return
+
+        # All events are sent to the dashboard's live event stream
+        # for a complete historical record.
+        self.dashboard.add_live_event(
+            event_type=event.event_type.value.upper(),
+            message=event.message,
+            data=event.data
+        )
 
     # ------------------------------------------------------------------
     def log_experiment_start(self) -> None:
@@ -140,17 +160,20 @@ class ExperimentLogger:
         )
         self._record_event(event)
 
-    def log_phase_transition(self, epoch: int, from_phase: str, to_phase: str) -> None:
+    def log_phase_transition(
+        self, epoch: int, from_phase: str, to_phase: str, description: str = "", total_epochs: int | None = None
+    ) -> None:
         """Record a phase transition of the experiment."""
 
         event = LogEvent(
             timestamp=time.time(),
             epoch=epoch,
             event_type=EventType.PHASE_TRANSITION,
-            message=f"Phase transition {from_phase} -> {to_phase}",
+            message=description or f"Phase transition {from_phase} -> {to_phase}",
             data={
                 "from": from_phase,
                 "to": to_phase,
+                "total_epochs": total_epochs,
             },
         )
         self._record_event(event)
@@ -195,7 +218,13 @@ class ExperimentLogger:
 
         ts = datetime.fromtimestamp(event.timestamp).strftime("%Y-%m-%d %H:%M:%S")
         event_name = event.event_type.value.upper()
-        print(f"[{ts}] {event_name}: {event.message} - {event.data}")
+        message = f"[{ts}] {event_name}: {event.message} - {event.data}"
+        
+        # If dashboard is available, send there instead of printing
+        if hasattr(self, 'dashboard') and self.dashboard is not None:
+            self.dashboard.add_log_message(message)
+        else:
+            print(message)
 
     # ------------------------------------------------------------------
     def generate_final_report(self) -> Dict[str, int]:

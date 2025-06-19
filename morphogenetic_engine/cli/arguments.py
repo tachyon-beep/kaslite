@@ -53,9 +53,15 @@ def create_experiment_parser() -> argparse.ArgumentParser:
     # Problem type and general parameters
     parser.add_argument(
         "--problem_type",
-        choices=["spirals", "moons", "clusters", "spheres", "complex_moons"],
+        choices=["spirals", "moons", "clusters", "spheres", "complex_moons", "cifar10"],
         default="spirals",
         help="Type of problem to solve",
+    )
+    parser.add_argument(
+        "--num_classes",
+        type=int,
+        default=2,
+        help="Number of output classes (auto-detected for known datasets)",
     )
     parser.add_argument("--n_samples", type=int, default=2000, help="Total samples (split evenly)")
     parser.add_argument(
@@ -190,4 +196,5 @@ def get_valid_argument_names() -> set:
         "num_layers",
         "seeds_per_layer",
         "acc_threshold",
+        "num_classes",
     }

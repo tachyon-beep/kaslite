@@ -12,6 +12,14 @@ from typing import cast
 import numpy as np
 from sklearn.datasets import make_blobs, make_moons
 
+# Import torchvision for CIFAR-10 support
+try:
+    from torchvision.datasets import CIFAR10
+    from torchvision.transforms import ToTensor
+    CIFAR10_AVAILABLE = True
+except ImportError:
+    CIFAR10_AVAILABLE = False
+
 
 def _validate_common_params(n_samples: int, input_dim: int, noise: float = None) -> None:
     """Validate common parameters used across dataset generation functions."""
@@ -309,3 +317,71 @@ def create_spheres(
     X, y = X[indices], y[indices]
 
     return X.astype(np.float32), y.astype(np.int64)
+
+
+def load_cifar10(data_dir: str = "./data", download: bool = True) -> tuple[np.ndarray, np.ndarray]:
+    """Load and preprocess CIFAR-10 dataset.
+
+    Args:
+        data_dir (str): Directory to store/load the CIFAR-10 data.
+        download (bool): Whether to download the data if not already present.
+
+    Returns:
+        tuple: (X, y) where X is the array of image data and y is the array of labels.
+    """
+    if not CIFAR10_AVAILABLE:
+        raise ImportError("CIFAR-10 dataset is not available. Please install torchvision.")
+
+    # Load CIFAR-10 dataset
+    cifar10 = CIFAR10(root=data_dir, train=True, download=download)
+
+    # Convert to numpy arrays
+    X = np.array([np.array(img[0]) for img in cifar10], dtype=np.float32)
+    y = np.array([img[1] for img in cifar10], dtype=np.int64)
+
+    # Normalize pixel values to [0, 1] range
+    X /= 255.0
+
+    return X, y
+
+
+def create_cifar10(data_dir: str = "data/cifar", train: bool = True):
+    """Generate CIFAR-10 dataset with flattened images.
+    
+    Args:
+        data_dir: Directory to store/load CIFAR-10 data
+        train: Whether to load training set (True) or test set (False)
+        
+    Returns:
+        tuple: (X, y) where X is flattened images (N, 3072) and y is labels (N,)
+        
+    Raises:
+        ImportError: If torchvision is not available
+        ValueError: If data loading fails
+    """
+    if not CIFAR10_AVAILABLE:
+        raise ImportError(
+            "torchvision is required for CIFAR-10 support. "
+            "Install with: pip install torchvision"
+        )
+    
+    try:
+        # Load CIFAR-10 dataset
+        dataset = CIFAR10(root=data_dir, train=train, download=True, transform=ToTensor())
+        
+        # Extract data and labels
+        # dataset.data is (N, 32, 32, 3) uint8 array
+        # dataset.targets is list of labels
+        X = dataset.data.astype(np.float32)
+        y = np.array(dataset.targets, dtype=np.int64)
+        
+        # Flatten images: (N, 32, 32, 3) -> (N, 3072)
+        X = X.reshape(len(X), -1)
+        
+        # Normalize pixel values to [0, 1] range
+        X = X / 255.0
+        
+        return X, y
+        
+    except Exception as e:
+        raise ValueError(f"Failed to load CIFAR-10 dataset: {e}") from e

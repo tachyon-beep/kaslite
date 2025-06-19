@@ -13,14 +13,15 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import json
 
 import optuna
 from rich.console import Console
 from rich.progress import Progress
+from rich.table import Table
 
 from .config import SweepConfig
 from .results import SweepResults
-
 
 class BayesianSearchRunner:
     """Bayesian optimization runner using Optuna."""
@@ -334,8 +335,6 @@ class BayesianSearchRunner:
             ],
         }
 
-        import json
-
         with open(study_file, "w", encoding="utf-8") as f:
             json.dump(study_summary, f, indent=2, default=str)
 
@@ -345,7 +344,7 @@ class BayesianSearchRunner:
             self.console.print("[bold red]No successful trials![/bold red]")
             return
 
-        from rich.table import Table
+
 
         table = Table(title="Bayesian Optimization Summary")
         table.add_column("Metric", style="cyan")

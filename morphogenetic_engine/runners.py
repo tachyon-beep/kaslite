@@ -11,10 +11,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import mlflow
-import mlflow.pytorch as mlflow_pytorch
 import numpy as np
 import torch
-from sklearn.preprocessing import StandardScaler
+from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
@@ -22,7 +21,6 @@ from morphogenetic_engine import datasets
 from morphogenetic_engine.cli_dashboard import RichDashboard
 from morphogenetic_engine.experiment import build_model_and_agents
 from morphogenetic_engine.logger import ExperimentLogger
-from morphogenetic_engine.model_registry import ModelRegistry
 from morphogenetic_engine.monitoring import cleanup_monitoring, initialize_monitoring
 from morphogenetic_engine.training import execute_phase_1, execute_phase_2
 from morphogenetic_engine.utils import (
@@ -112,11 +110,23 @@ def get_dataloaders(args):
             sphere_noise=args.sphere_noise,
             input_dim=args.input_dim,
         )
+    elif args.problem_type == "cifar10":
+        # Load CIFAR-10 dataset - use full training set
+        X, y = datasets.create_cifar10(data_dir="data/cifar", train=True)
+        # Override input_dim for CIFAR-10 (32*32*3 = 3072)
+        args.input_dim = 3072
     else:
         raise ValueError(f"Unknown problem type: {args.problem_type}")
 
-    scaler = StandardScaler().fit(X)
-    X = scaler.transform(X).astype(np.float32)
+    # Apply normalization for synthetic datasets only
+    # CIFAR-10 is already normalized to [0,1] in create_cifar10
+    if args.problem_type != "cifar10":
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler().fit(X)
+        X = scaler.transform(X).astype(np.float32)
+    else:
+        # Ensure X is float32 for consistency
+        X = X.astype(np.float32)
 
     dataset = TensorDataset(torch.from_numpy(X), torch.from_numpy(y))
     train_size = int(args.train_frac * len(dataset))
@@ -150,7 +160,7 @@ def setup_mlflow_logging(config: Dict[str, Any], slug: str) -> None:
 
 
 def log_mlflow_metrics_and_artifacts(
-    final_stats: Dict[str, Any], model, seed_manager, project_root: Path, slug: str, args
+    final_stats: Dict[str, Any], model, seed_manager, project_root: Path, slug: str
 ) -> None:
     """Log metrics, artifacts, and model to MLflow."""
     try:
@@ -176,180 +186,131 @@ def log_mlflow_metrics_and_artifacts(
         # Log TensorBoard logs
         tb_dir = project_root / "runs" / slug
         if tb_dir.exists():
-            mlflow.log_artifacts(str(tb_dir), "tensorboard")
+            mlflow.log_artifacts(str(tb_dir), artifact_path="tensorboard")
 
         # Log and register model
         try:
-            # Create a clean copy of the model for serialization
-            # (avoid thread locks and other non-serializable objects)
-            model_copy = type(model)(model.input_dim, model.hidden_dim, model.output_dim)
-            model_copy.load_state_dict(model.state_dict())
-            model_copy.eval()
+            serializable_model = _create_serializable_model(model)
+            mlflow.pytorch.log_model(serializable_model, "model")
+        except RuntimeError as e:
+            print(f"Warning: MLflow model logging failed: {e}")
 
-            mlflow_pytorch.log_model(model_copy, "model")
+        # Register model in Model Registry if validation accuracy meets threshold
+        if final_stats.get("val_acc", 0) >= 0.7:
+            print("Model validation accuracy exceeds threshold, but registry is disabled.")
 
-            # Register model in Model Registry if validation accuracy meets threshold
-            if final_stats.get("val_acc", 0) >= 0.7 and ModelRegistry is not None:
-                try:
-                    registry = ModelRegistry()
-                    active_run = mlflow.active_run()
-                    if active_run and active_run.info.run_id:
-                        run_id = active_run.info.run_id
-                        model_version = registry.register_best_model(
-                            run_id=run_id,
-                            metrics=final_stats,
-                            description=f"Morphogenetic model trained on {args.problem_type}",
-                            tags={
-                                "problem_type": args.problem_type,
-                                "device": str(args.device),
-                                "seeds_activated": str(final_stats.get("seeds_activated", False)),
-                                "training_mode": "single_experiment",
-                            },
-                        )
-                        if model_version:
-                            print(
-                                f"✅ Model registered: v{model_version.version} "
-                                f"(Val Acc: {final_stats.get('val_acc', 0):.4f})"
-                            )
-
-                            # Auto-promote to Staging if very good accuracy
-                            if final_stats.get("val_acc", 0) >= 0.9:
-                                registry.promote_model(
-                                    version=model_version.version, stage="Staging"
-                                )
-                                print(f"🚀 Model promoted to Staging: v{model_version.version}")
-
-                except (ImportError, RuntimeError, ValueError, OSError, AttributeError) as e:
-                    print(f"Warning: Model registration failed: {e}")
-
-        except (ImportError, RuntimeError, ValueError, OSError) as e:
-            print(f"Warning: Could not log model to MLflow: {e}")
-
-    except (ImportError, AttributeError, RuntimeError, ValueError, OSError) as e:
+    except (ImportError, AttributeError, RuntimeError, ValueError) as e:
         print(f"Warning: MLflow logging failed: {e}")
+
+
+def _create_serializable_model(original_model):
+    """Create a serializable version of BaseNet for MLflow logging."""
+
+    class SerializableBaseNet(nn.Module):
+        """Simplified, serializable version of BaseNet for model persistence."""
+
+        def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+            super().__init__()
+            self.input_dim = input_dim
+            self.hidden_dim = hidden_dim
+            self.output_dim = output_dim
+            self.num_layers = num_layers
+            
+            layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+            for _ in range(num_layers - 1):
+                layers.extend([nn.Linear(hidden_dim, hidden_dim), nn.ReLU()])
+            layers.append(nn.Linear(hidden_dim, output_dim))
+            self.backbone = nn.Sequential(*layers)
+
+        def forward(self, x):
+            return self.backbone(x)
+
+    serializable = SerializableBaseNet(
+        input_dim=original_model.input_dim,
+        hidden_dim=original_model.hidden_dim,
+        output_dim=original_model.output_dim,
+        num_layers=original_model.num_layers,
+    )
+
+    serializable_state = serializable.state_dict()
+    original_state = original_model.state_dict()
+
+    for key in serializable_state.keys():
+        if key in original_state:
+            serializable_state[key] = original_state[key]
+
+    serializable.load_state_dict(serializable_state)
+    serializable.eval()
+
+    return serializable
 
 
 def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
     """Run a single experiment with the given arguments and return results."""
-    # Set seeds for reproducibility
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
 
     logger, tb_writer, log_f, device, config, slug, project_root = setup_experiment(args)
-
-    # Start MLflow run if available
     setup_mlflow_logging(config, slug)
-
-    # Initialize Rich dashboard
-    dashboard = RichDashboard()
+    dashboard = RichDashboard(experiment_params=vars(args))
+    logger.dashboard = dashboard
 
     try:
-        with log_f, dashboard:  # Ensure both log file and dashboard are properly closed
-            # Write the detailed configuration header
+        with log_f, dashboard:
             write_experiment_log_header(log_f, config, args)
-
             logger.log_experiment_start()
 
             train_loader, val_loader = get_dataloaders(args)
             loaders = (train_loader, val_loader)
+            loss_fn = nn.CrossEntropyLoss()
 
-            model, seed_manager, loss_fn, kasmina = build_model_and_agents(args, device)
+            model, seed_manager, optimizer, scheduler = build_model_and_agents(args, device)
 
-            # Initialize seeds in dashboard
             for sid in seed_manager.seeds:
-                dashboard.update_seed(sid, "dormant")
+                logger.log_seed_event(epoch=0, seed_id=sid, from_state="init", to_state="dormant")
 
-            # Phase 1
-            logger.log_phase_transition(0, "init", "phase_1")
-            tb_writer.add_text("phase/transitions", "Epoch 0: init → phase_1", 0)
-            dashboard.show_phase_transition("phase_1", 0)
-
-            # Log phase transition to MLflow
-            try:
-                mlflow.set_tag("phase", "phase_1")
-            except (ImportError, AttributeError, RuntimeError):
-                pass
+            logger.log_phase_transition(
+                epoch=0,
+                from_phase="init",
+                to_phase="phase_1",
+                description="Warm-up",
+                total_epochs=args.warm_up_epochs,
+            )
 
             best_acc_phase1 = execute_phase_1(
-                config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f, dashboard
+                config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f
             )
 
-            # Phase 2
-            logger.log_phase_transition(config["warm_up_epochs"], "phase_1", "phase_2")
-            tb_writer.add_text(
-                "phase/transitions",
-                f"Epoch {config['warm_up_epochs']}: phase_1 → phase_2",
-                config["warm_up_epochs"],
+            logger.log_phase_transition(
+                epoch=args.warm_up_epochs,
+                from_phase="phase_1",
+                to_phase="phase_2",
+                description="Adaptation",
+                total_epochs=args.adaptation_epochs,
             )
-            dashboard.show_phase_transition("phase_2", config["warm_up_epochs"])
-
-            # Log phase transition to MLflow
-            try:
-                mlflow.set_tag("phase", "phase_2")
-            except (ImportError, AttributeError, RuntimeError):
-                pass
 
             final_stats = execute_phase_2(
-                config,
-                model,
-                loaders,
-                loss_fn,
-                seed_manager,
-                kasmina,
-                logger,
-                tb_writer,
-                log_f,
-                best_acc_phase1,
-                dashboard,
+                config, model, loaders, loss_fn, seed_manager, seed_manager, logger, tb_writer, log_f, best_acc_phase1
             )
 
-            logger.log_experiment_end(config["warm_up_epochs"] + config["adaptation_epochs"])
             log_final_summary(logger, final_stats, seed_manager, log_f)
-
-            # Log final metrics and artifacts to MLflow
-            log_mlflow_metrics_and_artifacts(
-                final_stats, model, seed_manager, project_root, slug, args
-            )
-
-            # Export metrics for DVC
+            log_mlflow_metrics_and_artifacts(final_stats, model, seed_manager, project_root, slug)
             export_metrics_for_dvc(final_stats, slug, project_root)
+            
+            print(f"Final best accuracy: {final_stats['best_acc']:.4f}")
+            if final_stats.get("seeds_activated"):
+                print("Seeds were activated during this experiment.")
 
-            # Close TensorBoard writer
-            tb_writer.close()
+            return {"run_id": run_id, "best_acc": final_stats["best_acc"], "seeds_activated": final_stats.get("seeds_activated", False)}
 
-            # End MLflow run
-            try:
-                mlflow.end_run()
-            except (ImportError, AttributeError, RuntimeError):
-                pass
-
-            # Cleanup monitoring
-            cleanup_monitoring()
-
-            # Return results for sweep summary
-            return {
-                "run_id": run_id,
-                "best_acc": final_stats["best_acc"],
-                "accuracy_dip": final_stats.get("accuracy_dip"),
-                "recovery_time": final_stats.get("recovery_time"),
-                "seeds_activated": final_stats.get("seeds_activated", False),
-                "total_seeds": len(seed_manager.seeds),
-                "active_seeds": sum(
-                    1 for info in seed_manager.seeds.values() if info["module"].state == "active"
-                ),
-            }
-
-    except (RuntimeError, ValueError, KeyError, torch.cuda.OutOfMemoryError) as e:
-        # Cleanup monitoring on error
+    except (RuntimeError, ValueError, KeyError) as e:
+        import traceback
+        traceback.print_exc()
         cleanup_monitoring()
-
-        # End MLflow run on error
-        try:
-            mlflow.end_run(status="FAILED")
-        except (ImportError, AttributeError, RuntimeError):
-            pass
-        tb_writer.close()  # Ensure writer is closed even on error
-        dashboard.stop()  # Ensure dashboard is stopped even on error
+        if mlflow.active_run():
+            mlflow.end_run("FAILED")
+        tb_writer.close()
+        dashboard.stop()
         print(f"Experiment failed: {e}")
         return {"run_id": run_id, "error": str(e), "best_acc": 0.0, "seeds_activated": False}

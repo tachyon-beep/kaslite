@@ -1,8 +1,15 @@
-# Python
+# =============================================================================
+# PYTHON
+# =============================================================================
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -16,76 +23,284 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 MANIFEST
 
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# =============================================================================
+# VIRTUAL ENVIRONMENTS & PACKAGE MANAGERS
+# =============================================================================
 # Virtual environments
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+.venv/
+pyvenv.cfg
 
+# Poetry
+poetry.lock
+.poetry/
+
+# Pipenv
+Pipfile.lock
+
+# Conda
+.conda/
+conda-meta/
+
+# =============================================================================
+# DEVELOPMENT TOOLS & IDEs
+# =============================================================================
 # IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.spyderproject
+.spyproject
+.ropeproject
 
-# OS
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# Testing
-.coverage
-.pytest_cache/
-.tox/
-.nox/
-coverage.xml
-*.cover
-.hypothesis/
+# Code formatting and linting
+.ruff_cache/
+.black/
+.isort.cfg
+.flake8
 
 # Type checking
 .mypy_cache/
 .dmypy.json
 dmypy.json
+.pyre/
+.pytype/
 
-# Ruff
-.ruff_cache/
+# =============================================================================
+# TESTING & COVERAGE
+# =============================================================================
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+htmlcov/
+.cache
+nosetests.xml
+coverage.html
 
-# MLOps and Experiment Data
+# =============================================================================
+# OPERATING SYSTEM
+# =============================================================================
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+
+# Windows
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# =============================================================================
+# ENVIRONMENT & CONFIGURATION
+# =============================================================================
+# Environment variables
+.env
+.env.*
+.envrc
+!.env.example
+!.env.template
+
+# Local configuration overrides
+config.local.*
+settings.local.*
+*.local.yml
+*.local.yaml
+*.local.json
+
+# =============================================================================
+# MACHINE LEARNING & DATA SCIENCE
+# =============================================================================
+# Dataset files (can be large)
+data/
+datasets/
+raw_data/
+processed_data/
+*.npz
+*.npy
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Model artifacts and checkpoints
+models/
+checkpoints/
+saved_models/
+*.pt
+*.pth
+*.ckpt
+*.pb
+*.tflite
+*.onnx
+*.joblib
+
+# Experiment tracking and MLOps
 mlruns/
 runs/
 results/
 !results/.gitkeep
 !results/*.md
-
-# DVC
-.dvc/tmp/
-.dvcignore
-
-# Jupyter
-.ipynb_checkpoints
-
-# Logs
+experiments/
+outputs/
+logs/
 *.log
 
-# Temporary files
+# Weights & Biases
+wandb/
+
+# TensorBoard
+tensorboard/
+tb_logs/
+
+# MLflow
+mlartifacts/
+.mlflow/
+
+# DVC (Data Version Control)
+.dvc/tmp/
+.dvcignore
+.dvc/cache/
+
+# Hydra
+.hydra/
+outputs/
+
+# Optuna
+optuna_storage.db
+
+# =============================================================================
+# JUPYTER & NOTEBOOKS
+# =============================================================================
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+.jupyter/
+*.ipynb_checkpoints/
+
+# Jupyter Book
+_build/
+
+# =============================================================================
+# DOCKER & CONTAINERIZATION
+# =============================================================================
+# Docker build context
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Container volumes and caches
+.docker-cache/
+docker-volumes/
+
+# =============================================================================
+# MONITORING & DEPLOYMENT
+# =============================================================================
+# Prometheus & Grafana
+prometheus_data/
+grafana_data/
+*.db
+
+# Kubernetes
+*.kubeconfig
+k8s-local/
+
+# =============================================================================
+# PERFORMANCE & PROFILING
+# =============================================================================
+# Profiling output
+*.prof
+*.pstats
+profile_*.txt
+memory_profiler_*.dat
+
+# Performance monitoring
+.py-spy/
+flamegraph.svg
+
+# =============================================================================
+# TEMPORARY & CACHE FILES
+# =============================================================================
+# General temporary files
 *.tmp
 *.temp
+*.cache
+*.swp
+*.swo
+*.bak
+*.orig
 
-# Misc
+# Cache directories
+.cache/
+__pycache__/
+.pytest_cache/
+
+# =============================================================================
+# SECURITY & SECRETS
+# =============================================================================
+# API keys and secrets
+secrets/
+.secrets/
+*.key
+*.pem
+*.p12
+*.jks
+credentials.json
+service-account.json
+
+# =============================================================================
+# MISC & PROJECT-SPECIFIC
+# =============================================================================
+# GitHub Copilot instructions (if they contain sensitive info)
 .github/copilot-instructions.md
+
+# Local development scripts
+dev_*.py
+test_*.py
+debug_*.py
+!tests/test_*.py
+
+# Documentation builds
+docs/_build/
+docs/build/
+site/
+
+# Node.js (if any frontend components)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
