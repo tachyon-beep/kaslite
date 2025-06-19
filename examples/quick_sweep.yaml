@@ -1,0 +1,24 @@
+# Quick Test Sweep Configuration
+# Minimal configuration for fast validation and testing
+
+sweep_type: "grid"
+
+experiment:
+  problem_type: "spirals"
+  input_dim: 3
+  n_samples: 1000
+  warm_up_epochs: 10
+  adaptation_epochs: 20
+
+parameters:
+  num_layers: [4, 8]
+  hidden_dim: [64, 128]
+  lr: [1e-3, 1e-2]
+
+execution:
+  max_parallel: 2
+  timeout_per_trial: 300 # 5 minutes
+
+optimization:
+  target_metric: "val_acc"
+  direction: "maximize"

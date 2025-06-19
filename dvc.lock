@@ -1,0 +1,15 @@
+schema: '2.0'
+stages:
+  generate_data:
+    cmd: python scripts/generate_data.py --problem_type spirals --n_samples 2000
+      --input_dim 3 --output data/spirals
+    params:
+      params.yaml:
+        input_dim: 3
+        n_samples: 2000
+        problem_type: spirals
+    outs:
+    - path: data/spirals.npz
+      hash: md5
+      md5: bd61a7c3f63c221dabee5804dfb57ddc
+      size: 40490

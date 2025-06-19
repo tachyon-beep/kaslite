@@ -1,0 +1,61 @@
+# Multi-stage Dockerfile for morphogenetic inference server
+# Production-ready image with minimal footprint
+
+# Build stage
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Production stage
+FROM python:3.11-slim
+
+# Create non-root user for security
+RUN groupadd -r morpho && useradd -r -g morpho morpho
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /home/morpho/.local
+
+# Copy application code
+COPY morphogenetic_engine/ ./morphogenetic_engine/
+COPY pyproject.toml .
+
+# Install the package and create directories
+ENV PATH=/home/morpho/.local/bin:$PATH
+RUN pip install --no-deps -e . && \
+    mkdir -p /app/mlruns /app/models && \
+    chown -R morpho:morpho /app
+
+# Switch to non-root user
+USER morpho
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Expose port
+EXPOSE 8080
+
+# Environment variables
+ENV PYTHONPATH=/app
+ENV MLFLOW_TRACKING_URI=file:///app/mlruns
+ENV PROMETHEUS_MULTIPROC_DIR=/tmp
+
+# Run the inference server
+CMD ["python", "-m", "uvicorn", "morphogenetic_engine.inference_server:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

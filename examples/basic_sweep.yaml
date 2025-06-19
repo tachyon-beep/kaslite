@@ -1,0 +1,34 @@
+# Basic Hyperparameter Sweep Configuration
+# Tests different learning rates and model architectures
+
+sweep_type: "grid"
+
+# Fixed experiment parameters
+experiment:
+  n_samples: 2000
+  batch_size: 64
+  device: "cpu"
+
+# Parameter grid to explore
+parameters:
+  # Network architecture parameters
+  num_layers: [4, 8, 16]
+  seeds_per_layer: [1, 2, 4]
+  hidden_dim: [64, 128, 256]
+
+  # Training parameters
+  lr: [0.001, 0.003, 0.01]
+  shadow_lr: [1e-4, 5e-4, 1e-3]
+
+  # Dataset selection
+  problem_type: ["moons", "spirals", "clusters"]
+
+# Execution configuration
+execution:
+  max_parallel: 2
+  timeout_per_trial: 1800 # 30 minutes
+
+# Optimization settings
+optimization:
+  target_metric: "val_acc"
+  direction: "maximize"

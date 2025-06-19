@@ -1,0 +1,34 @@
+# Architecture Search Configuration
+# Focused on finding optimal network architectures
+
+sweep_type: "grid"
+
+# Fixed experiment parameters
+experiment:
+  problem_type: "moons"
+  lr: 0.001
+  n_samples: 1000
+  adaptation_epochs: 100
+  device: "cpu"
+
+# Parameter grid to explore
+parameters:
+  # Core architecture parameters
+  num_layers: [2, 4, 6, 8, 12, 16, 20]
+  seeds_per_layer: [1, 2, 3, 4, 5]
+  hidden_dim: [32, 64, 128, 256, 512]
+
+  # Morphogenetic parameters
+  blend_steps: [10, 20, 30, 50, 100]
+  progress_thresh: [0.5, 0.6, 0.7, 0.8]
+  drift_warn: [0.05, 0.1, 0.15, 0.2]
+
+# Execution configuration
+execution:
+  max_parallel: 2
+  timeout_per_trial: 2400 # 40 minutes
+
+# Optimization settings
+optimization:
+  target_metric: "val_acc"
+  direction: "maximize"

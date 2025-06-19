@@ -1,0 +1,68 @@
+# Bayesian Optimization Configuration for Morphogenetic Experiments
+# This demonstrates Optuna-based intelligent parameter search
+
+sweep_type: "bayesian"
+
+# Fixed experiment parameters
+experiment:
+  problem_type: "spirals"
+  input_dim: 3
+  n_samples: 2000
+  batch_size: 64
+  device: "cpu"
+
+# Parameter search space definitions for Optuna
+parameters:
+  # Categorical parameters
+  num_layers:
+    type: "categorical"
+    choices: [4, 8, 16, 32]
+
+  seeds_per_layer:
+    type: "categorical"
+    choices: [1, 2, 4, 8]
+
+  # Integer parameters
+  hidden_dim:
+    type: "int"
+    low: 32
+    high: 512
+    log: true # Log-uniform distribution
+
+  warm_up_epochs:
+    type: "int"
+    low: 10
+    high: 100
+
+  adaptation_epochs:
+    type: "int"
+    low: 50
+    high: 300
+
+  # Float parameters
+  lr:
+    type: "float"
+    low: 1e-5
+    high: 1e-1
+    log: true # Log-uniform distribution
+
+  shadow_lr:
+    type: "float"
+    low: 1e-6
+    high: 1e-2
+    log: true
+
+# Execution configuration
+execution:
+  timeout_per_trial: 1800 # 30 minutes per trial
+
+# Optimization settings
+optimization:
+  target_metric: "val_acc"
+  direction: "maximize"
+  sampler: "TPE" # Tree-structured Parzen Estimator
+  pruner: "MedianPruner" # Prune unpromising trials early
+  secondary_metrics:
+    - "runtime"
+    - "final_acc"
+    - "best_acc"

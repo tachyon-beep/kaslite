@@ -118,6 +118,20 @@ class SeedManager:
             if seed_id in self.seeds:
                 self.seeds[seed_id]["telemetry"]["drift"] = drift
 
+    def reset(self) -> None:
+        """Reset the SeedManager to initial state. Primarily for testing."""
+        with self.lock:
+            self.seeds.clear()
+            self.germination_log.clear()
+
+    @classmethod
+    def reset_singleton(cls) -> None:
+        """Reset the singleton instance. Primarily for testing."""
+        with cls._singleton_lock:
+            if cls._instance is not None:
+                cls._instance.reset()
+                cls._instance = None
+
 
 class KasminaMicro:
     """
@@ -152,6 +166,9 @@ class KasminaMicro:
         Returns:
             True if germination occurred, False otherwise
         """
+        # Import here to avoid circular imports
+        from .monitoring import get_monitor
+
         # Check if loss has not improved by at least delta
         if self.prev_loss - val_loss < self.delta:
             self.plateau += 1
@@ -160,13 +177,21 @@ class KasminaMicro:
 
         self.prev_loss = val_loss
 
+        # Update Prometheus metrics for Kasmina controller
+        monitor = get_monitor()
+        if monitor:
+            monitor.update_kasmina_metrics(self.plateau, self.patience)
+
         # Only trigger germination if:
         # 1. Accuracy is below threshold (problem not solved)
         # 2. Loss plateau persists beyond patience
         if val_acc < self.acc_threshold and self.plateau >= self.patience:
-            self.plateau = 0  # Reset plateau counter
             seed_id = self._select_seed()
             if seed_id and self.seed_manager.request_germination(seed_id):
+                self.plateau = 0  # Reset plateau counter only on successful germination
+                # Record germination in monitoring
+                if monitor:
+                    monitor.record_germination()
                 return True  # Signal germination occurred
         return False
 

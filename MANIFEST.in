@@ -1,0 +1,23 @@
+include README.md
+include LICENSE
+include requirements.txt
+include requirements-dev.txt
+include dvc.yaml
+include params.yaml
+include .dvcignore
+
+recursive-include morphogenetic_engine *.py
+recursive-include examples *.yaml *.yml
+recursive-include monitoring *.yml *.yaml
+recursive-include scripts *.py
+recursive-include tests *.py
+
+exclude fix_tests.py
+exclude test_deployment.py
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude .git *
+recursive-exclude .dvc *
+recursive-exclude env *
+recursive-exclude mlruns *
+recursive-exclude runs *

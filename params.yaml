@@ -1,0 +1,19 @@
+# Default parameters for DVC pipeline
+problem_type: "spirals"
+n_samples: 2000
+input_dim: 3
+hidden_dim: 128
+batch_size: 64
+lr: 0.001
+warm_up_epochs: 40
+adaptation_epochs: 60
+device: "cpu"
+seed: 42
+blend_steps: 30
+shadow_lr: 0.001
+progress_thresh: 0.6
+drift_warn: 0.12
+acc_threshold: 0.95
+num_layers: 3
+seeds_per_layer: 2
+train_frac: 0.8

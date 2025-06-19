@@ -1,0 +1,46 @@
+# Enhanced Grid Search Configuration for Morphogenetic Experiments
+# This configuration demonstrates the new Phase 3 sweep capabilities
+
+# Sweep type: 'grid' for exhaustive search, 'bayesian' for Optuna optimization
+sweep_type: "grid"
+
+# Fixed experiment parameters
+experiment:
+  problem_type: "spirals"
+  input_dim: 3
+  n_samples: 2000
+  batch_size: 64
+  device: "cpu"
+
+# Parameter grid to explore
+parameters:
+  # Network architecture
+  num_layers: [4, 8, 16]
+  seeds_per_layer: [1, 2, 4]
+  hidden_dim: [64, 128, 256]
+
+  # Learning rates
+  lr: [1e-4, 1e-3, 1e-2]
+  shadow_lr: [5e-5, 1e-4, 5e-4]
+
+  # Training schedule
+  warm_up_epochs: [25, 50]
+  adaptation_epochs: [100, 200]
+
+# Execution configuration
+execution:
+  max_parallel: 4 # Number of parallel experiments
+  timeout_per_trial: 1800 # 30 minutes per experiment
+  early_stopping:
+    metric: "val_acc"
+    patience: 10
+    min_trials: 20
+
+# Optimization settings (used for analysis and future Bayesian sweeps)
+optimization:
+  target_metric: "val_acc" # Primary metric to optimize
+  direction: "maximize" # 'maximize' or 'minimize'
+  secondary_metrics: # Additional metrics to track
+    - "runtime"
+    - "final_acc"
+    - "best_acc"
