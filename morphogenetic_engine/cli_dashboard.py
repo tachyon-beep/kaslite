@@ -111,8 +111,16 @@ class RichDashboard:
 
         # --- Right Column ---
         self.layout["right_column"].split_column(
+            Layout(name="seed_box_area"),
+            Layout(name="network_strain_area"),
+        )
+        self.layout["seed_box_area"].split_column(
             Layout(name="seed_box_panel"),
-            Layout(name="architecture_panel"),
+            Layout(name="seed_legend_panel", size=3),
+        )
+        self.layout["network_strain_area"].split_column(
+            Layout(name="network_strain_panel"),
+            Layout(name="strain_legend_panel", size=3),
         )
 
         # --- Populate Panels ---
@@ -123,7 +131,9 @@ class RichDashboard:
         self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
         self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
         self.layout["seed_box_panel"].update(self._create_seed_box_panel())
-        self.layout["architecture_panel"].update(self._create_architecture_panel())
+        self.layout["seed_legend_panel"].update(self._create_seed_legend_panel())
+        self.layout["network_strain_panel"].update(self._create_network_strain_panel())
+        self.layout["strain_legend_panel"].update(self._create_strain_legend_panel())
 
         self._layout_initialized = True
 
@@ -358,39 +368,95 @@ class RichDashboard:
         )
         return Panel(metrics_layout, title="Seed Metrics", border_style="green")
 
-    def _create_architecture_panel(self) -> Panel:
-        """Generate the panel for the network architecture visualization."""
+    def _create_network_strain_panel(self) -> Panel:
+        """Generate the panel for the network strain visualization (clone of seed box)."""
         num_layers = self.experiment_params.get("num_layers", 0)
         seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
 
-        if num_layers == 0:
+        emoji_map = {
+            "active": "🟢",
+            "dormant": "⚪",
+            "blending": "🟡",
+            "germinated": "🌱",
+        }
+        empty_emoji = "⚫"
+
+        grid_table = Table(
+            show_header=True,
+            header_style="bold magenta",
+            expand=False,
+            box=box.SIMPLE_HEAD,
+        )
+        # L# column
+        grid_table.add_column("L#", style="dim", width=3, justify="center")
+        # Visual separator column
+        grid_table.add_column("│", width=1, no_wrap=True, style="dim")
+        # Seed columns
+        for i in range(16):
+            grid_table.add_column(
+                str(i + 1), justify="center", no_wrap=True, style="bold"
+            )
+
+        if num_layers == 0 or seeds_per_layer == 0:
             return Panel(
-                Align.center("Architecture data unavailable.", vertical="middle"),
-                title="Network Architecture",
+                Align.center("Network strain data unavailable.", vertical="middle"),
+                title="Network Strain",
                 border_style="yellow",
             )
 
         layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        content = Text()
-        emoji_map = {
-            "active": "[bold green]●[/bold green]",
-            "dormant": "[dim]○[/dim]",
-            "blending": "[yellow]●[/yellow]",
-            "germinated": "[cyan]🌱[/cyan]",
-        }
-        default_emoji = "[grey37]○[/grey37]"
+        # Always display 16 layer rows
+        for i in range(16):
+            # Start row with layer number (1-indexed) and the separator
+            row = [f"{i + 1}", "│"]
 
-        for i in range(num_layers):
-            content.append(f"Layer {i+1:02d}: ", style="bold yellow")
-            states = layer_seeds.get(i, [])
-            for j in range(seeds_per_layer):
-                state = states[j] if j < len(states) else "dormant"
-                emoji = emoji_map.get(state, default_emoji)
-                content.append_text(Text.from_markup(f"{emoji} "))
-            content.append("\n")
+            # Check if the current layer index is valid for the experiment
+            if i < num_layers:
+                states = layer_seeds.get(i, [])
+                for j in range(16):  # Populate 16 seed columns
+                    emoji = empty_emoji
+                    if j < seeds_per_layer and j < len(states):
+                        state = states[j]
+                        emoji = emoji_map.get(state, empty_emoji)
+                    row.append(emoji)
+            else:
+                # If layer does not exist, fill row with empty emojis
+                row.extend([empty_emoji] * 16)
 
-        return Panel(content, title="Network Architecture", border_style="yellow")
+            grid_table.add_row(*row)
+
+        return Panel(
+            Align.center(grid_table, vertical="middle"),
+            title="Network Strain",
+            border_style="yellow",
+        )
+
+    def _create_seed_legend_panel(self) -> Panel:
+        """Generate the legend for the seed box."""
+        legend_text = Text.from_markup(
+            "🟢 Active  🟡 Blending  🌱 Germinated  ⚪ Dormant  ⚫ Empty"
+        )
+        return Panel(
+            Align.center(legend_text),
+            box=box.MINIMAL,
+            style="dim",
+            border_style="magenta",
+            padding=(0, 1),
+        )
+
+    def _create_strain_legend_panel(self) -> Panel:
+        """Generate the legend for the network strain box."""
+        legend_text = Text.from_markup(
+            "[blue]●[/blue] None  [green]●[/green] Low  [yellow]●[/yellow] Medium  [red]●[/red] High  💥 Fired  ⚫ Empty"
+        )
+        return Panel(
+            Align.center(legend_text),
+            box=box.MINIMAL,
+            style="dim",
+            border_style="yellow",
+            padding=(0, 1),
+        )
 
     def _create_seed_timeline_panel(self) -> Panel:
         """Generate the panel for the scrolling seed-specific event log."""
@@ -482,7 +548,7 @@ class RichDashboard:
         if self.layout:
             self.layout["seed_metrics_panel"].update(self._create_seed_metrics_panel())
             self.layout["seed_box_panel"].update(self._create_seed_box_panel())
-            self.layout["architecture_panel"].update(self._create_architecture_panel())
+            self.layout["network_strain_panel"].update(self._create_network_strain_panel())
 
     def show_phase_transition(
         self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None
