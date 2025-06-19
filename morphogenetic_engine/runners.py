@@ -253,7 +253,12 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
 
     logger, tb_writer, log_f, device, config, slug, project_root = setup_experiment(args)
     setup_mlflow_logging(config, slug)
-    dashboard = RichDashboard(experiment_params=vars(args))
+
+    # Calculate total epochs and pass to the dashboard
+    total_experiment_epochs = args.warm_up_epochs + args.adaptation_epochs
+    dashboard_params = vars(args).copy()
+    dashboard_params["epochs"] = total_experiment_epochs
+    dashboard = RichDashboard(experiment_params=dashboard_params)
     logger.dashboard = dashboard
 
     try:
@@ -265,7 +270,7 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
             loaders = (train_loader, val_loader)
             loss_fn = nn.CrossEntropyLoss()
 
-            model, seed_manager, optimizer, scheduler = build_model_and_agents(args, device)
+            model, seed_manager, _, _ = build_model_and_agents(args, device)
 
             for sid in seed_manager.seeds:
                 logger.log_seed_event(epoch=0, seed_id=sid, from_state="init", to_state="dormant")

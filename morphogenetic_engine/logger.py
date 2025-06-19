@@ -71,20 +71,72 @@ class ExperimentLogger:
     def _record_event(self, event: LogEvent) -> None:
         self.events.append(event)
         self.write_to_file(event)
-        
+
         # If we have a dashboard, send the event there instead of printing
         if self.dashboard is not None:
             self._send_to_dashboard(event)
         else:
             self.print_real_time_update(event)
-    
+
     def _send_to_dashboard(self, event: LogEvent) -> None:
         """Send event to dashboard for live display."""
         if not self.dashboard:
             return
 
-        # All events are sent to the dashboard's live event stream
-        # for a complete historical record.
+        # Use a dispatcher to call the appropriate method on the dashboard
+        # based on the event type, passing the specific data it needs.
+        event_map = {
+            EventType.EXPERIMENT_START: (
+                self.dashboard.add_live_event,
+                {"event_type": "INFO", "message": "Experiment Started", "data": {}},
+            ),
+            EventType.EPOCH_PROGRESS: (
+                self.dashboard.update_progress,
+                {"epoch": event.epoch, "metrics": event.data},
+            ),
+            EventType.PHASE_TRANSITION: (
+                self.dashboard.show_phase_transition,
+                {
+                    "to_phase": event.data.get("to"),
+                    "epoch": event.epoch,
+                    "from_phase": event.data.get("from"),
+                    "total_epochs": event.data.get("total_epochs"),
+                },
+            ),
+            EventType.SEED_STATE_CHANGE: (
+                self.dashboard.update_seed,
+                {
+                    "seed_id": event.data.get("seed_id"),
+                    "state": event.data.get("to"),
+                    "from_state": event.data.get("from"),
+                },
+            ),
+            EventType.GERMINATION: (
+                self.dashboard.show_germination_event,
+                {"seed_id": event.data.get("seed_id"), "epoch": event.epoch},
+            ),
+            EventType.BLENDING_PROGRESS: (
+                self.dashboard.update_seed, # Can reuse update_seed for this
+                {
+                    "seed_id": event.data.get("seed_id"),
+                    "state": "blending",
+                    "alpha": event.data.get("alpha", 0.0),
+                    "from_state": "germinated"
+                }
+            ),
+            EventType.EXPERIMENT_END: (
+                self.dashboard.add_live_event,
+                {"event_type": "INFO", "message": "Experiment Finished", "data": {}},
+            )
+        }
+
+        handler, kwargs = event_map.get(event.event_type, (None, None))
+
+        if handler:
+            # Filter out None values from kwargs to avoid passing them
+            handler(**{k: v for k, v in kwargs.items() if v is not None})
+        
+        # Also send the raw event for historical logging in the panel
         self.dashboard.add_live_event(
             event_type=event.event_type.value.upper(),
             message=event.message,
