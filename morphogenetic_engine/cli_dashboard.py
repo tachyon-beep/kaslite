@@ -79,12 +79,13 @@ class RichDashboard:
         )
         header.update(progress_layout)
 
-        # --- Main Area Setup ---
+        # --- Main Area Setup: 3 Columns ---
         main_area = Layout(name="main")
-        left_column = Layout(name="left_column", ratio=2)    # 40%
-        right_column = Layout(name="right_column", ratio=3) # 60%
+        left_column = Layout(name="left_column", ratio=7)         # Adjusted
+        center_column = Layout(name="seed_metrics_panel", ratio=5) # Adjusted
+        right_column = Layout(name="right_column", ratio=8)        # Adjusted
 
-        # Split the left column (top/bottom)
+        # --- Left Column ---
         top_left_area = Layout(name="top_left_area")
         top_left_area.split_row(
             Layout(name="info_panel"), Layout(name="metrics_panel")
@@ -94,18 +95,14 @@ class RichDashboard:
             Layout(name="event_log_panel", ratio=1),
         )
 
-        # Split the right column (top/bottom)
-        top_right_area = Layout(name="top_right_area")
-        top_right_area.split_row(
-            Layout(name="seed_metrics_panel", ratio=1),  # Swapped and renamed
-            Layout(name="seed_box_panel", ratio=2),      # Swapped and renamed
-        )
+        # --- Center Column is the seed_metrics_panel, populated later ---
+
+        # --- Right Column ---
         right_column.split_column(
-            top_right_area,
-            Layout(name="seed_log_panel")
+            Layout(name="seed_box_panel"), Layout(name="seed_log_panel")
         )
 
-        main_area.split_row(left_column, right_column)
+        main_area.split_row(left_column, center_column, right_column)
         self.layout.split(header, main_area)
 
         # --- Populate Panels ---
