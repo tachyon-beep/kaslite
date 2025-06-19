@@ -28,6 +28,23 @@ class RichDashboard:
     """A Rich CLI dashboard for experiment monitoring with progress bars."""
     GRID_SIZE = 16
 
+    # Seed Emojis
+    SEED_ACTIVE_EMOJI = "🟢"
+    SEED_DORMANT_EMOJI = "⚪"
+    SEED_BLENDING_EMOJI = "🟡"
+    SEED_GERMINATED_EMOJI = "🌱"
+    SEED_FOSSILIZED_EMOJI = "🦴"
+
+    # Strain Emojis
+    STRAIN_NONE_EMOJI = "🔵"
+    STRAIN_LOW_EMOJI = "🟢"
+    STRAIN_MEDIUM_EMOJI = "🟡"
+    STRAIN_HIGH_EMOJI = "🔴"
+    STRAIN_FIRED_EMOJI = "💥"
+
+    # Common
+    EMPTY_CELL_EMOJI = "⚫"
+
     def __init__(self, console: Console | None = None, experiment_params: dict[str, Any] | None = None):
         self.console = console or Console()
         self.experiment_params = experiment_params or {}
@@ -182,8 +199,8 @@ class RichDashboard:
         """Generate the panel for the live metrics table."""
         metrics_table = Table(show_header=True, header_style="bold magenta", expand=True)
         metrics_table.add_column("Metric", justify="left", style="cyan", no_wrap=True)
-        metrics_table.add_column("Current", justify="center", style="green")
-        metrics_table.add_column("Last", justify="center", style="yellow")
+        metrics_table.add_column("Last", justify="center", style="green")
+        metrics_table.add_column("Previous", justify="center", style="yellow")
 
         # Populate with latest and previous metrics
         metrics_to_show = sorted(self.latest_metrics.keys())
@@ -262,6 +279,30 @@ class RichDashboard:
         # In the future, this should query a different data source for strain.
         return self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
+    def _create_grid_row(
+        self,
+        layer_index: int,
+        num_layers: int,
+        seeds_per_layer: int,
+        layer_data: dict[int, list[str | None]],
+        emoji_map: dict[str, str],
+        empty_emoji: str,
+    ) -> list[str]:
+        """Helper to create a single row for a grid table."""
+        row = [f"{layer_index + 1}", "│"]
+        if layer_index < num_layers:
+            states = layer_data.get(layer_index, [])
+            for j in range(self.GRID_SIZE):
+                emoji = empty_emoji
+                if j < seeds_per_layer and j < len(states):
+                    state = states[j]
+                    if state:
+                        emoji = emoji_map.get(state, empty_emoji)
+                row.append(emoji)
+        else:
+            row.extend([empty_emoji] * self.GRID_SIZE)
+        return row
+
     def _create_grid_table(
         self,
         num_layers: int,
@@ -285,17 +326,9 @@ class RichDashboard:
             )
 
         for i in range(self.GRID_SIZE):
-            row = [f"{i + 1}", "│"]
-            if i < num_layers:
-                states = layer_data.get(i, [])
-                for j in range(self.GRID_SIZE):
-                    emoji = empty_emoji
-                    if j < seeds_per_layer and j < len(states):
-                        state = states[j]
-                        emoji = emoji_map.get(state, empty_emoji)
-                    row.append(emoji)
-            else:
-                row.extend([empty_emoji] * self.GRID_SIZE)
+            row = self._create_grid_row(
+                i, num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji
+            )
             grid_table.add_row(*row)
         return grid_table
 
@@ -312,13 +345,13 @@ class RichDashboard:
             )
 
         emoji_map = {
-            "active": "🟢",
-            "dormant": "⚪",
-            "blending": "🟡",
-            "germinated": "🌱",
-            "fossilized": "🦴",
+            "active": self.SEED_ACTIVE_EMOJI,
+            "dormant": self.SEED_DORMANT_EMOJI,
+            "blending": self.SEED_BLENDING_EMOJI,
+            "germinated": self.SEED_GERMINATED_EMOJI,
+            "fossilized": self.SEED_FOSSILIZED_EMOJI,
         }
-        empty_emoji = "⚫"
+        empty_emoji = self.EMPTY_CELL_EMOJI
         layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
         grid_table = self._create_grid_table(
@@ -336,11 +369,11 @@ class RichDashboard:
         table = Table(
             show_header=True, header_style="bold green", expand=True, box=box.MINIMAL
         )
-        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=1)  # Halved
-        table.add_column("Act. Epoch", justify="center", ratio=1.25)
-        table.add_column("Grad Norm", justify="center", ratio=1.25)
-        table.add_column("Weight Norm", justify="center", ratio=1.25)
-        table.add_column("Patience", justify="center", ratio=1.25)
+        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=4)
+        table.add_column("Act. Epoch", justify="center", ratio=5)
+        table.add_column("Grad Norm", justify="center", ratio=5)
+        table.add_column("Weight Norm", justify="center", ratio=5)
+        table.add_column("Patience", justify="center", ratio=5)
 
         high_perf_seeds = {
             sid: d
@@ -364,11 +397,11 @@ class RichDashboard:
         table = Table(
             show_header=True, header_style="bold red", expand=True, box=box.MINIMAL
         )
-        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=1)  # Halved
-        table.add_column("Act. Epoch", justify="center", ratio=1.25)
-        table.add_column("Grad Norm", justify="center", ratio=1.25)
-        table.add_column("Weight Norm", justify="center", ratio=1.25)
-        table.add_column("Patience", justify="center", ratio=1.25)
+        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=4)
+        table.add_column("Act. Epoch", justify="center", ratio=5)
+        table.add_column("Grad Norm", justify="center", ratio=5)
+        table.add_column("Weight Norm", justify="center", ratio=5)
+        table.add_column("Patience", justify="center", ratio=5)
 
         low_perf_seeds = {
             sid: d
@@ -417,18 +450,18 @@ class RichDashboard:
 
         # Emoji map corresponding to the strain legend
         emoji_map = {
-            "none": "[blue]●[/blue]",
-            "low": "[green]●[/green]",
-            "medium": "[yellow]●[/yellow]",
-            "high": "[red]●[/red]",
-            "fired": "💥",
+            "none": self.STRAIN_NONE_EMOJI,
+            "low": self.STRAIN_LOW_EMOJI,
+            "medium": self.STRAIN_MEDIUM_EMOJI,
+            "high": self.STRAIN_HIGH_EMOJI,
+            "fired": self.STRAIN_FIRED_EMOJI,
             # Mapping seed states to strain for placeholder visualization
-            "active": "[green]●[/green]",  # Low strain
-            "blending": "[yellow]●[/yellow]", # Medium strain
-            "germinated": "[blue]●[/blue]", # No strain
-            "dormant": "[blue]●[/blue]", # No strain
+            "active": self.STRAIN_LOW_EMOJI,  # Low strain
+            "blending": self.STRAIN_MEDIUM_EMOJI, # Medium strain
+            "germinated": self.STRAIN_NONE_EMOJI, # No strain
+            "dormant": self.STRAIN_NONE_EMOJI, # No strain
         }
-        empty_emoji = "⚫"
+        empty_emoji = self.EMPTY_CELL_EMOJI
 
         # NOTE: This currently uses seed data as a placeholder for strain data.
         layer_data = self._get_network_strain_states_by_layer(
@@ -448,7 +481,9 @@ class RichDashboard:
     def _create_seed_legend_panel(self) -> Panel:
         """Generate the legend for the seed box."""
         legend_text = Text.from_markup(
-            "🟢 Active  🟡 Blending  🌱 Germinated  ⚪ Dormant  🦴 Fossilized  ⚫ Empty"
+            f"{self.SEED_ACTIVE_EMOJI} Active  {self.SEED_BLENDING_EMOJI} Blending  "
+            f"{self.SEED_GERMINATED_EMOJI} Germinated  {self.SEED_DORMANT_EMOJI} Dormant  "
+            f"{self.SEED_FOSSILIZED_EMOJI} Fossilized  {self.EMPTY_CELL_EMOJI} Empty"
         )
         return Panel(
             Align.center(legend_text),
@@ -461,7 +496,9 @@ class RichDashboard:
     def _create_strain_legend_panel(self) -> Panel:
         """Generate the legend for the network strain box."""
         legend_text = Text.from_markup(
-            "[blue]●[/blue] None  [green]●[/green] Low  [yellow]●[/yellow] Medium  [red]●[/red] High  💥 Fired  ⚫ Empty"
+            f"{self.STRAIN_NONE_EMOJI} None  {self.STRAIN_LOW_EMOJI} Low  "
+            f"{self.STRAIN_MEDIUM_EMOJI} Medium  {self.STRAIN_HIGH_EMOJI} High  "
+            f"{self.STRAIN_FIRED_EMOJI} Fired  {self.EMPTY_CELL_EMOJI} Empty"
         )
         return Panel(
             Align.center(legend_text),
@@ -618,6 +655,8 @@ def demo_dashboard():
         "learning_rate": 0.001,
         "seed": 42,
     }
+    num_layers: int = params.get("num_layers", 0)
+    seeds_per_layer: int = params.get("seeds_per_layer", 0)
     print("Starting dashboard demo...")
     with RichDashboard(console, experiment_params=params) as dashboard:
         dashboard.add_live_event("INFO", "Dashboard Initialized", {"run_id": "demo_run_123"})
@@ -627,10 +666,10 @@ def demo_dashboard():
         dashboard.show_phase_transition("SEEDING", 0, total_epochs=50)
         for i in range(50):
             dashboard.update_progress(i, {"train_loss": 1.0 - i * 0.01, "val_acc": 0.5 + i * 0.005})
-            if i < params["num_layers"] * params["seeds_per_layer"]:
-                layer = i // params["seeds_per_layer"]
-                seed_idx = i % params["seeds_per_layer"]
-                if layer < params["num_layers"]:
+            if i < num_layers * seeds_per_layer:
+                layer = i // seeds_per_layer
+                seed_idx = i % seeds_per_layer
+                if layer < num_layers:
                     seed_id = f"L{layer}_S{seed_idx}"
                     dashboard.update_seed(seed_id, "dormant")
             time.sleep(0.02)
