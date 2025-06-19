@@ -44,6 +44,7 @@ class RichDashboard:
 
     # Common
     EMPTY_CELL_EMOJI = "⚫"
+    STYLE_BOLD_BLUE = "bold blue"
 
     def __init__(self, console: Console | None = None, experiment_params: dict[str, Any] | None = None):
         self.console = console or Console()
@@ -146,7 +147,7 @@ class RichDashboard:
         # --- Center Column ---
         self.layout["center_column"].split_column(
             Layout(name="kasima_panel"),
-            Layout(name="tamiyo_panel", size=12),
+            Layout(name="tamiyo_panel", size=13),
             Layout(name="karn_panel", size=9),
             Layout(name="crucible_panel", size=8),
         )
@@ -374,15 +375,15 @@ class RichDashboard:
             border_style="magenta",
         )
 
-    def _create_high_perf_seeds_panel(self) -> Panel:
-        """Generate the panel for high-performing seeds."""
-        table = Table(
+    def _create_seeds_training_table(self) -> Table:
+        """Generate the table for seeds currently in training."""
+        seeds_table = Table(
             show_header=True, header_style="bold green", expand=True, box=box.MINIMAL
         )
-        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=4)
-        table.add_column("Act. Epoch", justify="center", ratio=5)
-        table.add_column("Grad Norm", justify="center", ratio=5)
-        table.add_column("Weight Norm", justify="center", ratio=5)
+        seeds_table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=4)
+        seeds_table.add_column("Train Loss", justify="center", ratio=5)
+        seeds_table.add_column("Val Loss", justify="center", ratio=5)
+        seeds_table.add_column("Val Acc", justify="center", ratio=5)
 
         high_perf_seeds = {
             sid: d
@@ -390,44 +391,25 @@ class RichDashboard:
             if d.get("state") in ["active", "blending"]
         }
 
-        for seed_id, data in sorted(high_perf_seeds.items()):
-            table.add_row(
-                seed_id[:12] + "...",
-                str(data.get("activation_epoch", "N/A")),
-                (f"{data.get('grad_norm'):.2e}" if data.get('grad_norm') is not None else "N/A"),
-                (f"{data.get('weight_norm'):.2f}" if data.get('weight_norm') is not None else "N/A"),
-            )
-
-        return Panel(table, title="High Performing Seeds", border_style="green")
-
-    def _create_low_perf_seeds_panel(self) -> Panel:
-        """Generate the panel for poorly-performing seeds."""
-        table = Table(
-            show_header=True, header_style="bold red", expand=True, box=box.MINIMAL
+        # Sort by validation accuracy (descending) if available, otherwise by ID
+        sorted_seeds = sorted(
+            high_perf_seeds.items(),
+            key=lambda item: item[1].get("val_acc", 0),
+            reverse=True,
         )
-        table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=4)
-        table.add_column("Act. Epoch", justify="center", ratio=5)
-        table.add_column("Grad Norm", justify="center", ratio=5)
-        table.add_column("Weight Norm", justify="center", ratio=5)
 
-        low_perf_seeds = {
-            sid: d
-            for sid, d in self.seed_states.items()
-            if d.get("state") not in ["active", "blending"]
-        }
-
-        for seed_id, data in sorted(low_perf_seeds.items()):
-            table.add_row(
+        for seed_id, data in sorted_seeds:
+            seeds_table.add_row(
                 seed_id[:12] + "...",
-                str(data.get("activation_epoch", "N/A")),
-                (f"{data.get('grad_norm'):.2e}" if data.get('grad_norm') is not None else "N/A"),
-                (f"{data.get('weight_norm'):.2f}" if data.get('weight_norm') is not None else "N/A"),
+                (f"{data.get('train_loss'):.4f}" if data.get('train_loss') is not None else "N/A"),
+                (f"{data.get('val_loss'):.4f}" if data.get('val_loss') is not None else "N/A"),
+                (f"{data.get('val_acc') * 100:.1f}%" if data.get('val_acc') is not None else "N/A"),
             )
 
-        return Panel(table, title="Poorly Performing Seeds", border_style="red")
+        return seeds_table
 
     def _create_kasima_panel(self) -> Panel:
-        """Generate the panel containing high and poor performing seed tables."""
+        """Generate the panel containing the seeds training table."""
         if not self.seed_states:
             return Panel(
                 Align.center("Waiting for seed data...", vertical="middle"),
@@ -435,19 +417,16 @@ class RichDashboard:
                 border_style="green",
             )
 
-        metrics_layout = Layout(name="seed_metrics_split")
-        metrics_layout.split_column(
-            Layout(self._create_high_perf_seeds_panel()),
-            Layout(self._create_low_perf_seeds_panel()),
-        )
-        return Panel(metrics_layout, title="Kasima", border_style="green")
+        seeds_training_table = self._create_seeds_training_table()
+
+        return Panel(seeds_training_table, title="Kasima", border_style="green")
 
     def _create_tamiyo_panel(self) -> Panel:
         """Generate the panel for Tamiyo's status."""
         tamiyo_table = Table(
             show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
         )
-        tamiyo_table.add_column("Metric", style="bold blue")
+        tamiyo_table.add_column("Metric", style=self.STYLE_BOLD_BLUE)
         tamiyo_table.add_column("Value")
 
         tamiyo_table.add_row("Status", "Selecting Blueprint")
@@ -459,6 +438,7 @@ class RichDashboard:
         tamiyo_table.add_row("Critic Loss", "0.051")
         tamiyo_table.add_row("Mean Reward (last 100)", "88.1")
         tamiyo_table.add_row("Action Entropy", "0.55")
+        tamiyo_table.add_row()  # Whitespace
 
         return Panel(tamiyo_table, title="Tamiyo", border_style="blue")
 
@@ -467,7 +447,7 @@ class RichDashboard:
         karn_table = Table(
             show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
         )
-        karn_table.add_column("Metric", style="bold blue")
+        karn_table.add_column("Metric", style=self.STYLE_BOLD_BLUE)
         karn_table.add_column("Value")
 
         karn_table.add_row("Status", "Exploiting Keystone Lineage")
@@ -475,6 +455,7 @@ class RichDashboard:
         karn_table.add_row("Archive Quality (Mean)", "74.5 ELO")
         karn_table.add_row("Critic Loss", "0.051")
         karn_table.add_row("Exploration/Exploitation", "Exploiting (80%)")
+        karn_table.add_row()  # Whitespace
 
         return Panel(karn_table, title="Karn", border_style="blue")
 
@@ -483,7 +464,7 @@ class RichDashboard:
         crucible_table = Table(
             show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1)
         )
-        crucible_table.add_column("Metric", style="bold blue")
+        crucible_table.add_column("Metric", style=self.STYLE_BOLD_BLUE)
         crucible_table.add_column("Value")
 
         crucible_table.add_row("Match Status", "In Progress (75%)")
@@ -491,6 +472,7 @@ class RichDashboard:
         crucible_table.add_row("Incumbent ID", "bp_3c5d (Keystone)")
         crucible_table.add_row("Live ELO Change", "+12.5 (Challenger)")
         crucible_table.add_row("Key Metric Δ", "Latency: -15%")
+        crucible_table.add_row()  # Whitespace
 
         return Panel(crucible_table, title="Crucible", border_style="blue")
 
