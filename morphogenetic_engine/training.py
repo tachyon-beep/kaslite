@@ -19,6 +19,11 @@ from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
+from .cli_dashboard import RichDashboard
+from .core import KasminaMicro, SeedManager
+from .events import SeedInfo
+from .logger import ExperimentLogger
+
 # Check if we're in testing mode to conditionally disable MLflow
 TESTING_MODE = "pytest" in sys.modules or "unittest" in sys.modules
 MLFLOW_AVAILABLE = not TESTING_MODE
@@ -87,102 +92,108 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device:
     return loss_accum / len(loader), correct / total
 
 
-def log_seed_updates(epoch: int, seed_manager: "SeedManager", logger: "ExperimentLogger", tb_writer: "SummaryWriter"):
-    """
-    REFACTORED: Checks and logs all seed state transitions through the logger.
-    This is now the single source of truth for seed status reporting.
-    """
-    for sid, info in seed_manager.seeds.items():
-        module = info["module"]
-        current_state = module.state
-        current_alpha = getattr(module, "alpha", 0.0)
-
-        # Create a unique tag for the current state to detect changes
-        current_tag = f"{current_state}:{current_alpha:.3f}" if current_state == "blending" else current_state
-        last_tag = _last_report[sid]
-
-        if current_tag != last_tag:
-            from_state = last_tag.split(":")[0] if ":" in last_tag else last_tag
-            if from_state == "":
-                from_state = "init"
-
-            # Use the correct, specific logger methods
-            if current_state == "blending":
-                logger.log_blending_progress(epoch, sid, current_alpha)
-            else:
-                logger.log_seed_event(epoch, sid, from_state, current_state)
-
-            # Also log to TensorBoard
-            if current_state == "blending":
-                tb_writer.add_scalar(f"seed/{sid}/alpha", current_alpha, epoch)
-            else:
-                tb_writer.add_text(f"seed/{sid}/events", f"Epoch {epoch}: {from_state} → {current_state}", epoch)
-
-            _last_report[sid] = current_tag
+def _get_seed_info_for_logging(seed_manager: SeedManager) -> list[SeedInfo]:
+    """Helper to gather all seed information into the standardized SeedInfo format."""
+    seed_infos: list[SeedInfo] = []
+    with seed_manager.lock:
+        for sid, data in seed_manager.seeds.items():
+            module = data["module"]
+            layer_idx, seed_idx_in_layer = sid
+            info = SeedInfo(
+                id=sid,
+                state=module.state,
+                layer=layer_idx,
+                index_in_layer=seed_idx_in_layer,
+                metrics={
+                    "alpha": getattr(module, "alpha", None),
+                    "grad_norm": getattr(module, "grad_norm", None),
+                    "weight_norm": getattr(module, "weight_norm", None),
+                    "patience": getattr(module, "patience", None),
+                },
+            )
+            seed_infos.append(info)
+    return seed_infos
 
 
 def execute_phase_1(
-    config: Dict[str, Any],
     model: nn.Module,
-    loaders: tuple,
-    loss_fn: nn.Module,
-    seed_manager: "SeedManager",
-    logger: "ExperimentLogger",
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    logger: ExperimentLogger,
     tb_writer: "SummaryWriter",
-    log_f,
-) -> float:
+    device: torch.device,
+    config: dict[str, Any],
+    dashboard: RichDashboard,
+    seed_manager: SeedManager,
+) -> dict[str, Any]:
     """
-    REFACTORED: Runs the initial warm-up phase, reporting all progress via the logger.
-    The `dashboard` parameter has been removed.
+    Runs the initial warm-up phase, reporting all progress via the logger.
     """
-    train_loader, val_loader = loaders
-    device = config["device"]
     optimiser = torch.optim.Adam(model.parameters(), lr=config["lr"])
     scheduler = torch.optim.lr_scheduler.StepLR(optimiser, 20, 0.1)
+    criterion = nn.CrossEntropyLoss().to(device)
     best_acc = 0.0
 
+    logger.log_phase_update(
+        epoch=0,
+        from_phase="Init",
+        to_phase="Warm-up",
+        total_epochs_in_phase=config["warm_up_epochs"],
+    )
+
     for epoch in range(1, config["warm_up_epochs"] + 1):
-        train_loss = train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, device, scheduler)
-        val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
+        train_loss = train_epoch(
+            model, train_loader, optimiser, criterion, seed_manager, device, scheduler
+        )
+        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 
-        metrics = {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc, "best_acc": best_acc}
+        metrics = {
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "val_acc": val_acc,
+            "best_acc": best_acc,
+        }
+        logger.log_metrics_update(epoch, metrics)
 
-        # <<< CHANGE: Single call to the logger handles all UI and file logging.
-        logger.log_epoch_progress(epoch, metrics)
+        # Log comprehensive seed state update
+        seed_info = _get_seed_info_for_logging(seed_manager)
+        logger.log_seed_state_update(epoch, seed_info)
 
-        log_seed_updates(epoch, seed_manager, logger, tb_writer)
-
-        # Log to other platforms
+        # Update dashboard and other loggers
+        dashboard.update_progress(epoch, metrics)
         tb_writer.add_scalar("train/loss_phase1", train_loss, epoch)
         tb_writer.add_scalar("validation/loss_phase1", val_loss, epoch)
         tb_writer.add_scalar("validation/accuracy_phase1", val_acc, epoch)
         if MLFLOW_AVAILABLE and mlflow.active_run():
-            mlflow.log_metrics({"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc}, step=epoch)
+            mlflow.log_metrics(
+                {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc},
+                step=epoch,
+            )
 
-    return best_acc
+    return {"best_acc": best_acc}
 
 
 def execute_phase_2(
-    config: Dict[str, Any],
     model: nn.Module,
-    loaders: tuple,
-    loss_fn: nn.Module,
-    seed_manager: "SeedManager",
-    kasmina,
-    logger: "ExperimentLogger",
+    seed_manager: SeedManager,
+    karn: Any,  # Placeholder for Karn agent
+    tamiyo: KasminaMicro,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    logger: ExperimentLogger,
     tb_writer: "SummaryWriter",
-    log_f,
-    initial_best_acc: float,
+    device: torch.device,
+    config: dict[str, Any],
+    dashboard: RichDashboard,
+    final_stats: dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    REFACTORED: Runs the adaptation phase, reporting all progress via the logger.
-    The `dashboard` parameter has been removed.
+    Runs the adaptation phase, reporting all progress via the logger.
     """
-    train_loader, val_loader = loaders
-    device = config["device"]
     warm_up_epochs = config["warm_up_epochs"]
     adaptation_epochs = config["adaptation_epochs"]
+    criterion = nn.CrossEntropyLoss().to(device)
 
     model.freeze_backbone()
 
@@ -191,20 +202,31 @@ def execute_phase_2(
         return torch.optim.Adam(params, lr=config["lr"] * 0.1) if params else None
 
     optimiser = rebuild_opt(model)
-    best_acc, acc_pre, acc_post, t_recover, germ_epoch = initial_best_acc, None, None, None, None
+
+    # Carry over stats from phase 1
+    best_acc = final_stats.get("best_acc", 0.0)
+    acc_pre, acc_post, t_recover, germ_epoch = None, None, None, None
     seeds_activated = False
+
+    logger.log_phase_update(
+        epoch=warm_up_epochs,
+        from_phase="Warm-up",
+        to_phase="Adaptation",
+        total_epochs_in_phase=adaptation_epochs,
+    )
 
     for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
         train_loss = 0.0
         if optimiser:
-            train_loss = train_epoch(model, train_loader, optimiser, loss_fn, seed_manager, device)
+            train_loss = train_epoch(
+                model, train_loader, optimiser, criterion, seed_manager, device
+            )
 
-        val_loss, val_acc = evaluate(model, val_loader, loss_fn, device)
+        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 
-        if not seeds_activated and kasmina.step(val_loss, val_acc):
+        if not seeds_activated and tamiyo.step(epoch, val_loss, val_acc):
             seeds_activated, germ_epoch, acc_pre = True, epoch, val_acc
-            logger.log_germination(epoch, kasmina.get_last_germinated_seed_id())
             optimiser = rebuild_opt(model)
 
         if germ_epoch:
@@ -213,28 +235,43 @@ def execute_phase_2(
             if t_recover is None and acc_pre is not None and val_acc >= acc_pre:
                 t_recover = epoch - germ_epoch
 
-        metrics = {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc, "best_acc": best_acc}
+        metrics = {
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "val_acc": val_acc,
+            "best_acc": best_acc,
+        }
+        logger.log_metrics_update(epoch, metrics)
 
-        # <<< CHANGE: Single call to the logger handles all UI and file logging.
-        logger.log_epoch_progress(epoch, metrics)
+        # Log comprehensive seed state update
+        seed_info = _get_seed_info_for_logging(seed_manager)
+        logger.log_seed_state_update(epoch, seed_info)
 
-        log_seed_updates(epoch, seed_manager, logger, tb_writer)
-
-        # Log to other platforms
+        # Update dashboard and other loggers
+        dashboard.update_progress(epoch, metrics)
         tb_writer.add_scalar("train/loss_phase2", train_loss, epoch)
         tb_writer.add_scalar("validation/loss_phase2", val_loss, epoch)
         tb_writer.add_scalar("validation/accuracy_phase2", val_acc, epoch)
         if MLFLOW_AVAILABLE and mlflow.active_run():
-            mlflow.log_metrics({"train_loss_p2": train_loss, "val_loss_p2": val_loss, "val_acc_p2": val_acc}, step=epoch)
+            mlflow.log_metrics(
+                {"train_loss_p2": train_loss, "val_loss_p2": val_loss, "val_acc_p2": val_acc},
+                step=epoch,
+            )
 
-    return {
-        "best_acc": best_acc,
-        "accuracy_dip": (acc_pre - acc_post) if acc_pre is not None and acc_post is not None else None,
-        "recovery_time": t_recover,
-        "seeds_activated": seeds_activated,
-        "acc_pre": acc_pre,
-        "acc_post": acc_post,
-    }
+    # Combine results
+    final_stats.update(
+        {
+            "best_acc": best_acc,
+            "accuracy_dip": (acc_pre - acc_post)
+            if acc_pre is not None and acc_post is not None
+            else None,
+            "recovery_time": t_recover,
+            "seeds_activated": seeds_activated,
+            "acc_pre": acc_pre,
+            "acc_post": acc_post,
+        }
+    )
+    return final_stats
 
 
 def clear_seed_report_cache():

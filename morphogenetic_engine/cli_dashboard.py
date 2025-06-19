@@ -6,8 +6,10 @@ This is a simplified version, designed to be rebuilt.
 
 from __future__ import annotations
 
+import random
 import time
 from collections import deque
+from collections.abc import Mapping
 from typing import Any, cast
 
 from rich import box
@@ -20,25 +22,35 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeRemainingColumn
 from rich.table import Table
 from rich.text import Text
 
+from morphogenetic_engine.events import (
+    NetworkStrain,
+    NetworkStrainGridUpdatePayload,
+    SeedState,
+    SeedStateUpdatePayload,
+)
+
 
 class RichDashboard:
     """A Rich CLI dashboard for experiment monitoring with progress bars."""
 
     GRID_SIZE = 16
 
-    # Seed Emojis
-    SEED_ACTIVE_EMOJI = "🟢"
-    SEED_DORMANT_EMOJI = "⚪"
-    SEED_BLENDING_EMOJI = "🟡"
-    SEED_GERMINATED_EMOJI = "🌱"
-    SEED_FOSSILIZED_EMOJI = "🦴"
+    # EMOJI MAPS
+    SEED_EMOJI_MAP = {
+        SeedState.ACTIVE: "🟢",
+        SeedState.DORMANT: "⚪",
+        SeedState.BLENDING: "🟡",
+        SeedState.GERMINATED: "🌱",
+        SeedState.FOSSILIZED: "🦴",
+    }
 
-    # Strain Emojis
-    STRAIN_NONE_EMOJI = "🔵"
-    STRAIN_LOW_EMOJI = "🟢"
-    STRAIN_MEDIUM_EMOJI = "🟡"
-    STRAIN_HIGH_EMOJI = "🔴"
-    STRAIN_FIRED_EMOJI = "💥"
+    STRAIN_EMOJI_MAP = {
+        NetworkStrain.NONE: "🔵",
+        NetworkStrain.LOW: "🟢",
+        NetworkStrain.MEDIUM: "🟡",
+        NetworkStrain.HIGH: "🔴",
+        NetworkStrain.FIRED: "💥",
+    }
 
     # Common
     EMPTY_CELL_EMOJI = "⚫"
@@ -250,39 +262,71 @@ class RichDashboard:
         content = Text.from_markup(f"[bold]Experiment Log:[/bold]\n{event_text}")
         return Panel(content, title="Event Log", border_style="blue")
 
-    def _get_seed_states_by_layer(self, num_layers: int, seeds_per_layer: int) -> dict[int, list[str | None]]:
+    def _get_seed_states_by_layer(
+        self, num_layers: int, seeds_per_layer: int
+    ) -> dict[int, list[SeedState | None]]:
         """Parse seed_states and organize them by layer and seed index."""
-        layer_seeds: dict[int, list[str | None]] = {i: [None] * seeds_per_layer for i in range(num_layers)}
+        layer_seeds: dict[int, list[SeedState | None]] = {
+            i: [None] * seeds_per_layer for i in range(num_layers)
+        }
+        
         for seed_id, data in self.seed_states.items():
-            if not seed_id.startswith("L") or "_" not in seed_id:
-                continue
-            try:
+            layer_idx, seed_idx = self._parse_seed_id(seed_id)
+            if (layer_idx is not None and seed_idx is not None and 
+                layer_idx < num_layers and seed_idx < seeds_per_layer):
+                state = data.get("state")
+                if isinstance(state, SeedState):
+                    layer_seeds[layer_idx][seed_idx] = state
+        return layer_seeds
+    
+    def _parse_seed_id(self, seed_id) -> tuple[int | None, int | None]:
+        """Extract layer and seed indices from a seed_id (tuple or string)."""
+        try:
+            # Handle tuple format: (layer_idx, seed_idx)
+            if isinstance(seed_id, tuple) and len(seed_id) == 2:
+                return seed_id
+            
+            # Handle string format: "L0_S1" or similar
+            if isinstance(seed_id, str) and seed_id.startswith("L") and "_" in seed_id:
                 parts = seed_id.split("_")
                 layer_idx = int(parts[0][1:])
-                seed_idx = int(parts[1])
-                if layer_idx < num_layers and seed_idx < seeds_per_layer:
-                    layer_seeds[layer_idx][seed_idx] = data.get("state")
-            except (ValueError, IndexError):
-                continue  # Ignore malformed IDs
-        return layer_seeds
+                seed_idx_str = parts[1]
+                if seed_idx_str.startswith("S"):
+                    seed_idx_str = seed_idx_str[1:]
+                seed_idx = int(seed_idx_str)
+                return layer_idx, seed_idx
+        except (ValueError, IndexError, TypeError):
+            pass
+        
+        return None, None
 
-    def _get_network_strain_states_by_layer(self, num_layers: int, seeds_per_layer: int) -> dict[int, list[str | None]]:
+    def _get_network_strain_states_by_layer(
+        self, num_layers: int, seeds_per_layer: int
+    ) -> dict[int, list[NetworkStrain | None]]:
         """
         Parse and organize network strain data by layer and seed index.
-        NOTE: This is a placeholder. It currently returns the same data as
-        the seed states for visual demonstration.
+        NOTE: This is a placeholder. It currently returns random data for visual demonstration.
         """
-        # For now, just reuse the seed state logic.
-        # In the future, this should query a different data source for strain.
-        return self._get_seed_states_by_layer(num_layers, seeds_per_layer)
+        layer_strains: dict[int, list[NetworkStrain | None]] = {
+            i: [None] * seeds_per_layer for i in range(num_layers)
+        }
+        strain_choices = list(NetworkStrain)
+        for i in range(num_layers):
+            for j in range(seeds_per_layer):
+                # Create some dynamic-looking random data
+                if (i * seeds_per_layer + j + int(time.time() * 2)) % 7 < 2:
+                    layer_strains[i][j] = random.choice(strain_choices)
+                else:
+                    layer_strains[i][j] = NetworkStrain.NONE
+        return layer_strains
 
     def _create_grid_row(
         self,
         layer_index: int,
         num_layers: int,
         seeds_per_layer: int,
-        layer_data: dict[int, list[str | None]],
-        emoji_map: dict[str, str],
+        layer_data: Mapping[int, list[SeedState | NetworkStrain | None]],
+        emoji_map: Mapping[SeedState | NetworkStrain, str],
         empty_emoji: str,
     ) -> list[str]:
         """Helper to create a single row for a grid table."""
@@ -302,85 +346,80 @@ class RichDashboard:
 
     def _create_grid_table(
         self,
+        grid: Mapping[int, list[SeedState | NetworkStrain | None]],
+        emoji_map: Mapping[SeedState | NetworkStrain, str],
         num_layers: int,
         seeds_per_layer: int,
-        layer_data: dict[int, list[str | None]],
-        emoji_map: dict[str, str],
-        empty_emoji: str,
     ) -> Table:
-        """Creates the Rich Table for a grid display."""
-        grid_table = Table(
-            show_header=True,
-            header_style="bold magenta",
-            expand=False,
-            box=box.SIMPLE_HEAD,
+        """Creates a Rich Table for a grid."""
+        table = Table(
+            title="", 
+            show_header=True, 
+            header_style="bold magenta", 
+            box=box.ROUNDED,
+            expand=True  # Force table to use full width
         )
-        grid_table.add_column("L#", style="dim", width=3, justify="center")
-        grid_table.add_column("│", width=1, no_wrap=True, style="dim")
-        for i in range(self.GRID_SIZE):
-            grid_table.add_column(str(i + 1), justify="center", no_wrap=True, style="bold")
+        table.add_column("L", justify="center")
+        table.add_column("", justify="center")  # Separator
+        for i in range(seeds_per_layer):  # Use actual seeds_per_layer instead of GRID_SIZE
+            table.add_column(f"{i}", justify="center")
 
-        for i in range(self.GRID_SIZE):
-            row = self._create_grid_row(i, num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji)
-            grid_table.add_row(*row)
-        return grid_table
+        for i in range(num_layers):  # Use num_layers instead of len(grid)
+            row = self._create_grid_row(
+                i, num_layers, seeds_per_layer, grid, emoji_map, self.EMPTY_CELL_EMOJI
+            )
+            table.add_row(*row)
+
+        return table
 
     def _create_seed_box_panel(self) -> Panel:
-        """Generate the panel for the seed status grid."""
-        num_layers = self.experiment_params.get("num_layers", 0)
-        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
+        """Generate the main panel for visualizing seed states."""
+        num_layers = self.experiment_params.get("num_layers", 8)
+        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
 
-        if num_layers == 0 or seeds_per_layer == 0:
-            return Panel(
-                Align.center("Seed box data unavailable.", vertical="middle"),
-                title="Seed Box",
-                border_style="magenta",
-            )
+        layer_data = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
-        emoji_map = {
-            "active": self.SEED_ACTIVE_EMOJI,
-            "dormant": self.SEED_DORMANT_EMOJI,
-            "blending": self.SEED_BLENDING_EMOJI,
-            "germinated": self.SEED_GERMINATED_EMOJI,
-            "fossilized": self.SEED_FOSSILIZED_EMOJI,
-        }
-        empty_emoji = self.EMPTY_CELL_EMOJI
-        layer_seeds = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
-
-        grid_table = self._create_grid_table(num_layers, seeds_per_layer, layer_seeds, emoji_map, empty_emoji)
-
-        return Panel(
-            Align.center(grid_table, vertical="middle"),
-            title="Seed Box",
-            border_style="magenta",
+        grid_table = self._create_grid_table(
+            layer_data, self.SEED_EMOJI_MAP, num_layers, seeds_per_layer
         )
+        return Panel(grid_table, title="Seed States", border_style="green")
 
     def _create_seeds_training_table(self) -> Table:
-        """Generate the table for seeds currently in training."""
-        seeds_table = Table(show_header=True, header_style="bold green", expand=True, box=box.MINIMAL)
-        seeds_table.add_column("Seed ID", style="cyan", no_wrap=True, ratio=4)
-        seeds_table.add_column("Train Loss", justify="center", ratio=5)
-        seeds_table.add_column("Val Loss", justify="center", ratio=5)
-        seeds_table.add_column("Val Acc", justify="center", ratio=5)
+        """Generate the table for detailed seed training metrics."""
+        table = Table(show_header=True, header_style="bold yellow", expand=True)
+        table.add_column("ID", style="cyan")
+        table.add_column("State", style="green")
+        table.add_column("α", justify="right", style="magenta")
+        table.add_column("∇ Norm", justify="right", style="yellow")
+        table.add_column("Pat.", justify="right", style="dim")
 
-        high_perf_seeds = {sid: d for sid, d in self.seed_states.items() if d.get("state") in ["active", "blending"]}
+        # Sort seeds for stable display order
+        sorted_seed_ids = sorted(self.seed_states.keys())
 
-        # Sort by validation accuracy (descending) if available, otherwise by ID
-        sorted_seeds = sorted(
-            high_perf_seeds.items(),
-            key=lambda item: item[1].get("val_acc", 0),
-            reverse=True,
-        )
+        for seed_id in sorted_seed_ids:
+            data = self.seed_states[seed_id]
+            state = data.get("state")
+            if isinstance(state, SeedState):
+                state_str = state.name.capitalize()
+            else:
+                state_str = str(state)
 
-        for seed_id, data in sorted_seeds:
-            seeds_table.add_row(
-                seed_id[:12] + "...",
-                (f"{data.get('train_loss'):.4f}" if data.get("train_loss") is not None else "N/A"),
-                (f"{data.get('val_loss'):.4f}" if data.get("val_loss") is not None else "N/A"),
-                (f"{(val_acc * 100):.1f}%" if (val_acc := data.get("val_acc")) is not None else "N/A"),
+            alpha = data.get("alpha", 0.0)
+            grad_norm = data.get("grad_norm")
+            patience = data.get("patience")
+
+            # Convert tuple seed_id back to string for display
+            seed_id_str = f"L{seed_id[0]}_S{seed_id[1]}"
+
+            table.add_row(
+                seed_id_str,
+                state_str,
+                f"{alpha:.3f}",
+                f"{grad_norm:.2e}" if grad_norm is not None else "N/A",
+                str(patience) if patience is not None else "N/A",
             )
 
-        return seeds_table
+        return table
 
     def _create_kasima_panel(self) -> Panel:
         """Generate the panel containing the seeds training table."""
@@ -430,90 +469,64 @@ class RichDashboard:
         return Panel(karn_table, title="Karn", border_style="blue")
 
     def _create_crucible_panel(self) -> Panel:
-        """Generate the panel for Crucible's status."""
-        crucible_table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1))
-        crucible_table.add_column("Metric", style=self.STYLE_BOLD_BLUE)
-        crucible_table.add_column("Value")
-
-        crucible_table.add_row("Match Status", "In Progress (75%)")
-        crucible_table.add_row("Challenger ID", "bp_9f1a (Novel Mixer)")
-        crucible_table.add_row("Incumbent ID", "bp_3c5d (Keystone)")
-        crucible_table.add_row("Live ELO Change", "+12.5 (Challenger)")
-        crucible_table.add_row("Key Metric Δ", "Latency: -15%")
-        crucible_table.add_row()  # Whitespace
-
-        return Panel(crucible_table, title="Crucible", border_style="blue")
-
-    def _create_network_strain_panel(self) -> Panel:
-        """Generate the panel for the network strain visualization."""
-        num_layers = self.experiment_params.get("num_layers", 0)
-        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 0)
-
-        if num_layers == 0 or seeds_per_layer == 0:
-            return Panel(
-                Align.center("Network strain data unavailable.", vertical="middle"),
-                title="Network Strain",
-                border_style="yellow",
-            )
-
-        # Emoji map corresponding to the strain legend
-        emoji_map = {
-            "none": self.STRAIN_NONE_EMOJI,
-            "low": self.STRAIN_LOW_EMOJI,
-            "medium": self.STRAIN_MEDIUM_EMOJI,
-            "high": self.STRAIN_HIGH_EMOJI,
-            "fired": self.STRAIN_FIRED_EMOJI,
-            # Mapping seed states to strain for placeholder visualization
-            "active": self.STRAIN_LOW_EMOJI,  # Low strain
-            "blending": self.STRAIN_MEDIUM_EMOJI,  # Medium strain
-            "germinated": self.STRAIN_NONE_EMOJI,  # No strain
-            "dormant": self.STRAIN_NONE_EMOJI,  # No strain
-        }
-        empty_emoji = self.EMPTY_CELL_EMOJI
-
-        # NOTE: This currently uses seed data as a placeholder for strain data.
-        layer_data = self._get_network_strain_states_by_layer(num_layers, seeds_per_layer)
-
-        grid_table = self._create_grid_table(num_layers, seeds_per_layer, layer_data, emoji_map, empty_emoji)
-
+        """Generate the panel for detailed seed training data."""
         return Panel(
-            Align.center(grid_table, vertical="middle"),
-            title="Network Strain",
+            self._create_seeds_training_table(),
+            title="Crucible",
             border_style="yellow",
         )
+
+    def _create_network_strain_panel(self) -> Panel:
+        """Generate the panel for visualizing network strain."""
+        num_layers = self.experiment_params.get("num_layers", 8)
+        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
+
+        layer_data = self._get_network_strain_states_by_layer(
+            num_layers, seeds_per_layer
+        )
+
+        grid_table = self._create_grid_table(
+            layer_data, self.STRAIN_EMOJI_MAP, num_layers, seeds_per_layer
+        )
+        return Panel(grid_table, title="Network Strain", border_style="red")
 
     def _create_seed_legend_panel(self) -> Panel:
         """Generate the legend for the seed box."""
         legend_text = Text.from_markup(
-            f"{self.SEED_ACTIVE_EMOJI} Active  {self.SEED_BLENDING_EMOJI} Blending  "
-            f"{self.SEED_GERMINATED_EMOJI} Germinated  {self.SEED_DORMANT_EMOJI} Dormant  "
-            f"{self.SEED_FOSSILIZED_EMOJI} Fossilized  {self.EMPTY_CELL_EMOJI} Empty"
+            f"{self.SEED_EMOJI_MAP[SeedState.ACTIVE]} Active  "
+            f"{self.SEED_EMOJI_MAP[SeedState.BLENDING]} Blending  "
+            f"{self.SEED_EMOJI_MAP[SeedState.GERMINATED]} Germinated  "
+            f"{self.SEED_EMOJI_MAP[SeedState.DORMANT]} Dormant  "
+            f"{self.SEED_EMOJI_MAP[SeedState.FOSSILIZED]} Fossilized  "
+            f"{self.EMPTY_CELL_EMOJI} Empty"
         )
         return Panel(
             Align.center(legend_text),
             box=box.MINIMAL,
             style="dim",
-            border_style="magenta",
+            border_style="green",
             padding=(0, 1),
         )
 
     def _create_strain_legend_panel(self) -> Panel:
-        """Generate the legend for the network strain box."""
+        """Generate the legend for the network strain."""
         legend_text = Text.from_markup(
-            f"{self.STRAIN_NONE_EMOJI} None  {self.STRAIN_LOW_EMOJI} Low  "
-            f"{self.STRAIN_MEDIUM_EMOJI} Medium  {self.STRAIN_HIGH_EMOJI} High  "
-            f"{self.STRAIN_FIRED_EMOJI} Fired  {self.EMPTY_CELL_EMOJI} Empty"
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.NONE]} None  "
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.LOW]} Low  "
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.MEDIUM]} Medium  "
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.HIGH]} High  "
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.FIRED]} Fired"
         )
         return Panel(
             Align.center(legend_text),
             box=box.MINIMAL,
             style="dim",
-            border_style="yellow",
+            border_style="red",
             padding=(0, 1),
         )
 
     def _create_seed_timeline_panel(self) -> Panel:
-        """Generate the panel for the scrolling seed-specific event log."""
+        """Generate the panel for the seed event log."""
         event_text = "\n".join(self.seed_log_events)
         content = Text.from_markup(f"[bold]Seed Events:[/bold]\n{event_text}")
         return Panel(content, title="Seed Timeline", border_style="red")
@@ -568,7 +581,7 @@ class RichDashboard:
     def update_seed(
         self,
         seed_id: str,
-        state: str,
+        state: SeedState,
         alpha: float = 0.0,
         from_state: str = "unknown",
         activation_epoch: int | None = None,
@@ -576,31 +589,31 @@ class RichDashboard:
         weight_norm: float | None = None,
         patience: int | None = None,
     ):
-        """Handle seed state change event and update the status panel."""
-        # Log the event to the dedicated seed log
-        log_data = {"alpha": f"{alpha:.2f}"}
+        """Update the state and metrics of a single seed."""
+        if seed_id not in self.seed_states:
+            self.seed_states[seed_id] = {}
+
+        # Store the raw enum member
+        self.seed_states[seed_id]["state"] = state
+        self.seed_states[seed_id]["alpha"] = alpha
+        if activation_epoch is not None:
+            self.seed_states[seed_id]["activation_epoch"] = activation_epoch
         if grad_norm is not None:
-            log_data["grad"] = f"{grad_norm:.2e}"
-        self.add_seed_log_event("seed", f"Seed {seed_id[:12]}...: {from_state} -> {state}", log_data)
+            self.seed_states[seed_id]["grad_norm"] = grad_norm
+        if weight_norm is not None:
+            self.seed_states[seed_id]["weight_norm"] = weight_norm
+        if patience is not None:
+            self.seed_states[seed_id]["patience"] = patience
 
-        # Update the internal state for the right panels
-        new_data = {
-            "state": state,
-            "alpha": alpha,
-            "activation_epoch": activation_epoch,
-            "grad_norm": grad_norm,
-            "weight_norm": weight_norm,
-            "patience": patience,
-        }
-        # Merge with existing data to preserve fields that aren't updated in this event
-        self.seed_states.setdefault(seed_id, {}).update({k: v for k, v in new_data.items() if v is not None})
+        # The from_state is for logging, can remain a string
+        message = f"Seed {seed_id} changed from {from_state} to {state.name}"
+        self.add_seed_log_event(
+            "SEED_STATE_CHANGE", message, {"seed_id": seed_id, "to_state": state.name}
+        )
 
-        if self.layout:
-            self.layout["kasima_panel"].update(self._create_kasima_panel())
-            self.layout["seed_box_panel"].update(self._create_seed_box_panel())
-            self.layout["network_strain_panel"].update(self._create_network_strain_panel())
-
-    def show_phase_transition(self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None):
+    def show_phase_transition(
+        self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None
+    ):
         """Handle phase transition event and reset phase progress bar."""
         self.add_live_event("phase_transition", f"Moving to {to_phase}", {"from": from_phase, "epoch": epoch})
 
@@ -638,6 +651,25 @@ class RichDashboard:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
+
+    def update_grid_view(self, payload: NetworkStrainGridUpdatePayload) -> None:
+        """Receives a grid update and refreshes the view."""
+        num_layers = self.experiment_params.get("num_layers", 8)
+        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
+        grid_table = self._create_grid_table(
+            payload["grid"], self.STRAIN_EMOJI_MAP, num_layers, seeds_per_layer
+        )
+        self.layout["network_strain_panel"].update(grid_table)
+
+    def update_seeds_view(self, payload: SeedStateUpdatePayload) -> None:
+        """Receives a seed state update and refreshes the view."""
+        num_layers = self.experiment_params.get("num_layers", 8)
+        seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
+        grid_table = self._create_grid_table(
+            payload["grid"], self.SEED_EMOJI_MAP, num_layers, seeds_per_layer
+        )
+        panel = Panel(grid_table, title="Seed States", border_style="green")
+        self.layout["seed_box_panel"].update(panel)
 
 
 def demo_dashboard():

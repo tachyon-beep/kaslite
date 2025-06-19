@@ -25,6 +25,27 @@ class EventType(Enum):
     METRICS_UPDATE = "metrics_update"
     PHASE_UPDATE = "phase_update"
     SEED_STATE_UPDATE = "seed_state_update"
+    GERMINATION = "germination"
+
+
+class SeedState(Enum):
+    """Enumeration of possible states for a morphogenetic seed."""
+
+    ACTIVE = "active"
+    DORMANT = "dormant"
+    BLENDING = "blending"
+    GERMINATED = "germinated"
+    FOSSILIZED = "fossilized"
+
+
+class NetworkStrain(Enum):
+    """Enumeration of network strain levels."""
+
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    FIRED = "fired"
 
 
 # =============================================================================
@@ -35,15 +56,15 @@ class EventType(Enum):
 class SystemInitPayload(TypedDict):
     """Payload for when the system starts."""
 
-    message: str
-    details: dict[str, Any] | None
+    config: dict[str, Any]
+    timestamp: float
 
 
 class SystemShutdownPayload(TypedDict):
     """Payload for when the system stops."""
 
-    message: str
-    details: dict[str, Any] | None
+    final_stats: dict[str, Any]
+    timestamp: float
 
 
 class MetricsUpdatePayload(TypedDict):
@@ -51,21 +72,50 @@ class MetricsUpdatePayload(TypedDict):
 
     epoch: int
     metrics: dict[str, float | int]
+    timestamp: float
 
 
 class PhaseUpdatePayload(TypedDict):
     """Payload for announcing a change in the experiment phase."""
 
-    phase_name: str
     epoch: int
-    details: dict[str, Any] | None
+    from_phase: str
+    to_phase: str
+    total_epochs_in_phase: int | None
+    timestamp: float
+
+
+class SeedInfo(TypedDict):
+    """A snapshot of a single seed's state and metrics."""
+
+    id: tuple[int, int]  # (layer_index, seed_index_in_layer)
+    state: SeedState
+    layer: int
+    index_in_layer: int
+    metrics: dict[str, float | int | None]  # e.g., train_loss, val_acc, alpha
 
 
 class SeedStateUpdatePayload(TypedDict):
     """Payload for providing a complete update of all tracked seeds."""
 
     epoch: int
-    seed_updates: list[dict[str, Any]]
+    grid: dict[int, list[SeedState | None]]
+    timestamp: float
+
+
+class NetworkStrainGridUpdatePayload(TypedDict):
+    """Payload for providing a complete update of network strain."""
+
+    epoch: int
+    grid: dict[int, list[NetworkStrain | None]]
+
+
+class GerminationPayload(TypedDict):
+    """Payload for seed germination events."""
+
+    epoch: int
+    seed_id: tuple[int, int]
+    timestamp: float
 
 
 # A union of all possible event payloads for type-safe handling
@@ -75,6 +125,7 @@ EventPayload = Union[
     MetricsUpdatePayload,
     PhaseUpdatePayload,
     SeedStateUpdatePayload,
+    GerminationPayload,
 ]
 
 
@@ -87,7 +138,6 @@ EventPayload = Union[
 class LogEvent:
     """A container for a single, fully type-safe log event."""
 
-    timestamp: float
     event_type: EventType
     payload: EventPayload
 
@@ -97,8 +147,11 @@ class LogEvent:
         # Custom JSON encoder to handle Enum
         class EventEncoder(json.JSONEncoder):
             def default(self, o: Any) -> Any:
-                if isinstance(o, EventType):
+                if isinstance(o, (EventType, SeedState, NetworkStrain)):
                     return o.value
+                if isinstance(o, float):
+                    # Optional: Round floats for cleaner logs
+                    return round(o, 6)
                 return super().default(o)
 
         return json.dumps(asdict(self), cls=EventEncoder)

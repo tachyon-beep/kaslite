@@ -12,6 +12,8 @@ from typing import Optional
 
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
+from .events import SeedState
+
 # Training Metrics
 EPOCHS_TOTAL = Counter("kaslite_epochs_total", "Number of training epochs completed", ["phase", "experiment_id"])
 
@@ -85,8 +87,9 @@ class PrometheusMonitor:
         self.server_lock = threading.Lock()
         self.experiment_start_time = time.time()
 
-        # State mapping for seed states
-        self.state_map = {"dormant": 0, "training": 1, "blending": 2, "active": 3, "failed": -1}
+        # State mapping for seed states - built from SeedState enum for consistency
+        self.state_map = {state.value: idx for idx, state in enumerate(SeedState)}
+        self.state_map["failed"] = -1  # Add special failed state
 
     def start_metrics_server(self):
         """Start the Prometheus metrics HTTP server."""
@@ -123,7 +126,7 @@ class PrometheusMonitor:
 
     def update_seed_metrics(
         self,
-        seed_id: str,
+        seed_id: tuple[int, int] | str,
         state: str,
         alpha: float = 0.0,
         drift: float = 0.0,
@@ -131,14 +134,20 @@ class PrometheusMonitor:
         training_progress: float = 0.0,
     ):
         """Update all metrics for a specific seed."""
+        # Convert tuple seed_id to string for Prometheus labels
+        if isinstance(seed_id, tuple):
+            seed_id_str = f"L{seed_id[0]}_S{seed_id[1]}"
+        else:
+            seed_id_str = seed_id
+            
         # Convert state to numeric value
         state_value = self.state_map.get(state, -1)
 
-        SEED_STATE.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(state_value)
-        SEED_ALPHA.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(alpha)
-        SEED_DRIFT.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(drift)
-        SEED_HEALTH_SIGNAL.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(health_signal)
-        SEED_TRAINING_PROGRESS.labels(seed_id=seed_id, experiment_id=self.experiment_id).set(training_progress)
+        SEED_STATE.labels(seed_id=seed_id_str, experiment_id=self.experiment_id).set(state_value)
+        SEED_ALPHA.labels(seed_id=seed_id_str, experiment_id=self.experiment_id).set(alpha)
+        SEED_DRIFT.labels(seed_id=seed_id_str, experiment_id=self.experiment_id).set(drift)
+        SEED_HEALTH_SIGNAL.labels(seed_id=seed_id_str, experiment_id=self.experiment_id).set(health_signal)
+        SEED_TRAINING_PROGRESS.labels(seed_id=seed_id_str, experiment_id=self.experiment_id).set(training_progress)
 
     def update_kasmina_metrics(self, plateau_counter: int, patience: int):
         """Update Kasmina controller metrics."""

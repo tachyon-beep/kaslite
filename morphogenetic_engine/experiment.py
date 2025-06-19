@@ -9,39 +9,70 @@ from __future__ import annotations
 
 from torch import nn
 
+from morphogenetic_engine.cli_dashboard import RichDashboard
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
+from morphogenetic_engine.logger import ExperimentLogger
 
 
-def build_model_and_agents(args, device):
+def build_model_and_agents(
+    # Model architecture
+    hidden_dim: int,
+    input_dim: int,
+    num_layers: int,
+    seeds_per_layer: int,
+    # Model behavior
+    blend_steps: int,
+    shadow_lr: float,
+    progress_thresh: float,
+    drift_warn: float,
+    # Agents
+    acc_threshold: float,
+    # Infrastructure
+    device: str,
+    logger: ExperimentLogger,
+    dashboard: RichDashboard,
+    tb_writer,  # Add type hint if available
+    # Dataset-specific
+    problem_type: str,
+    **kwargs,  # Capture any other unused args
+):
     """Initialize the SeedManager, BaseNet model, loss function, and KasminaMicro."""
     seed_manager = SeedManager()
 
     # Determine number of classes based on problem type
-    if args.problem_type == "cifar10":
+    if problem_type == "cifar10":
         num_classes = 10
     else:
         # All synthetic datasets are binary classification
-        # Handle case where args might be a Mock object
-        num_classes_attr = getattr(args, "num_classes", 2)
-        if hasattr(num_classes_attr, "_mock_name"):  # It's a Mock object
-            num_classes = 2
-        else:
-            num_classes = num_classes_attr
+        num_classes = 2
 
     model = BaseNet(
-        args.hidden_dim,
+        hidden_dim=hidden_dim,
         seed_manager=seed_manager,
-        input_dim=args.input_dim,
+        input_dim=input_dim,
         output_dim=num_classes,
-        num_layers=args.num_layers,
-        seeds_per_layer=args.seeds_per_layer,
-        blend_steps=args.blend_steps,
-        shadow_lr=args.shadow_lr,
-        progress_thresh=args.progress_thresh,
-        drift_warn=args.drift_warn,
+        num_layers=num_layers,
+        seeds_per_layer=seeds_per_layer,
+        blend_steps=blend_steps,
+        shadow_lr=shadow_lr,
+        progress_thresh=progress_thresh,
+        drift_warn=drift_warn,
     ).to(device)
-    loss_fn = nn.CrossEntropyLoss().to(device)
-    kasmina = KasminaMicro(seed_manager, patience=15, delta=5e-4, acc_threshold=args.acc_threshold)
 
-    return model, seed_manager, loss_fn, kasmina
+    loss_fn = nn.CrossEntropyLoss().to(device)
+
+    # The `tamiyo` agent from the high-level plan
+    tamiyo = KasminaMicro(
+        seed_manager,
+        patience=15,  # This could be parameterized
+        delta=5e-4,  # This could be parameterized
+        acc_threshold=acc_threshold,
+        logger=logger,
+        dashboard=dashboard,
+    )
+
+    # The `karn` agent is implicitly the training loop logic itself
+    karn = None  # Placeholder, as Karn's logic is not a separate class yet
+
+    return model, seed_manager, karn, tamiyo

@@ -18,7 +18,7 @@ class SentinelSeed(nn.Module):
 
     def __init__(
         self,
-        seed_id: str,
+        seed_id: tuple[int, int],
         dim: int,
         seed_manager: SeedManager,
         blend_steps: int = 30,
@@ -231,7 +231,7 @@ class BaseNet(nn.Module):
             # Multiple seeds per layer
             for j in range(seeds_per_layer):
                 seed = SentinelSeed(
-                    f"seed{i+1}_{j+1}",  # e.g., seed1_1, seed1_2, seed2_1, etc.
+                    (i, j),  # Use a tuple (layer_idx, seed_idx) as the ID
                     hidden_dim,
                     seed_manager,
                     blend_steps=blend_steps,

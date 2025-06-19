@@ -1,5 +1,7 @@
 """Core module for morphogenetic engine containing seed management and germination control."""
 
+from __future__ import annotations
+
 import logging
 import threading
 import time
@@ -8,7 +10,9 @@ from typing import Any, Dict, List, Optional
 
 import torch
 
+from .cli_dashboard import RichDashboard
 from .logger import ExperimentLogger
+from .monitoring import get_monitor
 
 
 class SeedManager:
@@ -20,7 +24,7 @@ class SeedManager:
     _singleton_lock = threading.Lock()
 
     # Declare instance attributes for type checking
-    seeds: Dict[str, Dict]
+    seeds: Dict[tuple[int, int], Dict]
     germination_log: List[Dict[str, Any]]
     lock: threading.RLock
     logger: Optional[ExperimentLogger]
@@ -47,7 +51,7 @@ class SeedManager:
         if logger is not None:
             self.logger = logger
 
-    def register_seed(self, seed_module, seed_id: str) -> None:
+    def register_seed(self, seed_module, seed_id: tuple[int, int]) -> None:
         """Register a new seed module with the manager."""
         with self.lock:
             self.seeds[seed_id] = {
@@ -65,7 +69,7 @@ class SeedManager:
             if seed_id in self.seeds:
                 self.seeds[seed_id]["buffer"].append(x.detach().clone())
 
-    def request_germination(self, seed_id: str, epoch: int = 0) -> bool:
+    def request_germination(self, seed_id: tuple[int, int], epoch: int = 0) -> bool:
         """Request germination for a specific seed. Returns True if successful."""
         with self.lock:
             seed_info = self.seeds.get(seed_id)
@@ -85,23 +89,23 @@ class SeedManager:
                 self._log_event(seed_id, False)
                 return False
 
-    def _log_event(self, seed_id: str, success: bool) -> None:
+    def _log_event(self, seed_id: tuple[int, int], success: bool) -> None:
         """Log a germination event with timestamp."""
         self.germination_log.append(
             {
                 "event_type": "germination_attempt",
-                "seed_id": seed_id,
+                "seed_id": f"L{seed_id[0]}_S{seed_id[1]}",  # Convert tuple to string for logging
                 "success": success,
                 "timestamp": time.time(),
             }
         )
 
-    def record_transition(self, seed_id: str, old_state: str, new_state: str, epoch: int = 0) -> None:
+    def record_transition(self, seed_id: tuple[int, int], old_state: str, new_state: str, epoch: int = 0) -> None:
         """Record a state change for analytics and log the event."""
         self.germination_log.append(
             {
                 "event_type": "state_transition",
-                "seed_id": seed_id,
+                "seed_id": f"L{seed_id[0]}_S{seed_id[1]}",  # Convert tuple to string for logging
                 "from": old_state,
                 "to": new_state,
                 "timestamp": time.time(),
@@ -110,7 +114,7 @@ class SeedManager:
         if self.logger is not None:
             self.logger.log_seed_event(epoch, seed_id, old_state, new_state)
 
-    def record_drift(self, seed_id: str, drift: float) -> None:
+    def record_drift(self, seed_id: tuple[int, int], drift: float) -> None:
         """Record drift telemetry for a specific seed."""
         with self.lock:
             if seed_id in self.seeds:
@@ -145,6 +149,8 @@ class KasminaMicro:
         patience: int = 15,
         delta: float = 1e-4,
         acc_threshold: float = 0.95,
+        logger: ExperimentLogger | None = None,
+        dashboard: RichDashboard | None = None,
     ) -> None:
         self.seed_manager = seed_manager
         self.patience = patience
@@ -152,21 +158,21 @@ class KasminaMicro:
         self.acc_threshold = acc_threshold  # Accuracy threshold for germination
         self.plateau = 0
         self.prev_loss = float("inf")
+        self.logger = logger
+        self.dashboard = dashboard
 
-    def step(self, val_loss: float, val_acc: float) -> bool:
+    def step(self, epoch: int, val_loss: float, val_acc: float) -> bool:
         """
         Process a training step and determine if germination should occur.
 
         Args:
+            epoch: The current epoch number.
             val_loss: Current validation loss
             val_acc: Current validation accuracy
 
         Returns:
             True if germination occurred, False otherwise
         """
-        # Import here to avoid circular imports
-        from .monitoring import get_monitor
-
         # Check if loss has not improved by at least delta
         if self.prev_loss - val_loss < self.delta:
             self.plateau += 1
@@ -190,11 +196,18 @@ class KasminaMicro:
                 # Record germination in monitoring
                 if monitor:
                     monitor.record_germination()
+                # Log the phase transition for germination
+                if self.logger:
+                    self.logger.log_phase_update(
+                        epoch=epoch,
+                        from_phase="Monitoring",
+                        to_phase="Germination",
+                    )
                 return True  # Signal germination occurred
         return False
 
-    def _select_seed(self) -> Optional[str]:
-        candidate_id = None
+    def _select_seed(self) -> Optional[tuple[int, int]]:
+        candidate_id: Optional[tuple[int, int]] = None
         worst_signal = float("inf")  # Start with worst possible value
 
         with self.seed_manager.lock:

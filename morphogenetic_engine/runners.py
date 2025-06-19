@@ -21,14 +21,13 @@ from morphogenetic_engine import datasets
 from morphogenetic_engine.cli_dashboard import RichDashboard
 from morphogenetic_engine.experiment import build_model_and_agents
 from morphogenetic_engine.logger import ExperimentLogger
+from morphogenetic_engine.events import SeedState
 from morphogenetic_engine.monitoring import cleanup_monitoring, initialize_monitoring
 from morphogenetic_engine.training import execute_phase_1, execute_phase_2
 from morphogenetic_engine.utils import (
     create_experiment_config,
     export_metrics_for_dvc,
     generate_experiment_slug,
-    write_experiment_log_footer,
-    write_experiment_log_header,
 )
 
 
@@ -56,17 +55,14 @@ def setup_experiment(args):
     mlflow.set_experiment(config.get("experiment_name", args.problem_type))
 
     log_dir = project_root / "results"
-    log_dir.mkdir(exist_ok=True)
-    log_path = log_dir / f"results_{slug}.log"
-
-    logger = ExperimentLogger(str(log_path), config)
-    log_f = log_path.open("w", encoding="utf-8")
+    log_filename = f"results_{slug}.log"
+    logger = ExperimentLogger(log_dir=log_dir, log_file=log_filename)
 
     # Create TensorBoard writer
     tb_dir = project_root / "runs" / slug
     tb_writer = SummaryWriter(log_dir=str(tb_dir))
 
-    return logger, tb_writer, log_f, device, config, slug, project_root
+    return logger, tb_writer, device, config, slug, project_root
 
 
 def get_dataloaders(args):
@@ -135,15 +131,17 @@ def get_dataloaders(args):
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size * 2, num_workers=0)
 
-    return train_loader, val_loader
+    return train_loader, val_loader, X.shape[0], X.shape[1:]
 
 
-def log_final_summary(logger, final_stats, seed_manager, log_f):
-    """Print the final report to the console and write the summary footer to the log file."""
-    if final_stats["acc_pre"] is not None and final_stats["acc_post"] is not None:
-        logger.log_accuracy_dip(0, final_stats["accuracy_dip"])
-
-    write_experiment_log_footer(log_f, final_stats, seed_manager)
+def log_final_summary(logger: ExperimentLogger, final_stats: dict[str, Any]):
+    """Logs the final summary and system shutdown event."""
+    if final_stats.get("acc_pre") is not None and final_stats.get("acc_post") is not None:
+        logging.info(
+            f"Final Accuracy: Pre-Adaptation {final_stats['acc_pre']:.4f}, "
+            f"Post-Adaptation {final_stats['acc_post']:.4f}"
+        )
+    logger.log_system_shutdown(final_stats=final_stats)
 
 
 def setup_mlflow_logging(config: Dict[str, Any], slug: str) -> None:
@@ -162,14 +160,15 @@ def log_mlflow_metrics_and_artifacts(final_stats: Dict[str, Any], model, seed_ma
     """Log metrics, artifacts, and model to MLflow."""
     try:
         # Log metrics
-        mlflow.log_metric("final_best_acc", final_stats["best_acc"])
-        if "accuracy_dip" in final_stats and final_stats["accuracy_dip"] is not None:
-            mlflow.log_metric("accuracy_dip", final_stats["accuracy_dip"])
-        if "recovery_time" in final_stats and final_stats["recovery_time"] is not None:
-            mlflow.log_metric("recovery_time", final_stats["recovery_time"])
+        if (best_acc := final_stats.get("best_acc")) is not None:
+            mlflow.log_metric("final_best_acc", best_acc)
+        if (accuracy_dip := final_stats.get("accuracy_dip")) is not None:
+            mlflow.log_metric("accuracy_dip", accuracy_dip)
+        if (recovery_time := final_stats.get("recovery_time")) is not None:
+            mlflow.log_metric("recovery_time", recovery_time)
 
         mlflow.log_metric("total_seeds", len(seed_manager.seeds))
-        active_seeds_count = sum(1 for info in seed_manager.seeds.values() if info["module"].state == "active")
+        active_seeds_count = sum(1 for info in seed_manager.seeds.values() if info["module"].state == SeedState.ACTIVE)
         mlflow.log_metric("active_seeds", active_seeds_count)
         mlflow.set_tag("seeds_activated", str(final_stats.get("seeds_activated", False)))
 
@@ -240,13 +239,14 @@ def _create_serializable_model(original_model):
     return serializable
 
 
-def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
+def run_single_experiment(args) -> Dict[str, Any]:
     """Run a single experiment with the given arguments and return results."""
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     random.seed(args.seed)
 
-    logger, tb_writer, log_f, device, config, slug, project_root = setup_experiment(args)
+    logger, tb_writer, device, config, slug, project_root = setup_experiment(args)
+    logger.log_system_init(config=config)
     setup_mlflow_logging(config, slug)
 
     # Calculate total epochs and pass to the dashboard
@@ -254,66 +254,78 @@ def run_single_experiment(args, run_id: Optional[str] = None) -> Dict[str, Any]:
     dashboard_params = vars(args).copy()
     dashboard_params["epochs"] = total_experiment_epochs
     dashboard = RichDashboard(experiment_params=dashboard_params)
+
+    # Connect the dashboard to the logger for real-time dispatching
     logger.dashboard = dashboard
 
+    # Start the dashboard UI
+    dashboard.start()
+
+    # Initialize variables to ensure they exist for the `finally` block
+    model, seed_manager, final_stats = None, None, {}
+
     try:
-        with log_f, dashboard:
-            write_experiment_log_header(log_f, config, args)
-            logger.log_experiment_start()
+        train_loader, val_loader, n_samples, input_shape = get_dataloaders(args)
+        config["n_samples"] = n_samples
+        config["input_shape"] = input_shape
 
-            train_loader, val_loader = get_dataloaders(args)
-            loaders = (train_loader, val_loader)
-            loss_fn = nn.CrossEntropyLoss()
+        model, seed_manager, karn, tamiyo = build_model_and_agents(
+            logger=logger,
+            tb_writer=tb_writer,
+            dashboard=dashboard,
+            **config,
+        )
 
-            model, seed_manager, _, _ = build_model_and_agents(args, device)
+        # --- Phase 1: Warm-up ---
+        final_stats = execute_phase_1(
+            model=model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            logger=logger,
+            tb_writer=tb_writer,
+            device=device,
+            config=config,
+            dashboard=dashboard,
+            seed_manager=seed_manager,
+        )
 
-            for sid in seed_manager.seeds:
-                logger.log_seed_event(epoch=0, seed_id=sid, from_state="init", to_state="dormant")
-
-            logger.log_phase_transition(
-                epoch=0,
-                from_phase="init",
-                to_phase="phase_1",
-                description="Warm-up",
-                total_epochs=args.warm_up_epochs,
-            )
-
-            best_acc_phase1 = execute_phase_1(config, model, loaders, loss_fn, seed_manager, logger, tb_writer, log_f)
-
-            logger.log_phase_transition(
-                epoch=args.warm_up_epochs,
-                from_phase="phase_1",
-                to_phase="phase_2",
-                description="Adaptation",
-                total_epochs=args.adaptation_epochs,
-            )
-
+        # --- Phase 2: Adaptation ---
+        if args.adaptation_epochs > 0:
             final_stats = execute_phase_2(
-                config, model, loaders, loss_fn, seed_manager, seed_manager, logger, tb_writer, log_f, best_acc_phase1
+                model=model,
+                seed_manager=seed_manager,
+                karn=karn,
+                tamiyo=tamiyo,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                logger=logger,
+                tb_writer=tb_writer,
+                device=device,
+                config=config,
+                dashboard=dashboard,
+                final_stats=final_stats,
             )
 
-            log_final_summary(logger, final_stats, seed_manager, log_f)
-            log_mlflow_metrics_and_artifacts(final_stats, model, seed_manager, project_root, slug)
-            export_metrics_for_dvc(final_stats, slug, project_root)
+    except (RuntimeError, ValueError, KeyError, TypeError) as e:
+        logging.error(f"Experiment failed: {e}")
+        # Return a result indicating failure
+        return {"status": "failed", "error": str(e), **final_stats}
 
-            print(f"Final best accuracy: {final_stats['best_acc']:.4f}")
-            if final_stats.get("seeds_activated"):
-                print("Seeds were activated during this experiment.")
-
-            return {
-                "run_id": run_id,
-                "best_acc": final_stats["best_acc"],
-                "seeds_activated": final_stats.get("seeds_activated", False),
-            }
-
-    except (RuntimeError, ValueError, KeyError) as e:
-        import traceback
-
-        traceback.print_exc()
+    finally:
+        log_final_summary(logger, final_stats)
+        if model and seed_manager:
+            log_mlflow_metrics_and_artifacts(
+                final_stats, model, seed_manager, project_root, slug
+            )
+        # Stop the live dashboard
+        dashboard.stop()
+        tb_writer.close()
         cleanup_monitoring()
         if mlflow.active_run():
-            mlflow.end_run("FAILED")
-        tb_writer.close()
-        dashboard.stop()
-        print(f"Experiment failed: {e}")
-        return {"run_id": run_id, "error": str(e), "best_acc": 0.0, "seeds_activated": False}
+            mlflow.end_run()
+
+    # Export final metrics for DVC
+    export_metrics_for_dvc(final_stats, slug, project_root)
+
+    logging.info(f"Experiment {slug} completed.")
+    return {**final_stats, "status": "completed"}
