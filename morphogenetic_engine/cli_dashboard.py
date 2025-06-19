@@ -140,7 +140,7 @@ class RichDashboard:
 
         # --- Center Column ---
         self.layout["center_column"].split_column(
-            Layout(name="seed_metrics_panel", ratio=2),
+            Layout(name="seed_metrics_panel", ratio=1),
             Layout(name="seed_timeline_panel", ratio=1),
         )
 
