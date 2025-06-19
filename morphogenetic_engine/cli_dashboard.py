@@ -280,7 +280,11 @@ class RichDashboard:
 
             grid_table.add_row(*row)
 
-        return Panel(grid_table, title="Seed Box", border_style="magenta")
+        return Panel(
+            Align.center(grid_table, vertical="middle"),
+            title="Seed Box",
+            border_style="magenta",
+        )
 
     def _create_high_perf_seeds_panel(self) -> Panel:
         """Generate the panel for high-performing seeds."""
