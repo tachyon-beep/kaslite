@@ -405,7 +405,7 @@ class TestAssertionUtilities:
         assert_valid_experiment_slug(valid_slug)  # Should not raise
         
         # Test invalid problem type
-        with pytest.raises(AssertionError, match="Invalid problem type"):
+        with pytest.raises(AssertionError, match="doesn't start with a known problem type"):
             assert_valid_experiment_slug("invalid_dim2_cpu_h128_bs32_lr0.001_pt0.6_dw0.12")
         
         # Test missing dim prefix

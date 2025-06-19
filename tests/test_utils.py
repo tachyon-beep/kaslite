@@ -487,6 +487,7 @@ def create_configured_seed_manager(num_seeds: int = 3) -> SeedManager:
         raise ValueError(f"num_seeds must be positive, got {num_seeds}")
     
     manager = SeedManager()
+    manager.seeds.clear()  # Clear any default seeds
     for i in range(num_seeds):
         # Create mock seed modules
         mock_seed = MagicMock()
@@ -970,7 +971,7 @@ def create_mock_device(device_type: str = "cpu") -> MagicMock:
         raise ValueError(f"Unsupported device type: {device_type}")
     
     mock_device = MagicMock()
-    mock_device.__str__ = lambda self: device_type
+    mock_device.__str__ = MagicMock(return_value=device_type)
     mock_device.type = device_type
     return mock_device
 

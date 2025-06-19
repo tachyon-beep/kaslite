@@ -139,7 +139,7 @@ class TestExperimentConfiguration:
         
         # Test with mock device object
         mock_device = MagicMock()
-        mock_device.__str__ = lambda: "cuda:0"
+        mock_device.__str__ = MagicMock(return_value="cuda:0")
         config = utils.create_experiment_config(args, mock_device)
         assert config["device"] == "cuda:0"
 
@@ -437,7 +437,7 @@ class TestIntegration:
                 metrics = json.load(f)
             assert_valid_metrics_json(metrics)
 
-    @patch('morphogenetic_engine.training.clear_seed_report_cache')
+    @patch('morphogenetic_engine.utils.clear_seed_report_cache')
     def test_log_header_clears_seed_cache(self, mock_clear_cache):
         """Test that log header writing clears the seed report cache."""
         with temporary_file(suffix=".log") as log_path:
