@@ -17,12 +17,25 @@ def quick_test():
         original_layout_id = id(dashboard.layout)
         console.print(f"Initial layout ID: {original_layout_id}")
         
-        # Initialize some data
-        dashboard.update_seed("seed1", "dormant")
-        dashboard.update_seed("seed2", "dormant")
+        # Initialize some data using new API
+        dashboard.update_seed_metrics({
+            "seed_id": "seed1",
+            "state": "dormant"
+        })
+        dashboard.update_seed_metrics({
+            "seed_id": "seed2", 
+            "state": "dormant"
+        })
         
-        # Start a phase (this was causing the issue)
-        dashboard.start_phase("test_phase", 3, "Testing stability")
+        # Start a phase using the correct API
+        import time as time_module
+        dashboard.transition_phase({
+            "to_phase": "test_phase",
+            "epoch": 0,
+            "from_phase": "",
+            "total_epochs_in_phase": 3,
+            "timestamp": time_module.time()
+        })
         after_phase_layout_id = id(dashboard.layout)
         
         if original_layout_id == after_phase_layout_id:
@@ -33,11 +46,16 @@ def quick_test():
         
         # Update progress a few times
         for i in range(3):
-            dashboard.update_progress(i+1, {
-                "train_loss": 1.0 - i*0.1,
-                "val_loss": 0.9 - i*0.1,
-                "val_acc": 0.5 + i*0.1,
-                "best_acc": 0.5 + i*0.1
+            import time as time_module
+            dashboard.update_metrics({
+                "epoch": i+1,
+                "metrics": {
+                    "train_loss": 1.0 - i*0.1,
+                    "val_loss": 0.9 - i*0.1,
+                    "val_acc": 0.5 + i*0.1,
+                    "best_acc": 0.5 + i*0.1
+                },
+                "timestamp": time_module.time()
             })
             time.sleep(0.5)
         

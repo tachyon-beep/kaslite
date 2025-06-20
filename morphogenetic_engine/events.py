@@ -39,6 +39,7 @@ class SeedState(Enum):
     BLENDING = "blending"
     GERMINATED = "germinated"
     FOSSILIZED = "fossilized"
+    CULLED = "culled"
 
 
 class NetworkStrain(Enum):

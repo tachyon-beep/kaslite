@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import random
 import time
+import math
 from collections import deque
 from collections.abc import Mapping
 from typing import Any, cast
@@ -47,6 +48,7 @@ class RichDashboard:
         SeedState.BLENDING: "🟡",
         SeedState.GERMINATED: "🌱",
         SeedState.FOSSILIZED: "🦴",
+        SeedState.CULLED: "🥀",
     }
 
     STRAIN_EMOJI_MAP = {
@@ -68,7 +70,7 @@ class RichDashboard:
         self.live: Live | None = None
         self._layout_initialized = False
         self.last_events: deque[str] = deque(maxlen=20)
-        self.seed_log_events: deque[str] = deque(maxlen=40)  # Larger buffer for seed events
+        self.seed_log_events: deque[str] = deque(maxlen=45)  # Larger buffer for seed events
         self.seed_states: dict[str, dict[str, Any]] = {}
         self.latest_metrics: dict[str, Any] = {}
         self.previous_metrics: dict[str, Any] = {}
@@ -79,6 +81,27 @@ class RichDashboard:
         self.epoch_times: list[float] = []
         self.experiment_start_time: float = time.time()
         self.total_planned_epochs: int | None = None
+        
+        # Sparkline system
+        self.metric_histories: dict[str, deque[float]] = {}
+        self.sparkline_config = {
+            'window_size': 45,  # Number of data points to track
+            'display_length': 45,  # Characters to display (increased from 25)
+            'levels': '▁▂▃▄▅▆▇',
+            'smoothing': True,
+            'color_trends': True
+        }
+        
+        # Metric type configuration for sparklines
+        self.metric_types = {
+            'train_loss': {'inverted': True, 'color': 'green'},  # Lower is better
+            'val_loss': {'inverted': True, 'color': 'green'},
+            'val_acc': {'inverted': False, 'color': 'cyan'},     # Higher is better
+            'learning_rate': {'inverted': False, 'color': 'yellow'},
+            'loss_change': {'inverted': True, 'color': 'magenta'},
+            'acc_change': {'inverted': False, 'color': 'magenta'},
+            'loss_improvement': {'inverted': False, 'color': 'green'},
+        }
 
         # Progress Bars
         self.total_progress = Progress(
@@ -159,12 +182,12 @@ class RichDashboard:
             Layout(name="seed_timeline_panel", ratio=1),
         )
         self.layout["left_column"].split_column(
-            Layout(name="top_left_area", size=34),  # 20 + 14 = fixed total (was 31)
+            Layout(name="top_left_area", size=32),  # 20 + 12 = fixed total (reduced by 2)
             bottom_left,
         )
         self.layout["top_left_area"].split_column(
             Layout(name="top_row", size=20),
-            Layout(name="sparkline_panel", size=14),  # increased from 11 to 14
+            Layout(name="sparkline_panel", size=12),  # reduced from 14 to 12
         )
         self.layout["top_row"].split_row(
             Layout(name="info_panel", ratio=2),
@@ -276,7 +299,7 @@ class RichDashboard:
 
     def _create_metrics_table_panel(self) -> Panel:
         """Generate the panel for the live metrics table with comprehensive training data."""
-        metrics_table = Table(show_header=True, header_style="bold magenta", expand=True, box=box.MINIMAL, padding=(0, 0))
+        metrics_table = Table(show_header=True, header_style="bold magenta", box=box.MINIMAL, padding=(0, 0))
         metrics_table.add_column("Metric", justify="left", style="cyan", no_wrap=True)
         metrics_table.add_column("Curr", justify="center", style="green")
         metrics_table.add_column("Prev", justify="center", style="yellow")
@@ -289,7 +312,9 @@ class RichDashboard:
             current_str, previous_str, change_str = self._format_metric_row(metric_key, fmt)
             metrics_table.add_row(display_name, current_str, previous_str, change_str)
 
-        return Panel(metrics_table, title="Live Training Metrics", border_style="cyan")
+        # Center the table both horizontally and vertically
+        centered_table = Align.center(metrics_table, vertical="middle")
+        return Panel(centered_table, title="Live Training Metrics", border_style="cyan")
 
     def _get_metrics_display_config(self) -> list[tuple[str, str, str]]:
         """Get the configuration for metrics display."""
@@ -310,9 +335,10 @@ class RichDashboard:
             
             # Timing and performance
             ("avg_epoch_time", "Epoch Time (s)", ".2f"),
-            ("total_time", "Total Time (s)", ".0f"),
+
             ("samples_per_sec", "Samples/sec", ".1f"),
-            ("eta_seconds", "ETA (s)", ".0f"),
+            ("total_time", "Total Time", ".0f"),
+            ("eta_seconds", "ETA", ".0f"),
         ]
 
     def _format_metric_row(self, metric_key: str, fmt: str) -> tuple[str, str, str]:
@@ -321,20 +347,34 @@ class RichDashboard:
         previous_val = self.previous_metrics.get(metric_key)
         
         # Format current value
-        current_str = self._format_metric_value(current_val, fmt)
+        current_str = self._format_metric_value(current_val, fmt, metric_key)
         
-        # Format previous value
-        previous_str = self._format_metric_value(previous_val, fmt)
-        
-        # Calculate and format change
-        change_str = self._calculate_metric_change(current_val, previous_val, fmt, metric_key)
+        # For time metrics, don't show previous value or change
+        if metric_key in ["total_time", "eta_seconds"]:
+            previous_str = "-"
+            change_str = "-"
+        else:
+            # Format previous value
+            previous_str = self._format_metric_value(previous_val, fmt, metric_key)
+            # Calculate and format change
+            change_str = self._calculate_metric_change(current_val, previous_val, fmt, metric_key)
         
         return current_str, previous_str, change_str
 
-    def _format_metric_value(self, value: Any, fmt: str) -> str:
+    def _format_metric_value(self, value: Any, fmt: str, metric_key: str = "") -> str:
         """Format a single metric value."""
         if value is not None:
-            if isinstance(value, float):
+            # Special formatting for time metrics - mm:ss until 59:59, then hh:mm
+            if metric_key in ["total_time", "eta_seconds"] and isinstance(value, (int, float)):
+                if value < 3600:  # Less than 1 hour, show mm:ss
+                    minutes = int(value // 60)
+                    seconds = int(value % 60)
+                    return f"{minutes:02d}:{seconds:02d}"
+                else:  # 1 hour or more, show hh:mm
+                    hours = int(value // 3600)
+                    minutes = int((value % 3600) // 60)
+                    return f"{hours:02d}:{minutes:02d}"
+            elif isinstance(value, float):
                 return f"{value:{fmt}}"
             return str(value)
         return "N/A"
@@ -383,7 +423,6 @@ class RichDashboard:
             ("loss_change", "Loss Δ", "+.3f"),
             ("acc_change", "Acc Δ", "+.3f"),
             ("loss_improvement", "Loss ↗", "+.3f"),
-            ("learning_rate", "Learning Rate", ".2e"),
         ]
 
         for metric_key, display_name, fmt in trend_metrics:
@@ -402,8 +441,8 @@ class RichDashboard:
             # Calculate change
             change_str = self._calculate_metric_change(current_val, previous_val, fmt, metric_key)
             
-            # Trend placeholder - longer sparkline to fill the expanded column
-            trend_indicator = "[dim]···○···○···○···○···○···○···○···○···○···[/dim]" if current_val is not None else "[dim]----------------------------------------[/dim]"
+            # Generate dynamic sparkline
+            trend_indicator = self._generate_sparkline(metric_key)
 
             sparkline_table.add_row(display_name, current_str, change_str, trend_indicator)
 
@@ -678,6 +717,7 @@ class RichDashboard:
             f"{self.SEED_EMOJI_MAP[SeedState.GERMINATED]} Germinated",
             f"{self.SEED_EMOJI_MAP[SeedState.DORMANT]} Dormant",
             f"{self.SEED_EMOJI_MAP[SeedState.FOSSILIZED]} Fossilized",
+            f"{self.SEED_EMOJI_MAP[SeedState.CULLED]} Culled",
             f"{self.EMPTY_CELL_EMOJI} Empty",
         ]
         legend_text = Text("  ".join(legend_parts))
@@ -796,6 +836,11 @@ class RichDashboard:
         # Add derived metrics
         self._add_derived_metrics(epoch, timestamp)
         
+        # Update metric histories for sparklines
+        for metric_key, value in self.latest_metrics.items():
+            if isinstance(value, (int, float)):
+                self._update_metric_history(metric_key, value)
+        
         # Store in history for trend analysis
         metrics_with_metadata = {
             "epoch": epoch,
@@ -901,68 +946,6 @@ class RichDashboard:
         if self.layout:
             self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
 
-    def add_live_event(self, event_type: str, message: str, data: dict[str, Any]):
-        """DEPRECATED: Use log_event with LogPayload instead."""
-        self.log_event({"event_type": event_type, "message": message, "data": data})
-
-    def add_seed_log_event(self, event_type: str, message: str, data: dict[str, Any]):
-        """DEPRECATED: Use log_seed_event with SeedLogPayload instead."""
-        self.log_seed_event({"event_type": event_type, "message": message, "data": data})
-        
-    def update_progress(self, epoch: int, metrics: dict[str, Any]):
-        """DEPRECATED: Use update_metrics with MetricsUpdatePayload instead."""
-        import time
-        self.update_metrics({"epoch": epoch, "metrics": metrics, "timestamp": time.time()})
-
-    def update_seed(
-        self,
-        seed_id: str | tuple,
-        state: SeedState | str,
-        alpha: float = 0.0,
-        from_state: str = "unknown",
-        grad_norm: float | None = None,
-        patience: int | None = None,
-    ):
-        """DEPRECATED: Use update_seed_metrics with SeedMetricsUpdatePayload instead."""
-        payload = SeedMetricsUpdatePayload(
-            seed_id=seed_id,
-            state=state,
-            alpha=alpha,
-            grad_norm=grad_norm,
-            patience=patience,
-        )
-        self.update_seed_metrics(payload)
-        
-        # Log the state change event separately
-        if "state" in payload:
-            message = f"Seed {seed_id} changed from {from_state} to {state.name if isinstance(state, SeedState) else state}"
-            self.log_seed_event({
-                "event_type": "SEED_STATE_CHANGE", 
-                "message": message, 
-                "data": {"seed_id": seed_id, "to_state": state.name if isinstance(state, SeedState) else state}
-            })
-
-    def show_phase_transition(
-        self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None
-    ):
-        """DEPRECATED: Use transition_phase with PhaseTransitionPayload instead."""
-        import time
-        self.transition_phase({
-            "to_phase": to_phase, 
-            "epoch": epoch, 
-            "from_phase": from_phase, 
-            "total_epochs_in_phase": total_epochs,
-            "timestamp": time.time()
-        })
-
-    def show_germination_event(self, seed_id: str, epoch: int):
-        """DEPRECATED: Use log_seed_event instead."""
-        self.log_seed_event({
-            "event_type": "germination", 
-            "message": f"Seed {seed_id[:12]}... germinated!", 
-            "data": {"epoch": epoch}
-        })
-
     def start(self):
         """Start the live dashboard display, with error handling."""
         if self.live:
@@ -1041,3 +1024,134 @@ class RichDashboard:
         # Update total progress bar with planned epochs
         if self.total_planned_epochs > 0:
             self.total_progress.update(self.total_task, total=self.total_planned_epochs)
+
+    def _update_metric_history(self, metric_key: str, value: float) -> None:
+        """Add new value to metric history with rolling window."""
+        if metric_key not in self.metric_histories:
+            self.metric_histories[metric_key] = deque(maxlen=self.sparkline_config['window_size'])
+        
+        if isinstance(value, (int, float)) and not math.isnan(value):
+            self.metric_histories[metric_key].append(value)
+
+    def _normalize_values(self, values: list[float], inverted: bool = False) -> list[int]:
+        """Normalize values to 0-6 range for ASCII levels."""
+        if len(values) < 2:
+            return [3] * len(values)  # Middle level for insufficient data
+        
+        min_val, max_val = min(values), max(values)
+        if max_val == min_val:
+            return [3] * len(values)  # All same value = middle level
+        
+        normalized = []
+        for val in values:
+            # Normalize to 0-1 range
+            norm = (val - min_val) / (max_val - min_val)
+            # Invert if needed (for loss metrics)
+            if inverted:
+                norm = 1 - norm
+            # Convert to 0-6 index (7 levels total)
+            level = int(norm * 6)
+            normalized.append(min(6, max(0, level)))
+        
+        return normalized
+
+    def _smooth_values(self, values: list[float], window: int = 3) -> list[float]:
+        """Apply simple moving average smoothing."""
+        if len(values) < window:
+            return values
+        
+        smoothed = []
+        for i in range(len(values)):
+            start = max(0, i - window // 2)
+            end = min(len(values), i + window // 2 + 1)
+            avg = sum(values[start:end]) / (end - start)
+            smoothed.append(avg)
+        
+        return smoothed
+
+    def _calculate_trend(self, recent_values: list[float]) -> float:
+        """Calculate trend direction from recent values (-1 to 1)."""
+        if len(recent_values) < 3:
+            return 0.0
+        
+        # Simple linear trend calculation
+        x_vals = list(range(len(recent_values)))
+        y_vals = recent_values
+        
+        n = len(recent_values)
+        sum_x = sum(x_vals)
+        sum_y = sum(y_vals)
+        sum_xy = sum(x * y for x, y in zip(x_vals, y_vals))
+        sum_x2 = sum(x * x for x in x_vals)
+        
+        if n * sum_x2 - sum_x * sum_x == 0:
+            return 0.0
+        
+        slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x)
+        
+        # Normalize slope to -1 to 1 range based on value scale
+        value_range = max(y_vals) - min(y_vals)
+        if value_range > 0:
+            normalized_slope = slope / value_range
+            return max(-1.0, min(1.0, normalized_slope))
+        
+        return 0.0
+
+    def _generate_sparkline(self, metric_key: str) -> str:
+        """Generate a sparkline for the given metric."""
+        if metric_key not in self.metric_histories:
+            return "[dim]" + "─" * self.sparkline_config['display_length'] + "[/dim]"
+        
+        history = list(self.metric_histories[metric_key])
+        if len(history) < 2:
+            return "[dim]" + "─" * self.sparkline_config['display_length'] + "[/dim]"
+        
+        # Apply smoothing if enabled
+        if self.sparkline_config['smoothing']:
+            history = self._smooth_values(history)
+        
+        # Get metric configuration
+        metric_config = self.metric_types.get(metric_key, {'inverted': False, 'color': 'white'})
+        
+        # Normalize values
+        normalized = self._normalize_values(history, metric_config['inverted'])
+        
+        # Generate sparkline characters
+        levels = self.sparkline_config['levels']
+        display_length = self.sparkline_config['display_length']
+        
+        # Subsample or pad to display length
+        if len(normalized) > display_length:
+            # Take the most recent values
+            step = len(normalized) / display_length
+            indices = [int(i * step) for i in range(display_length)]
+            sparkline_data = [normalized[i] for i in indices]
+        else:
+            # Pad with the last value
+            sparkline_data = normalized + [normalized[-1]] * (display_length - len(normalized))
+        
+        # Convert to characters
+        sparkline_chars = ''.join(levels[level] for level in sparkline_data)
+        
+        # Add trend coloring
+        if self.sparkline_config['color_trends'] and len(history) >= 5:
+            recent_trend = self._calculate_trend(history[-5:])
+            
+            if recent_trend > 0.1:  # Improving
+                trend_color = 'green' if not metric_config['inverted'] else 'red'
+            elif recent_trend < -0.1:  # Degrading  
+                trend_color = 'red' if not metric_config['inverted'] else 'green'
+            else:  # Stable
+                trend_color = 'dim'
+            
+            return f"[{trend_color}]{sparkline_chars}[/{trend_color}]"
+        
+        return f"[{metric_config['color']}]{sparkline_chars}[/{metric_config['color']}]"
+    
+    def configure_sparklines(self, **kwargs) -> None:
+        """Allow runtime configuration of sparkline behavior."""
+        self.sparkline_config.update(kwargs)
+        
+    def add_metric_type(self, metric_key: str, inverted: bool = False, color: str = 'white') -> None:
+        """Register a new metric type for sparkline rendering."""
+        self.metric_types[metric_key] = {'inverted': inverted, 'color': color}

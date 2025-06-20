@@ -179,7 +179,6 @@ omit = [
     "*/site-packages/*",
     # Exclude demo and CLI entry points (trivial/external)
     "*/demo_*",
-    "*/cli_dashboard.py:demo_dashboard",  # Demo function
     "*/__main__.py",
 ]
 
