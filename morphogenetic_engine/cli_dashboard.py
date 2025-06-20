@@ -71,14 +71,14 @@ class RichDashboard:
         # Progress Bars
         self.total_progress = Progress(
             TextColumn("[bold blue]Overall Progress"),
-            BarColumn(),
+            BarColumn(bar_width=None),
             "[progress.percentage]{task.percentage:>3.0f}%",
             TimeRemainingColumn(),
             expand=True,
         )
         self.phase_progress = Progress(
             TextColumn("[bold green]Phase Progress"),
-            BarColumn(),
+            BarColumn(bar_width=None),
             "[progress.percentage]{task.percentage:>3.0f}%",
             TimeRemainingColumn(),
             expand=True,
@@ -111,9 +111,10 @@ class RichDashboard:
         # --- Footer Setup for Progress Bars ---
         footer = Layout(name="footer", size=3)
         progress_layout = Layout()
-        # Spacer removed, bars take equal space
+        # Spacer added
         progress_layout.split_row(
             Layout(self.phase_progress, name="phase", ratio=1),
+            Layout(Align.center(Text("•", style="dim")), name="spacer", size=3),
             Layout(self.total_progress, name="total", ratio=1),
         )
         footer.update(progress_layout)
@@ -132,7 +133,7 @@ class RichDashboard:
         self.layout["main"].split_row(
             Layout(name="left_column", ratio=7),
             Layout(name="center_column", ratio=5),
-            Layout(name="right_column", ratio=8),
+            Layout(name="right_column", ratio=7),
         )
 
         # --- Left Column ---
@@ -330,8 +331,7 @@ class RichDashboard:
         empty_emoji: str,
     ) -> list[str]:
         """Helper to create a single row for a grid table."""
-        #row = [f"{layer_index + 1}", "│"]
-        row = [f"{layer_index + 1}"]        
+        row = [f"{layer_index + 1}"]
         if layer_index < num_layers:
             states = layer_data.get(layer_index, [])
             for j in range(seeds_per_layer):  # Use seeds_per_layer instead of GRID_SIZE
@@ -381,7 +381,7 @@ class RichDashboard:
         layer_data = self._get_seed_states_by_layer(num_layers, seeds_per_layer)
 
         grid_table = self._create_grid_table(
-            layer_data, self.SEED_EMOJI_MAP, num_layers, seeds_per_layer
+            cast(Any, layer_data), cast(Any, self.SEED_EMOJI_MAP), num_layers, seeds_per_layer
         )
         return Panel(
             Align.center(grid_table, vertical="middle"),
@@ -506,7 +506,7 @@ class RichDashboard:
         )
 
         grid_table = self._create_grid_table(
-            layer_data, self.STRAIN_EMOJI_MAP, num_layers, seeds_per_layer
+            cast(Any, layer_data), cast(Any, self.STRAIN_EMOJI_MAP), num_layers, seeds_per_layer
         )
         return Panel(
             Align.center(grid_table, vertical="middle"),
@@ -681,7 +681,7 @@ class RichDashboard:
         num_layers = self.experiment_params.get("num_layers", 8)
         seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
         grid_table = self._create_grid_table(
-            payload["grid"], self.STRAIN_EMOJI_MAP, num_layers, seeds_per_layer
+            cast(Any, payload["grid"]), cast(Any, self.STRAIN_EMOJI_MAP), num_layers, seeds_per_layer
         )
         panel = Panel(
             Align.center(grid_table, vertical="middle"),
@@ -695,7 +695,7 @@ class RichDashboard:
         num_layers = self.experiment_params.get("num_layers", 8)
         seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
         grid_table = self._create_grid_table(
-            payload["grid"], self.SEED_EMOJI_MAP, num_layers, seeds_per_layer
+            cast(Any, payload["grid"]), cast(Any, self.SEED_EMOJI_MAP), num_layers, seeds_per_layer
         )
         panel = Panel(
             Align.center(grid_table, vertical="middle"),
