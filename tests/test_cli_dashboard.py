@@ -13,19 +13,19 @@ import pytest
 from rich.console import Console
 from rich.layout import Layout
 
-from morphogenetic_engine.ui_dashboard import RichDashboard
 from morphogenetic_engine.core import Population
-from morphogenetic_engine.experiment import Experiment
 from morphogenetic_engine.events import (
-    LogEvent,
     EventType,
-    ExperimentStartPayload,
     ExperimentEndPayload,
+    ExperimentStartPayload,
+    LogEvent,
+    MessagePayload,
+    MetricsPayload,
     PopulationState,
     SeedState,
-    MetricsPayload,
-    MessagePayload,
 )
+from morphogenetic_engine.experiment import Experiment
+from morphogenetic_engine.ui_dashboard import RichDashboard
 
 # Test Utilities and Fixtures
 
@@ -133,9 +133,7 @@ class TestRichDashboardUnit:
 
         assert dashboard.phase_start_epoch == 10
         assert dashboard.current_phase_epochs == 50
-        dashboard.phase_progress.update.assert_called_with(
-            dashboard.phase_task, completed=0, total=50, description="TRAINING"
-        )
+        dashboard.phase_progress.update.assert_called_with(dashboard.phase_task, completed=0, total=50, description="TRAINING")
         assert "Phase changed to TRAINING" in dashboard.last_events[-1]
 
     def test_handle_metrics_update_event(self, dashboard: RichDashboard):

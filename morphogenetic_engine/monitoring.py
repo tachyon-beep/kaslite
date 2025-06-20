@@ -139,7 +139,7 @@ class PrometheusMonitor:
             seed_id_str = f"L{seed_id[0]}_S{seed_id[1]}"
         else:
             seed_id_str = seed_id
-            
+
         # Convert state to numeric value
         state_value = self.state_map.get(state, -1)
 

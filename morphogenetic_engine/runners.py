@@ -18,17 +18,13 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 from morphogenetic_engine import datasets
-from morphogenetic_engine.ui_dashboard import RichDashboard
+from morphogenetic_engine.events import SeedState
 from morphogenetic_engine.experiment import build_model_and_agents
 from morphogenetic_engine.logger import ExperimentLogger
-from morphogenetic_engine.events import SeedState
 from morphogenetic_engine.monitoring import cleanup_monitoring, initialize_monitoring
 from morphogenetic_engine.training import execute_phase_1, execute_phase_2
-from morphogenetic_engine.utils import (
-    create_experiment_config,
-    export_metrics_for_dvc,
-    generate_experiment_slug,
-)
+from morphogenetic_engine.ui_dashboard import RichDashboard
+from morphogenetic_engine.utils import create_experiment_config, export_metrics_for_dvc, generate_experiment_slug
 
 
 def setup_experiment(args):
@@ -138,8 +134,7 @@ def log_final_summary(logger: ExperimentLogger, final_stats: dict[str, Any]):
     """Logs the final summary and system shutdown event."""
     if final_stats.get("acc_pre") is not None and final_stats.get("acc_post") is not None:
         logging.info(
-            f"Final Accuracy: Pre-Adaptation {final_stats['acc_pre']:.4f}, "
-            f"Post-Adaptation {final_stats['acc_post']:.4f}"
+            f"Final Accuracy: Pre-Adaptation {final_stats['acc_pre']:.4f}, " f"Post-Adaptation {final_stats['acc_post']:.4f}"
         )
     logger.log_system_shutdown(final_stats=final_stats)
 

@@ -118,9 +118,7 @@ def execute_phase_1(
     )
 
     for epoch in range(1, config["warm_up_epochs"] + 1):
-        train_loss = train_epoch(
-            model, train_loader, optimiser, criterion, seed_manager, device, scheduler
-        )
+        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, scheduler)
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 
@@ -134,7 +132,7 @@ def execute_phase_1(
 
         # Assess seeds and log their state and metrics
         # This single call now handles all detailed seed logging.
-        if hasattr(tamiyo, 'assess_and_update_seeds'):
+        if hasattr(tamiyo, "assess_and_update_seeds"):
             tamiyo.assess_and_update_seeds(epoch)
 
         # Update other loggers
@@ -193,15 +191,13 @@ def execute_phase_2(
     for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
         train_loss = 0.0
         if optimiser:
-            train_loss = train_epoch(
-                model, train_loader, optimiser, criterion, seed_manager, device
-            )
+            train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device)
 
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 
         # Assess seeds BEFORE the step function, so Tamiyo has the latest state
-        if hasattr(tamiyo, 'assess_and_update_seeds'):
+        if hasattr(tamiyo, "assess_and_update_seeds"):
             tamiyo.assess_and_update_seeds(epoch)
 
         if not seeds_activated and tamiyo.step(epoch, val_loss, val_acc):
@@ -222,7 +218,7 @@ def execute_phase_2(
         }
         logger.log_metrics_update(epoch, metrics)
 
-        # NOTE: The comprehensive seed state update is now handled by 
+        # NOTE: The comprehensive seed state update is now handled by
         # tamiyo.assess_and_update_seeds() called earlier in the loop.
 
         # Update other loggers
@@ -239,9 +235,7 @@ def execute_phase_2(
     final_stats.update(
         {
             "best_acc": best_acc,
-            "accuracy_dip": (acc_pre - acc_post)
-            if acc_pre is not None and acc_post is not None
-            else None,
+            "accuracy_dip": (acc_pre - acc_post) if acc_pre is not None and acc_post is not None else None,
             "recovery_time": t_recover,
             "seeds_activated": seeds_activated,
             "acc_pre": acc_pre,

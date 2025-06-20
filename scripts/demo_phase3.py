@@ -45,18 +45,14 @@ def main():
 
     # Check if we're in the right directory
     if not Path("examples/quick_sweep.yaml").exists():
-        console.print(
-            "❌ Error: quick_sweep.yaml not found. Please run this script from the project root."
-        )
+        console.print("❌ Error: quick_sweep.yaml not found. Please run this script from the project root.")
         sys.exit(1)
 
     # 1. Test CLI help commands
     if not run_command("python -m morphogenetic_engine.cli.sweep --help", "Test sweep CLI help")[0]:
         return
 
-    if not run_command(
-        "python -m morphogenetic_engine.cli.reports --help", "Test reports CLI help"
-    )[0]:
+    if not run_command("python -m morphogenetic_engine.cli.reports --help", "Test reports CLI help")[0]:
         return
 
     # 2. Generate test data if needed
@@ -167,12 +163,8 @@ def main():
 
     console.print("\n[bold cyan]Next Steps:[/bold cyan]")
     console.print("• Explore the examples/ directory for more sweep configurations")
-    console.print(
-        "• Run larger sweeps with: morphogenetic-sweep grid --config examples/enhanced_sweep.yaml"
-    )
-    console.print(
-        "• Generate detailed reports with: morphogenetic-reports summary --sweep-dir <path>"
-    )
+    console.print("• Run larger sweeps with: morphogenetic-sweep grid --config examples/enhanced_sweep.yaml")
+    console.print("• Generate detailed reports with: morphogenetic-reports summary --sweep-dir <path>")
     console.print("• Set up CI/CD with the provided .github/workflows/ci.yml")
 
 

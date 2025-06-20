@@ -10,9 +10,9 @@ from typing import Any, Dict, List, Optional
 
 import torch
 
-from .ui_dashboard import RichDashboard
 from .logger import ExperimentLogger
 from .monitoring import get_monitor
+from .ui_dashboard import RichDashboard
 
 
 class SeedManager:
@@ -166,12 +166,13 @@ class KasminaMicro:
 
         # Collect all seed information for batch logging
         from .events import SeedInfo, SeedState
+
         seed_infos = []
-        
+
         with self.seed_manager.lock:
             for seed_id, seed_info in self.seed_manager.seeds.items():
                 module = seed_info["module"]
-                
+
                 # Store previous state for comparison
                 prev_state = module.state
 
@@ -197,8 +198,8 @@ class KasminaMicro:
                     metrics={
                         "alpha": module.alpha,
                         "grad_norm": module.get_gradient_norm(),
-                        "patience": getattr(module, 'patience_counter', None),
-                    }
+                        "patience": getattr(module, "patience_counter", None),
+                    },
                 )
                 seed_infos.append(seed_info_obj)
 
@@ -212,8 +213,8 @@ class KasminaMicro:
                             "seed_id": f"L{layer_idx}_S{seed_idx}",
                             "from_state": prev_state,
                             "to_state": module.state,
-                            "epoch": epoch
-                        }
+                            "epoch": epoch,
+                        },
                     )
 
         # Log all seed states in one batch
@@ -249,22 +250,19 @@ class KasminaMicro:
         # 2. Loss plateau persists beyond patience
         if val_acc < self.acc_threshold and self.plateau >= self.patience:
             seed_id = self._select_seed()
-            if seed_id and self.seed_manager.request_germination(seed_id, epoch=epoch): # Pass epoch
+            if seed_id and self.seed_manager.request_germination(seed_id, epoch=epoch):  # Pass epoch
                 self.plateau = 0  # Reset plateau counter only on successful germination
                 # Record germination in monitoring
                 if monitor:
                     monitor.record_germination()
-                
+
                 # Log the germination event via the logger
                 if self.logger:
                     self.logger.log_seed_event_detailed(
                         epoch=epoch,
                         event_type="GERMINATION",
                         message=f"Seed L{seed_id[0]}_S{seed_id[1]} germinated!",
-                        data={
-                            "seed_id": f"L{seed_id[0]}_S{seed_id[1]}",
-                            "epoch": epoch
-                        }
+                        data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}", "epoch": epoch},
                     )
                 return True  # Signal germination occurred
         return False

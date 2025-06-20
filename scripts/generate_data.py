@@ -35,9 +35,7 @@ def main():
     parser.add_argument("--cluster_std", type=float, default=0.5, help="Cluster std dev")
     parser.add_argument("--cluster_sep", type=float, default=3.0, help="Cluster separation")
     parser.add_argument("--sphere_count", type=int, default=2, help="Number of spheres")
-    parser.add_argument(
-        "--sphere_radii", type=float, nargs="+", default=[1.0, 2.0], help="Sphere radii"
-    )
+    parser.add_argument("--sphere_radii", type=float, nargs="+", default=[1.0, 2.0], help="Sphere radii")
     parser.add_argument("--sphere_noise", type=float, default=0.1, help="Sphere noise")
 
     args = parser.parse_args()

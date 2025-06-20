@@ -15,13 +15,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 import yaml
-
 from torch.utils.tensorboard import SummaryWriter
 
 from morphogenetic_engine.cli.arguments import get_valid_argument_names
 from morphogenetic_engine.runners import run_experiment, setup_experiment
-
-
 
 
 def parse_value_list(value: Union[str, List, int, float]) -> List[Any]:
@@ -182,7 +179,6 @@ def create_run_directory_and_setup(sweep_dir: Path, run_slug: str, original_setu
     def setup_experiment_for_sweep(args_inner, run_dir_param=run_dir, original_setup_param=original_setup_func):
         """Modified setup_experiment that puts logs in the run directory."""
 
-
         (
             logger_inner,
             tb_writer_inner,
@@ -231,7 +227,6 @@ def process_single_sweep_config(
     valid_args: set,
 ) -> tuple[List[Dict[str, Any]], int]:
     """Process a single sweep configuration and return results and updated counter."""
-    
 
     print(f"\nProcessing sweep config {config_idx + 1}")
 
@@ -264,7 +259,7 @@ def process_single_sweep_config(
         _, setup_func = create_run_directory_and_setup(sweep_dir, run_slug, original_setup)
 
         # Temporarily replace setup_experiment
-        import morphogenetic_engine.runners as runners_module # TODO - What the hell is this?
+        import morphogenetic_engine.runners as runners_module  # TODO - What the hell is this?
 
         original_setup_ref = runners_module.setup_experiment
         runners_module.setup_experiment = setup_func

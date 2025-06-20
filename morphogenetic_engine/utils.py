@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from morphogenetic_engine.training import clear_seed_report_cache
+
 from .events import SeedInfo, SeedState
 
 
@@ -158,4 +159,4 @@ def export_metrics_for_dvc(final_stats: Dict[str, Any], slug: str, project_root:
 
 def count_active_seeds(seeds: list[SeedInfo]) -> int:
     """Counts seeds in the 'active' state."""
-    return sum(1 for s in seeds if s['state'] == SeedState.ACTIVE)
+    return sum(1 for s in seeds if s["state"] == SeedState.ACTIVE)

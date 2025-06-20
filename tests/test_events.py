@@ -19,15 +19,18 @@ from morphogenetic_engine.events import (
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def fixed_timestamp() -> float:
     """Provide a fixed timestamp for deterministic testing."""
     return 1640995200.0
 
+
 @pytest.fixture
 def sample_metrics() -> dict[str, float | int]:
     """Provide a sample metrics dictionary."""
     return {"accuracy": 0.95, "loss": 0.12, "epoch_duration_sec": 30}
+
 
 @pytest.fixture
 def sample_seed_info() -> list[SeedInfo]:
@@ -49,9 +52,11 @@ def sample_seed_info() -> list[SeedInfo]:
         },
     ]
 
+
 # =============================================================================
 # Test Classes
 # =============================================================================
+
 
 @pytest.mark.unit
 class TestEventType:

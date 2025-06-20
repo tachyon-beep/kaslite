@@ -160,7 +160,7 @@ class SentinelSeed(nn.Module):
                 total_norm += p.grad.data.norm(2).item() ** 2
                 param_count += 1
 
-        return (total_norm ** 0.5) if param_count > 0 else 0.0
+        return (total_norm**0.5) if param_count > 0 else 0.0
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the sentinel seed."""

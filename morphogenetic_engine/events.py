@@ -4,13 +4,13 @@ Defines the standardized, type-safe data contracts for all events within the mor
 This module serves as the single source of truth for the "API" between the backend logic
 and any consumers of event data, such as the UI, loggers, or analysis tools.
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Any, TypedDict, Union
-
 
 # =============================================================================
 # Event Type Enumeration

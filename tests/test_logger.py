@@ -2,8 +2,8 @@
 
 # pylint: disable=redefined-outer-name,unused-argument,protected-access
 
-import json
 import collections
+import json
 from unittest.mock import patch
 
 import pytest
@@ -124,9 +124,7 @@ class TestExperimentLoggerUnit:
         phase_name = "TRAINING"
         epoch = 10
         details = {"reason": "Reached convergence"}
-        mock_logger.log_phase_update(
-            phase_name=phase_name, epoch=epoch, details=details
-        )
+        mock_logger.log_phase_update(phase_name=phase_name, epoch=epoch, details=details)
 
         assert len(mock_logger.events) == 1
         event = mock_logger.events[0]
@@ -190,9 +188,7 @@ class TestExperimentLoggerUnit:
                 LogEvent(
                     timestamp=3,
                     event_type=EventType.PHASE_UPDATE,
-                    payload=PhaseUpdatePayload(
-                        phase_name="a", epoch=1, details=None
-                    ),
+                    payload=PhaseUpdatePayload(phase_name="a", epoch=1, details=None),
                 ),
             ]
         )
@@ -243,9 +239,7 @@ class TestExperimentLoggerUnit:
         mocker.patch("morphogenetic_engine.events.json.dumps", side_effect=TypeError("Not serializable"))
 
         with pytest.raises(TypeError, match="Not serializable"):
-            mock_logger.log_system_init(
-                message="test", details=unserializable_details
-            )
+            mock_logger.log_system_init(message="test", details=unserializable_details)
 
 
 @pytest.mark.integration
@@ -305,14 +299,10 @@ class TestExperimentLoggerIntegration:
         logger.log_seed_state_update(epoch=2, seed_updates=seed_updates)
 
         # 4. Phase Update
-        logger.log_phase_update(
-            phase_name="ANNEALING", epoch=3, details={"temp": 0.5}
-        )
+        logger.log_phase_update(phase_name="ANNEALING", epoch=3, details={"temp": 0.5})
 
         # 5. System Shutdown
-        logger.log_system_shutdown(
-            message="Experiment finished", details={"exit_code": 0}
-        )
+        logger.log_system_shutdown(message="Experiment finished", details={"exit_code": 0})
 
         # Verification
         events = get_events_from_file(log_path)
