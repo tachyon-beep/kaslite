@@ -195,7 +195,7 @@ class PanelFactory:
         """Sort seeds by state priority: active training first, then others, dormant last."""
         # Define state priority order (lower number = higher priority)
         state_priority = {
-            SeedState.ACTIVE: 0,        # Currently training - highest priority
+            SeedState.TRAINING: 0,     # Currently training - highest priority
             SeedState.BLENDING: 1,      # Finishing training
             SeedState.GERMINATED: 2,    # Waiting in parking lot
             SeedState.FOSSILIZED: 3,    # Permanently integrated

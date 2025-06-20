@@ -36,7 +36,7 @@ def build_model_and_agents(
     **kwargs,  # Capture any other unused args
 ):
     """Initialize the SeedManager, BaseNet model, loss function, and KasminaMicro."""
-    seed_manager = SeedManager()
+    seed_manager = SeedManager(logger=logger)
 
     # Determine number of classes based on problem type
     if problem_type == "cifar10":

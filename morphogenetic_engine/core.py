@@ -58,8 +58,9 @@ class SeedManager:
             self.seeds[seed_id] = {
                 "module": seed_module,
                 "status": "dormant",
-                "state": "dormant",
+                "state": SeedState.DORMANT.value,
                 "alpha": 0.0,
+                "gradient_norm": 0.0,
                 "buffer": deque(maxlen=500),
                 "telemetry": {"drift": 0.0, "variance": 0.0},
             }
@@ -79,11 +80,18 @@ class SeedManager:
 
             try:
                 # Germinate seed but don't start training yet - it goes to the "parking lot"
-                seed_info["module"].initialize_child()
+                seed_info["module"].initialize_child(epoch=epoch)
                 seed_info["status"] = "germinated"  # Parking lot state
                 self._log_event(seed_id, True)
                 if self.logger is not None:
-                    self.logger.log_germination(epoch, seed_id)
+                    self.logger.log_seed_event_detailed(
+                        epoch=epoch,
+                        event_type="GERMINATION",
+                        message=f"Seed L{seed_id[0]}_S{seed_id[1]} germinated!",
+                        data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}", "epoch": epoch},
+                    )
+                # Immediately try to start training the next seed
+                self.start_training_next_seed()
                 return True
             except (RuntimeError, ValueError) as e:
                 logging.exception("Germination failed for '%s': %s", seed_id, e)
@@ -176,12 +184,15 @@ class SeedManager:
             # Start training this seed
             seed_info = self.seeds[next_seed]
             seed_info["status"] = "active"
-            seed_info["module"]._set_state("active")
+            
+            # Try to get the most recent epoch for logging
+            epoch = self.seeds[next_seed].get('last_epoch', 0)
+            seed_info["module"]._set_state(SeedState.TRAINING, epoch=epoch)
             
             # Log the training start
             if self.logger is not None:
                 self.logger.log_seed_event_detailed(
-                    epoch=0,  # We don't have epoch context here
+                    epoch=epoch,  # Use the determined epoch
                     event_type="TRAINING_START",
                     message=f"Seed L{next_seed[0]}_S{next_seed[1]} started training",
                     data={"seed_id": f"L{next_seed[0]}_S{next_seed[1]}"}
@@ -232,7 +243,7 @@ class KasminaMicro:
                 prev_state = module.state
 
                 # This method should update the seed's internal state
-                module.update_state()
+                module.update_state(epoch=epoch)
 
                 # Convert string state to SeedState enum if needed
                 if isinstance(module.state, str):
@@ -276,7 +287,7 @@ class KasminaMicro:
         self.logger.log_seed_state_update(epoch, seed_infos)
         
         # Check if we need to start training the next seed in the queue
-        self.start_training_next_seed()
+        self.start_training_next_seed(epoch=epoch)
 
     def step(self, epoch: int, val_loss: float, val_acc: float) -> bool:
         """
@@ -309,19 +320,10 @@ class KasminaMicro:
         if val_acc < self.acc_threshold and self.plateau >= self.patience:
             seed_id = self._select_seed()
             if seed_id and self.seed_manager.request_germination(seed_id, epoch=epoch):  # Pass epoch
-                self.plateau = 0  # Reset plateau counter only on successful germination
+                self.plateau = 0 # Reset plateau counter only on successful germination
                 # Record germination in monitoring
                 if monitor:
                     monitor.record_germination()
-
-                # Log the germination event via the logger
-                if self.logger:
-                    self.logger.log_seed_event_detailed(
-                        epoch=epoch,
-                        event_type="GERMINATION",
-                        message=f"Seed L{seed_id[0]}_S{seed_id[1]} germinated!",
-                        data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}", "epoch": epoch},
-                    )
                 return True  # Signal germination occurred
         return False
 
@@ -343,11 +345,11 @@ class KasminaMicro:
         """Check if any seed is currently in ACTIVE state (training)."""
         with self.seed_manager.lock:
             for seed_info in self.seed_manager.seeds.values():
-                if seed_info.get("state") == SeedState.ACTIVE.value:
+                if seed_info.get("state") == SeedState.TRAINING.value:
                     return True
         return False
 
-    def start_training_next_seed(self) -> bool:
+    def start_training_next_seed(self, epoch: int | None = None) -> bool:
         """Start training the next germinated seed if no seed is currently training."""
         if self.is_any_seed_training():
             return False  # Another seed is already training
@@ -358,12 +360,16 @@ class KasminaMicro:
                 if seed_info.get("state") == SeedState.GERMINATED.value:
                     # Start training this seed
                     if "module" in seed_info:
-                        seed_info["module"]._set_state(SeedState.ACTIVE)
+                        # If epoch is not provided, try to get it from the seed's own record
+                        if epoch is None:
+                            epoch = seed_info.get('last_epoch', 0)
+
+                        seed_info["module"]._set_state(SeedState.TRAINING, epoch=epoch)
                         
                         # Log the training start
                         if self.logger:
                             self.logger.log_seed_event_detailed(
-                                epoch=0,  # We don't have epoch context here
+                                epoch=epoch,  # We don't have epoch context here
                                 event_type="TRAINING_START", 
                                 message=f"Seed L{seed_id[0]}_S{seed_id[1]} started training!",
                                 data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}"},

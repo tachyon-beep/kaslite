@@ -164,7 +164,7 @@ def log_mlflow_metrics_and_artifacts(final_stats: Dict[str, Any], model, seed_ma
             mlflow.log_metric("recovery_time", recovery_time)
 
         mlflow.log_metric("total_seeds", len(seed_manager.seeds))
-        active_seeds_count = sum(1 for info in seed_manager.seeds.values() if info["module"].state == SeedState.ACTIVE)
+        active_seeds_count = sum(1 for info in seed_manager.seeds.values() if info["module"].state == SeedState.TRAINING.value)
         mlflow.log_metric("active_seeds", active_seeds_count)
         mlflow.set_tag("seeds_activated", str(final_stats.get("seeds_activated", False)))
 

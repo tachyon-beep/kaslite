@@ -40,7 +40,7 @@ class RichDashboard:
 
     # EMOJI MAPS
     SEED_EMOJI_MAP = {
-        SeedState.ACTIVE: "🟢",
+        SeedState.TRAINING: "🟢",
         SeedState.DORMANT: "⚪",
         SeedState.BLENDING: "🟡",
         SeedState.GERMINATED: "🌱",
@@ -380,10 +380,10 @@ class RichDashboard:
 
     def _update_alpha_metric(self, seed_id_str: str, seed_info: dict) -> None:
         """Update alpha metric for a seed."""
-        if "alpha" in seed_info:
+        # Always prefer the value from the manager dict
+        if "alpha" in seed_info and seed_info["alpha"] is not None:
             self.seed_states[seed_id_str]["alpha"] = seed_info["alpha"]
-        
-        if "module" in seed_info and hasattr(seed_info["module"], "alpha"):
+        elif "module" in seed_info and hasattr(seed_info["module"], "alpha"):
             self.seed_states[seed_id_str]["alpha"] = seed_info["module"].alpha
 
     def _update_gradient_norm_metric(self, seed_id_str: str, seed_info: dict) -> None:
@@ -398,10 +398,9 @@ class RichDashboard:
 
     def _update_patience_metric(self, seed_id_str: str, seed_info: dict) -> None:
         """Update patience metric for a seed."""
-        # Use actual training steps as a more meaningful patience metric
-        if "training_steps" in seed_info:
-            training_steps = seed_info["training_steps"]
-            self.seed_states[seed_id_str]["patience"] = training_steps
+        # Always prefer the value from the manager dict
+        if "training_steps" in seed_info and seed_info["training_steps"] is not None:
+            self.seed_states[seed_id_str]["patience"] = seed_info["training_steps"]
         elif "module" in seed_info and hasattr(seed_info["module"], "training_progress"):
             # Fallback to old calculation if training_steps not available
             training_progress = seed_info["module"].training_progress
@@ -413,7 +412,7 @@ class RichDashboard:
         if "status" in seed_info:
             status = seed_info["status"]
             if status == "active":
-                self.seed_states[seed_id_str]["state"] = SeedState.ACTIVE
+                self.seed_states[seed_id_str]["state"] = SeedState.TRAINING
             elif status == "dormant":
                 self.seed_states[seed_id_str]["state"] = SeedState.DORMANT
             elif status == "failed":

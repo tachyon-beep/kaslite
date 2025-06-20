@@ -1,6 +1,7 @@
 """Components module for morphogenetic engine."""
 
 import logging
+import weakref
 from enum import Enum
 
 import torch
@@ -23,7 +24,9 @@ class SentinelSeed(nn.Module):
         seed_id: tuple[int, int],
         dim: int,
         seed_manager: SeedManager,
+        parent_net: "BaseNet",  # Add parent_net reference
         blend_steps: int = 30,
+        probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         progress_thresh: float = 0.6,
         drift_warn: float = 0.12,
@@ -40,11 +43,14 @@ class SentinelSeed(nn.Module):
 
         self.seed_id = seed_id
         self.dim = dim
+        self.parent_net_ref = weakref.ref(parent_net)  # Use a weak reference to avoid recursion
         self.blend_steps = blend_steps
+        self.probationary_steps = probationary_steps
+        self.probationary_counter = 0
         self.shadow_lr = shadow_lr
         self.progress_thresh = progress_thresh
         self.alpha = 0.0
-        self.state = "dormant"
+        self.state = SeedState.DORMANT.value
         self.training_progress = 0.0
         self.drift_warn = drift_warn
 
@@ -64,8 +70,9 @@ class SentinelSeed(nn.Module):
         self.seed_manager.register_seed(self, seed_id)
 
     # ------------------------------------------------------------------
-    def _set_state(self, new_state: str | SeedState):
+    def _set_state(self, new_state: str | SeedState, epoch: int | None = None):
         """Set the seed state, validating against allowed transitions."""
+
         # Convert string to enum if needed
         if isinstance(new_state, str):
             try:
@@ -82,7 +89,7 @@ class SentinelSeed(nn.Module):
         info["state"] = new_state.value
         
         # Update status mapping for backward compatibility  
-        if new_state in [SeedState.ACTIVE, SeedState.GERMINATED, SeedState.BLENDING]:
+        if new_state in [SeedState.TRAINING, SeedState.GERMINATED, SeedState.BLENDING, SeedState.SHADOWING, SeedState.PROBATIONARY]:
             info["status"] = "active"
         elif new_state == SeedState.DORMANT:
             info["status"] = "dormant"
@@ -90,8 +97,12 @@ class SentinelSeed(nn.Module):
             info["status"] = "fossilized"
         elif new_state == SeedState.CULLED:
             info["status"] = "culled"
+
+        # If epoch is not provided, try to get it from the seed's own record
+        if epoch is None:
+            epoch = info.get('last_epoch', 0)
             
-        self.seed_manager.record_transition(self.seed_id, old_state, new_state.value)
+        self.seed_manager.record_transition(self.seed_id, old_state, new_state.value, epoch=epoch)
 
     def _initialize_as_identity(self):
         """Initialize to near-zero output (identity function)"""
@@ -104,7 +115,7 @@ class SentinelSeed(nn.Module):
         for p in self.child.parameters():
             p.requires_grad = False
 
-    def initialize_child(self):
+    def initialize_child(self, epoch: int | None = None):
         """Proper initialization when germinating - goes to parking lot (GERMINATED state)"""
         for m in self.child.modules():
             if isinstance(m, nn.Linear):
@@ -121,13 +132,13 @@ class SentinelSeed(nn.Module):
         self.seed_manager.seeds[self.seed_id]["training_steps"] = 0
         
         # Only transition to GERMINATED state (parking lot)
-        # The seed will transition to ACTIVE when training starts
-        self._set_state(SeedState.GERMINATED)
+        # The seed will transition to TRAINING when training starts
+        self._set_state(SeedState.GERMINATED, epoch=epoch)
 
     # ------------------------------------------------------------------
-    def train_child_step(self, inputs: torch.Tensor):
+    def train_child_step(self, inputs: torch.Tensor, epoch: int | None = None):
         """Train the child network on input data when in training state."""
-        if self.state != SeedState.ACTIVE.value or inputs.numel() == 0:
+        if self.state != SeedState.TRAINING.value or inputs.numel() == 0:
             return
         inputs = inputs.detach()  # block trunk grads
 
@@ -135,9 +146,19 @@ class SentinelSeed(nn.Module):
         outputs = self.child(inputs)
         loss = self.child_loss(outputs, inputs)
         loss.backward()
+        
+        # Calculate and store gradient norm before optimizer step
+        total_norm = 0.0
+        param_count = 0
+        for p in self.child.parameters():
+            if p.grad is not None:
+                total_norm += p.grad.data.norm(2).item() ** 2
+                param_count += 1
+        current_grad_norm = (total_norm**0.5) if param_count > 0 else 0.0
+        
         self.child_optim.step()
 
-        # Track loss for performance evaluation
+        # Track loss and gradient norm for performance evaluation
         current_loss = loss.item()
         seed_info = self.seed_manager.seeds[self.seed_id]
         
@@ -146,33 +167,92 @@ class SentinelSeed(nn.Module):
             seed_info["baseline_loss"] = current_loss
         
         seed_info["current_loss"] = current_loss
+        seed_info["gradient_norm"] = current_grad_norm
         seed_info["training_steps"] += 1
 
-        # Update training progress and alpha during active training
+        # Update training progress and alpha during training
         self.training_progress = min(1.0, self.training_progress + 0.01)
         
-        # Update alpha gradually during training (not just blending)
-        if self.state == SeedState.ACTIVE.value:
-            self.alpha = min(0.5, self.alpha + 0.002)  # Gradual increase during training
+        # Alpha remains 0 during training - only increases during blending
+        if self.state == SeedState.TRAINING.value:
+            self.alpha = 0.0  # Keep at 0 during training
         
         if self.training_progress > self.progress_thresh:
-            self._set_state(SeedState.BLENDING)
-            # Keep current alpha and continue increasing during blending
+            self._set_state(SeedState.BLENDING, epoch=epoch)
+            # Start blending with alpha at 0
+            self.alpha = 0.0
         
-        # Always sync alpha to seed manager
-        self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
+        # Always sync alpha and training_steps to seed manager dict
+        seed_info["alpha"] = self.alpha
+        seed_info["training_steps"] = seed_info.get("training_steps", 0)  # Ensure key exists
 
     # ------------------------------------------------------------------
-    def update_blending(self):
+    # ------------------------------------------------------------------
+    def update_blending(self, epoch: int | None = None):
         """Update the blending alpha value during blending phase."""
         if self.state == SeedState.BLENDING.value:
             self.alpha = min(1.0, self.alpha + 1 / self.blend_steps)
             self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
+                
             if self.alpha >= 0.99:
-                # Blending complete - evaluate performance and decide final state
-                self._evaluate_and_complete()
+                # Blending complete - transition to shadowing phase
+                self._set_state(SeedState.SHADOWING, epoch=epoch)
 
-    def update_state(self):
+    def update_shadowing(self, epoch: int | None = None):
+        """Stage 1 validation - monitor for internal stability during shadowing phase."""
+        if self.state == SeedState.SHADOWING.value:
+            # During shadowing, monitor internal stability metrics
+            seed_info = self.seed_manager.seeds[self.seed_id]
+            
+            # Initialize stability tracking if not present
+            if "stability_history" not in seed_info:
+                seed_info["stability_history"] = []
+                seed_info["shadowing_steps"] = 0
+            
+            seed_info["shadowing_steps"] += 1
+            
+            # Record current loss for stability analysis
+            current_loss = seed_info.get("current_loss", 0.0)
+            seed_info["stability_history"].append(current_loss)
+            
+            # Keep only recent history
+            if len(seed_info["stability_history"]) > 20:
+                seed_info["stability_history"].pop(0)
+            
+            # Require minimum steps AND stability before advancing
+            min_shadowing_steps = self.probationary_steps // 2  # e.g., 25 steps
+            if seed_info["shadowing_steps"] >= min_shadowing_steps:
+                # Check stability: loss should be relatively stable
+                if len(seed_info["stability_history"]) >= 10:
+                    recent_losses = seed_info["stability_history"][-10:]
+                    loss_variance = sum((x - sum(recent_losses)/len(recent_losses))**2 for x in recent_losses) / len(recent_losses)
+                    
+                    # Only advance if loss is stable (low variance)
+                    if loss_variance < 0.01:  # Configurable stability threshold
+                        self._set_state(SeedState.PROBATIONARY, epoch=epoch)
+                        # Reset counter for probationary phase  
+                        seed_info["probationary_steps"] = 0
+
+    def update_probationary(self, epoch: int | None = None):
+        """Stage 2 validation - monitor for systemic impact during probationary period."""
+        if self.state == SeedState.PROBATIONARY.value:
+            seed_info = self.seed_manager.seeds[self.seed_id]
+            
+            # Initialize probationary tracking if not present
+            if "probationary_steps" not in seed_info:
+                seed_info["probationary_steps"] = 0
+                seed_info["baseline_performance"] = None
+                
+            seed_info["probationary_steps"] += 1
+            
+            # Require minimum observation period for systemic impact assessment
+            min_probationary_steps = self.probationary_steps  # e.g., 50 steps
+            if seed_info["probationary_steps"] >= min_probationary_steps:
+                # In a real implementation, this would check global performance metrics
+                # For now, we'll use a simple success criteria
+                self._evaluate_and_complete(epoch)
+
+    def update_state(self, epoch: int | None = None):
         """Update the seed's state based on its current metrics and progress."""
         # This method is called by KasminaMicro to assess and potentially update state
         # For now, we'll implement basic state transitions based on existing logic
@@ -181,52 +261,66 @@ class SentinelSeed(nn.Module):
         self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
 
         # State transition logic (simplified for now)
-        if self.state == "training" and self.training_progress > self.progress_thresh:
-            self._set_state("blending")
+        if self.state == SeedState.TRAINING.value and self.training_progress > self.progress_thresh:
+            self._set_state(SeedState.BLENDING, epoch=epoch)
             self.alpha = 0.0
-        elif self.state == "blending" and self.alpha >= 0.99:
-            self._set_state("active")
+        elif self.state == SeedState.BLENDING.value and self.alpha >= 0.99:
+            self._set_state(SeedState.SHADOWING, epoch=epoch)
 
     def get_gradient_norm(self) -> float:
         """Get the gradient norm for this seed's parameters."""
-        if self.state in ["dormant"]:
+        if self.state in [SeedState.DORMANT.value]:
             return 0.0
 
-        total_norm = 0.0
-        param_count = 0
-        for p in self.child.parameters():
-            if p.grad is not None:
-                total_norm += p.grad.data.norm(2).item() ** 2
-                param_count += 1
-
-        return (total_norm**0.5) if param_count > 0 else 0.0
+        # Return the stored gradient norm from the last training step
+        seed_info = self.seed_manager.seeds[self.seed_id]
+        return seed_info.get("gradient_norm", 0.0)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the sentinel seed."""
 
-        if self.state != "active":
+        # Buffer activations for dormant seeds to gauge health
+        if self.state == SeedState.DORMANT.value:
             self.seed_manager.append_to_buffer(self.seed_id, x)
-
-        if self.state == "dormant":
-            return x
-        if self.state == "training":
             return x
 
-        child_out = self.child(x)
+        # For culled or pre-training seeds, act as an identity function.
+        # TRAINING seeds train on the buffer, not in the forward pass.
+        if self.state in [
+            SeedState.CULLED.value,
+            SeedState.GERMINATED.value,
+            SeedState.TRAINING.value,
+        ]:
+            return x
 
-        if self.state == "blending":
+        # For blending state, gradually mix input with child output
+        if self.state == SeedState.BLENDING.value:
+            child_out = self.child(x)
             output = (1 - self.alpha) * x + self.alpha * child_out
-        else:  # active
+            
+        # For shadowing state, return input unmodified (inert validation)
+        elif self.state == SeedState.SHADOWING.value:
+            return x
+            
+        # For probationary and fossilized states, apply child network additively
+        elif self.state in [SeedState.PROBATIONARY.value, SeedState.FOSSILIZED.value]:
+            child_out = self.child(x)
             output = x + child_out
+        else:
+            # Default case - should not reach here
+            return x
 
-        with torch.no_grad():
-            cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
-            drift = 1.0 - cos_sim.item()
-            # only warn during blending
-            if self.state == "blending" and drift > self.drift_warn > 0:
-                logging.warning("High drift %.4f at %s (blending)", drift, self.seed_id)
-        # always record drift for telemetry
-        self.seed_manager.record_drift(self.seed_id, drift)
+        # Monitor drift for active states only
+        if self.state in [SeedState.BLENDING.value, SeedState.PROBATIONARY.value]:
+            with torch.no_grad():
+                cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
+                drift = 1.0 - cos_sim.item()
+                # only warn during blending and probationary periods
+                if drift > self.drift_warn > 0:
+                    logging.warning("High drift %.4f at %s (%s)", drift, self.seed_id, self.state)
+            # always record drift for telemetry
+            self.seed_manager.record_drift(self.seed_id, drift)
+            
         return output
 
     def get_health_signal(self) -> float:
@@ -238,7 +332,7 @@ class SentinelSeed(nn.Module):
         # Calculate variance across all buffered activations
         return torch.var(torch.cat(list(buffer)), dim=0).mean().item()
 
-    def _evaluate_and_complete(self):
+    def _evaluate_and_complete(self, epoch: int | None = None):
         """Evaluate seed performance and transition to final state (fossilized or culled)."""
         # Get performance metrics
         baseline_loss = self.seed_manager.seeds[self.seed_id].get("baseline_loss")
@@ -246,7 +340,7 @@ class SentinelSeed(nn.Module):
         
         # If we don't have baseline, assume improvement and fossilize
         if baseline_loss is None:
-            self._fossilize_seed()
+            self._fossilize_seed(epoch)
             return
             
         # Calculate improvement
@@ -254,18 +348,18 @@ class SentinelSeed(nn.Module):
         improvement_threshold = 0.01  # Minimum improvement required
         
         if improvement > improvement_threshold:
-            self._fossilize_seed()
+            self._fossilize_seed(epoch)
         else:
-            self._cull_seed()
+            self._cull_seed(epoch)
     
-    def _fossilize_seed(self):
+    def _fossilize_seed(self, epoch: int | None = None):
         """Permanently integrate the seed into the parent network (grafting)."""
-        self._set_state(SeedState.FOSSILIZED)
+        self._set_state(SeedState.FOSSILIZED, epoch=epoch)
         
         # Log the fossilization event
         if hasattr(self.seed_manager, 'logger') and self.seed_manager.logger:
             self.seed_manager.logger.log_seed_event_detailed(
-                epoch=0,  # Would need actual epoch from context
+                epoch=epoch or 0,
                 event_type="FOSSILIZATION",
                 message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} fossilized!",
                 data={"seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}", "improvement": True}
@@ -276,33 +370,38 @@ class SentinelSeed(nn.Module):
         # to replace the sentinel seed with the trained child network
         self._graft_into_parent()
         
-    def _graft_into_parent(self):
-        """Permanently integrate the trained child network into the parent."""
-        # Mark as permanently integrated - child network replaces seed functionality
-        self.alpha = 1.0  # Full blend - child network always active
-        self.seed_manager.seeds[self.seed_id]["alpha"] = 1.0
-        
-        # Freeze the child network parameters since it's now part of the permanent architecture
-        for p in self.child.parameters():
-            p.requires_grad = False
-            
-        # In a full implementation, we would:
-        # 1. Modify the parent network to directly include the child's weights
-        # 2. Remove the sentinel seed mechanism for this position
-        # 3. Update the network topology permanently
-        # For now, we keep the seed but mark it as fossilized and permanently active
+        # Save the modified model
+        parent = self.parent_net_ref()
+        if parent:
+            parent.save_grafted_model()
         
         # Start training the next seed in the queue
         self.seed_manager.start_training_next_seed()
         
-    def _cull_seed(self):
+    def _graft_into_parent(self):
+        """Physically replaces this seed with its trained child in the parent network."""
+        parent = self.parent_net_ref()
+        if not parent:
+            logging.warning("Cannot graft seed: parent_net reference not found.")
+            return
+
+        # 1. Create the permanent, grafted module
+        # The child network is already trained and will be frozen.
+        for p in self.child.parameters():
+            p.requires_grad = False
+        grafted_module = GraftedChild(self.child)
+
+        # 2. Instruct the parent network to replace this seed
+        parent.replace_seed(self.seed_id, grafted_module)
+        
+    def _cull_seed(self, epoch: int | None = None):
         """Remove the seed due to poor performance."""
-        self._set_state(SeedState.CULLED)
+        self._set_state(SeedState.CULLED, epoch=epoch)
         
         # Log the culling event
         if hasattr(self.seed_manager, 'logger') and self.seed_manager.logger:
             self.seed_manager.logger.log_seed_event_detailed(
-                epoch=0,  # Would need actual epoch from context
+                epoch=epoch or 0,
                 event_type="CULLING", 
                 message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} culled!",
                 data={"seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}", "improvement": False}
@@ -318,6 +417,22 @@ class SentinelSeed(nn.Module):
             
         # Start training the next seed in the queue
         self.seed_manager.start_training_next_seed()
+
+
+class GraftedChild(nn.Module):
+    """
+    A wrapper for a trained child network that is permanently grafted.
+    This module ensures the residual connection (x + child_out) is preserved
+    after the original SentinelSeed is removed from the graph.
+    """
+    def __init__(self, child_network: nn.Module):
+        super().__init__()
+        self.child_network = child_network
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the grafted child network as a residual connection."""
+        return x + self.child_network(x)
+
 
 class BaseNet(nn.Module):
     """
@@ -382,6 +497,7 @@ class BaseNet(nn.Module):
                     (i, j),  # Use a tuple (layer_idx, seed_idx) as the ID
                     hidden_dim,
                     seed_manager,
+                    parent_net=self,  # Pass a reference to the parent network
                     blend_steps=blend_steps,
                     shadow_lr=shadow_lr,
                     progress_thresh=progress_thresh,
@@ -394,6 +510,27 @@ class BaseNet(nn.Module):
 
         # Output layer
         self.out = nn.Linear(hidden_dim, output_dim)
+
+    def replace_seed(self, seed_id: tuple[int, int], new_module: nn.Module):
+        """
+        Physically replaces a seed in the ModuleList with a new module.
+        """
+        layer_idx, seed_idx_in_layer = seed_id
+        # Calculate the flat index in the all_seeds list
+        flat_idx = layer_idx * self.seeds_per_layer + seed_idx_in_layer
+
+        if flat_idx < 0 or flat_idx >= len(self.all_seeds):
+            logging.error(f"Cannot replace seed: index {flat_idx} is out of bounds.")
+            return
+
+        # Perform the physical replacement in the ModuleList
+        self.all_seeds[flat_idx] = new_module
+        logging.info(f"Seed {seed_id} physically replaced in the network graph.")
+
+    def save_grafted_model(self, path: str = "grafted_model.pth"):
+        """Saves the state dictionary of the modified network."""
+        logging.info(f"Saving grafted model state_dict to {path}")
+        torch.save(self.state_dict(), path)
 
     # ------------------------------------------------------------------
     def freeze_backbone(self):

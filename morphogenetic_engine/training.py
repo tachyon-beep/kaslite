@@ -20,7 +20,7 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
 from .core import KasminaMicro, SeedManager
-from .events import SeedInfo
+from .events import SeedInfo, SeedState
 from .logger import ExperimentLogger
 
 # Check if we're in testing mode to conditionally disable MLflow
@@ -31,11 +31,16 @@ MLFLOW_AVAILABLE = not TESTING_MODE
 _last_report: Dict[str, str] = defaultdict(lambda: "")
 
 
-def handle_seed_training(seed_manager: "SeedManager", device: torch.device):
+def handle_seed_training(seed_manager: "SeedManager", device: torch.device, epoch: int | None = None):
     """Handle background seed training and blending for all seeds."""
     for info in seed_manager.seeds.values():
         seed = info["module"]
-        if seed.state == "training":
+
+        # Store the latest epoch for logging purposes
+        if epoch is not None:
+            info['last_epoch'] = epoch
+
+        if seed.state == SeedState.TRAINING.value:
             buf = info["buffer"]
             if len(buf) >= 10:
                 sample_tensors = random.sample(list(buf), min(64, len(buf)))
@@ -44,8 +49,10 @@ def handle_seed_training(seed_manager: "SeedManager", device: torch.device):
                     idx = torch.randperm(batch.size(0), device=batch.device)[:64]
                     batch = batch[idx]
                 batch = batch.to(device)
-                seed.train_child_step(batch)
-        seed.update_blending()
+                seed.train_child_step(batch, epoch=epoch)
+        seed.update_blending(epoch)
+        seed.update_shadowing(epoch)
+        seed.update_probationary(epoch)
 
 
 def train_epoch(
@@ -56,6 +63,7 @@ def train_epoch(
     seed_manager: "SeedManager",
     device: torch.device,
     scheduler: LRScheduler | None = None,
+    epoch: int | None = None,
 ) -> float:
     """Train the model for one epoch and return average loss."""
     model.train()
@@ -70,7 +78,7 @@ def train_epoch(
             optimiser.step()
 
         total_loss += loss.item()
-        handle_seed_training(seed_manager, device)
+        handle_seed_training(seed_manager, device, epoch)
 
     if scheduler:
         scheduler.step()
@@ -118,7 +126,7 @@ def execute_phase_1(
     )
 
     for epoch in range(1, config["warm_up_epochs"] + 1):
-        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, scheduler)
+        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, scheduler, epoch)
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 
@@ -191,8 +199,7 @@ def execute_phase_2(
     for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
         train_loss = 0.0
         if optimiser:
-            train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device)
-
+            train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, epoch=epoch)
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 

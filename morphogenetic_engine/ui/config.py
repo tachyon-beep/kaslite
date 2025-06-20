@@ -14,12 +14,14 @@ GRID_SIZE = 16
 
 # Emoji Maps
 SEED_EMOJI_MAP = {
-    SeedState.ACTIVE: "🟢",
-    SeedState.DORMANT: "⚪",
-    SeedState.BLENDING: "🟡",
-    SeedState.GERMINATED: "🌱",
-    SeedState.FOSSILIZED: "🦴",
-    SeedState.CULLED: "🥀",
+    SeedState.DORMANT: "[grey50]⚪[/]",          # ⚪ White circle (dormant)
+    SeedState.GERMINATED: "[bold green]🌱[/]",   # 🌱 Seedling (germinated)
+    SeedState.TRAINING: "[bold yellow]🟢[/]",    # 🟢 Green circle (training)
+    SeedState.BLENDING: "[bold cyan]🟡[/]",      # 🟡 Yellow circle (blending)
+    SeedState.SHADOWING: "[bold bright_black]👻[/]",  # 👻 Ghost (shadowing)
+    SeedState.PROBATIONARY: "[bold magenta]🧑‍⚖️[/]",  # 🧑‍⚖️ Judge (probationary)
+    SeedState.FOSSILIZED: "[bold white]🦴[/]",   # 🦴 Bone (fossilized)
+    SeedState.CULLED: "[bold red]🥀[/]",         # 🥀 Wilted flower (culled)
 }
 
 STRAIN_EMOJI_MAP = {

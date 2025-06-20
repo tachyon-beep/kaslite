@@ -36,12 +36,14 @@ class EventType(Enum):
 class SeedState(Enum):
     """Enumeration of possible states for a morphogenetic seed."""
 
-    DORMANT = "dormant"        # Seed is inactive, just monitoring
-    GERMINATED = "germinated"  # Seed has been activated but not training yet
-    ACTIVE = "active"          # Seed is actively training its child network  
-    BLENDING = "blending"      # Seed finished training, now blending into parent
-    FOSSILIZED = "fossilized"  # Successfully integrated into parent network
-    CULLED = "culled"          # Removed due to poor performance
+    DORMANT = "dormant"        # Seed is inactive, monitoring activations in buffer
+    GERMINATED = "germinated"  # Seed activated, waiting in training queue  
+    TRAINING = "training"      # Seed is actively training its child network
+    BLENDING = "blending"      # Seed smoothly integrating into parent with alpha mixing
+    SHADOWING = "shadowing"    # Stage 1 validation - inert monitoring for stability
+    PROBATIONARY = "probationary"  # Stage 2 validation - live monitoring for systemic impact
+    FOSSILIZED = "fossilized"  # Successfully integrated into parent network permanently
+    CULLED = "culled"          # Failed validation, under embargo until reset to DORMANT
 
 
 class NetworkStrain(Enum):

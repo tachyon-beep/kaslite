@@ -130,7 +130,7 @@ def write_experiment_log_footer(log_f, final_stats: Dict[str, Any], seed_manager
     log_f.write(f"# Final best accuracy: {final_stats['best_acc']:.4f}\n")
 
     if final_stats.get("seeds_activated", False):
-        active_seeds = sum(1 for info in seed_manager.seeds.values() if info["module"].state == "active")
+        active_seeds = sum(1 for info in seed_manager.seeds.values() if info["module"].state == SeedState.TRAINING.value)
         log_f.write(f"# Seeds activated: {active_seeds}/{len(seed_manager.seeds)}\n")
     else:
         log_f.write(f"# Seeds activated: 0/{len(seed_manager.seeds)}\n")
@@ -159,4 +159,4 @@ def export_metrics_for_dvc(final_stats: Dict[str, Any], slug: str, project_root:
 
 def count_active_seeds(seeds: list[SeedInfo]) -> int:
     """Counts seeds in the 'active' state."""
-    return sum(1 for s in seeds if s["state"] == SeedState.ACTIVE)
+    return sum(1 for s in seeds if s["state"] == SeedState.TRAINING)

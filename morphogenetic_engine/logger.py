@@ -10,7 +10,6 @@ from typing import Any, Optional, cast
 from .events import (
     EventPayload,
     EventType,
-    GerminationPayload,
     LogEvent,
     LogPayload,
     MetricsUpdatePayload,
@@ -62,17 +61,6 @@ class ExperimentLogger:
             EventType.NETWORK_STRAIN_UPDATE: lambda p: (
                 self.dashboard.update_network_strain_grid(cast(NetworkStrainGridUpdatePayload, p)) if self.dashboard else None
             ),
-            EventType.GERMINATION: lambda p: (
-                self.dashboard.log_seed_event(
-                    {
-                        "event_type": "germination",
-                        "message": f"Seed {cast(GerminationPayload, p)['seed_id']} germinated!",
-                        "data": {"epoch": cast(GerminationPayload, p)["epoch"]},
-                    }
-                )
-                if self.dashboard
-                else None
-            ),
             # General logging events can be mapped to the dashboard's log methods
             EventType.LOG_EVENT: lambda p: self.dashboard.log_event(cast(LogPayload, p)) if self.dashboard else None,
             EventType.SEED_LOG_EVENT: lambda p: (
@@ -88,7 +76,7 @@ class ExperimentLogger:
         # Dispatch to dashboard if present and a handler exists
         if self.dashboard and event.event_type in self.dashboard_dispatch_map:
             handler = self.dashboard_dispatch_map[event.event_type]
-            handler(payload)
+            handler(event.payload)
 
         try:
             with self.log_file_path.open("a", encoding="utf-8") as f:
@@ -164,10 +152,7 @@ class ExperimentLogger:
         payload = SystemShutdownPayload(final_stats=final_stats, timestamp=time.time())
         self._log_event(event_type=EventType.SYSTEM_SHUTDOWN, payload=payload)
 
-    def log_germination(self, epoch: int, seed_id: tuple[int, int]) -> None:
-        """Log a seed germination event with dedicated event type."""
-        payload = GerminationPayload(epoch=epoch, seed_id=seed_id, timestamp=time.time())
-        self._log_event(event_type=EventType.GERMINATION, payload=payload)
+
 
     def log_seed_event_detailed(self, epoch: int, event_type: str, message: str, data: dict[str, Any] | None = None) -> None:
         """Log a detailed seed event for the timeline."""
