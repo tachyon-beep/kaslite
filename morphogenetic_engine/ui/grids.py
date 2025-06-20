@@ -60,21 +60,36 @@ class GridManager:
 
     def create_seed_legend_panel(self) -> Panel:
         """Generate the legend for the seed box."""
-        # Extract plain emojis from Rich markup for legend
-        legend_parts = [
+        # Create a hidden table for proper alignment
+        legend_table = Table(show_header=False, show_edge=False, box=None, padding=(0, 1))
+        
+        # Add columns for each emoji/label pair
+        legend_table.add_column("", justify="center")  # Col 1
+        legend_table.add_column("", justify="center")  # Col 2
+        legend_table.add_column("", justify="center")  # Col 3
+        legend_table.add_column("", justify="center")  # Col 4
+        legend_table.add_column("", justify="center")  # Col 5
+        
+        # First row
+        legend_table.add_row(
             "⚪ Dormant",
             "🌱 Germinated", 
             "🟢 Training",
             "🟡 Blending",
             "👻 Shadowing",
+        )
+        
+        # Second row
+        legend_table.add_row(
             "🧑‍⚖️ Probationary",
             "🦴 Fossilized",
             "🥀 Culled",
             f"{EMPTY_CELL_EMOJI} Empty",
-        ]
-        legend_text = Text("  ".join(legend_parts))
+            "",  # Empty cell for alignment
+        )
+        
         return Panel(
-            Align.center(legend_text),
+            Align.center(legend_table),
             box=box.MINIMAL,
             style="dim",
             border_style="green",

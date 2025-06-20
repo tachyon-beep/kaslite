@@ -154,11 +154,11 @@ class LayoutManager:
         )
         self.layout["seed_box_area"].split_column(
             Layout(name="seed_box_panel"),
-            Layout(name="seed_legend_panel", size=LAYOUT_SIZES["legend_panel"]),
+            Layout(name="seed_legend_panel", size=LAYOUT_SIZES["seed_legend_panel"]),
         )
         self.layout["network_strain_area"].split_column(
             Layout(name="network_strain_panel"),
-            Layout(name="strain_legend_panel", size=LAYOUT_SIZES["legend_panel"]),
+            Layout(name="strain_legend_panel", size=LAYOUT_SIZES["strain_legend_panel"]),
         )
 
     def update_panel(self, panel_name: str, panel: Panel) -> None:

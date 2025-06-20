@@ -40,19 +40,29 @@ def handle_seed_training(seed_manager: "SeedManager", device: torch.device, epoc
         if epoch is not None:
             info['last_epoch'] = epoch
 
-        if seed.state == SeedState.TRAINING.value:
-            buf = info["buffer"]
-            if len(buf) >= 10:
-                sample_tensors = random.sample(list(buf), min(64, len(buf)))
-                batch = torch.cat(sample_tensors, dim=0)
-                if batch.size(0) > 64:
-                    idx = torch.randperm(batch.size(0), device=batch.device)[:64]
-                    batch = batch[idx]
-                batch = batch.to(device)
-                seed.train_child_step(batch, epoch=epoch)
+        # Get batch data for this seed (for training or validation)
+        batch = None
+        buf = info["buffer"]
+        if len(buf) >= 10:
+            sample_tensors = random.sample(list(buf), min(64, len(buf)))
+            batch = torch.cat(sample_tensors, dim=0)
+            if batch.size(0) > 64:
+                idx = torch.randperm(batch.size(0), device=batch.device)[:64]
+                batch = batch[idx]
+            batch = batch.to(device)
+
+        # Train if in training state
+        if seed.state == SeedState.TRAINING.value and batch is not None:
+            seed.train_child_step(batch, epoch=epoch)
+            
+        # Update all lifecycle phases (some need fresh loss measurements)
         seed.update_blending(epoch)
-        seed.update_shadowing(epoch)
-        seed.update_probationary(epoch)
+        if batch is not None:
+            seed.update_shadowing(epoch, batch)
+            seed.update_probationary(epoch, batch)
+        else:
+            seed.update_shadowing(epoch)
+            seed.update_probationary(epoch)
 
 
 def train_epoch(

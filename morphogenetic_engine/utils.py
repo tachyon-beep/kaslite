@@ -29,8 +29,7 @@ def generate_experiment_slug(args) -> str:
     return (
         f"{args.problem_type}_dim{args.input_dim}_{args.device}"
         f"_h{args.hidden_dim}_bs{args.blend_steps}"
-        f"_lr{args.shadow_lr}_pt{args.progress_thresh}"
-        f"_dw{args.drift_warn}"
+        f"_lr{args.shadow_lr}_dw{args.drift_warn}"
     )
 
 
@@ -52,7 +51,6 @@ def create_experiment_config(args, device) -> Dict[str, Any]:
         "seeds_per_layer": args.seeds_per_layer,
         "blend_steps": args.blend_steps,
         "shadow_lr": args.shadow_lr,
-        "progress_thresh": args.progress_thresh,
         "drift_warn": args.drift_warn,
         "acc_threshold": args.acc_threshold,
     }
@@ -109,7 +107,6 @@ def write_experiment_log_header(log_f, config: Dict[str, Any], args) -> None:
         "seeds_per_layer",
         "blend_steps",
         "shadow_lr",
-        "progress_thresh",
         "drift_warn",
         "acc_threshold",
     ]

@@ -82,16 +82,13 @@ class SeedManager:
                 # Germinate seed but don't start training yet - it goes to the "parking lot"
                 seed_info["module"].initialize_child(epoch=epoch)
                 seed_info["status"] = "germinated"  # Parking lot state
+                seed_info["germination_epoch"] = epoch  # Store germination epoch for training start
                 self._log_event(seed_id, True)
-                if self.logger is not None:
-                    self.logger.log_seed_event_detailed(
-                        epoch=epoch,
-                        event_type="GERMINATION",
-                        message=f"Seed L{seed_id[0]}_S{seed_id[1]} germinated!",
-                        data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}", "epoch": epoch},
-                    )
-                # Immediately try to start training the next seed
-                self.start_training_next_seed()
+                # State transition from DORMANT → GERMINATED is already logged by initialize_child()
+                # No need for separate GERMINATION event
+                
+                # Immediately try to start training the next seed with current epoch
+                self.start_training_next_seed()  # Note: SeedManager method, no epoch param
                 return True
             except (RuntimeError, ValueError) as e:
                 logging.exception("Germination failed for '%s': %s", seed_id, e)
@@ -185,8 +182,8 @@ class SeedManager:
             seed_info = self.seeds[next_seed]
             seed_info["status"] = "active"
             
-            # Try to get the most recent epoch for logging
-            epoch = self.seeds[next_seed].get('last_epoch', 0)
+            # Try to get the current epoch for training start (use germination epoch)
+            epoch = self.seeds[next_seed].get('germination_epoch', 0)
             seed_info["module"]._set_state(SeedState.TRAINING, epoch=epoch)
             
             # Log the training start
@@ -360,9 +357,9 @@ class KasminaMicro:
                 if seed_info.get("state") == SeedState.GERMINATED.value:
                     # Start training this seed
                     if "module" in seed_info:
-                        # If epoch is not provided, try to get it from the seed's own record
+                        # Use germination epoch for training start consistency
                         if epoch is None:
-                            epoch = seed_info.get('last_epoch', 0)
+                            epoch = seed_info.get('germination_epoch', 0)
 
                         seed_info["module"]._set_state(SeedState.TRAINING, epoch=epoch)
                         

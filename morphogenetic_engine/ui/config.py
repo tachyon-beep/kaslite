@@ -72,6 +72,8 @@ LAYOUT_SIZES = {
     "karn_panel": 9,
     "crucible_panel": 8,
     "legend_panel": 3,
+    "seed_legend_panel": 4,
+    "strain_legend_panel": 3,
 }
 
 # Column Ratios

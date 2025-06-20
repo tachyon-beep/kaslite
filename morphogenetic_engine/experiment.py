@@ -23,7 +23,6 @@ def build_model_and_agents(
     # Model behavior
     blend_steps: int,
     shadow_lr: float,
-    progress_thresh: float,
     drift_warn: float,
     # Agents
     acc_threshold: float,
@@ -54,7 +53,6 @@ def build_model_and_agents(
         seeds_per_layer=seeds_per_layer,
         blend_steps=blend_steps,
         shadow_lr=shadow_lr,
-        progress_thresh=progress_thresh,
         drift_warn=drift_warn,
     ).to(device)
 
