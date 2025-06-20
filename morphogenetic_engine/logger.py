@@ -5,7 +5,7 @@ from __future__ import annotations
 import collections
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from .cli_dashboard import RichDashboard
 from .events import (
@@ -46,40 +46,46 @@ class ExperimentLogger:
         """Create, store, write, and dispatch a LogEvent."""
         event = LogEvent(event_type=event_type, payload=payload)
         self.events.append(event)
-        
+
         # Dispatch to dashboard if present
         if self.dashboard:
             if event.event_type == EventType.METRICS_UPDATE:
                 # The dashboard's update_progress method handles metrics
-                self.dashboard.update_progress(payload['epoch'], payload['metrics'])
+                metrics_payload = cast(MetricsUpdatePayload, payload)
+                self.dashboard.update_progress(
+                    metrics_payload["epoch"], metrics_payload["metrics"]
+                )
             elif event.event_type == EventType.PHASE_UPDATE:
+                phase_payload = cast(PhaseUpdatePayload, payload)
                 self.dashboard.show_phase_transition(
-                    to_phase=payload['to_phase'],
-                    epoch=payload['epoch'],
-                    from_phase=payload['from_phase'],
-                    total_epochs=payload.get('total_epochs_in_phase')
+                    to_phase=phase_payload["to_phase"],
+                    epoch=phase_payload["epoch"],
+                    from_phase=phase_payload["from_phase"],
+                    total_epochs=phase_payload.get("total_epochs_in_phase"),
                 )
             elif event.event_type == EventType.SEED_STATE_UPDATE:
                 # Use the proper dashboard method for seed updates
-                self.dashboard.update_seeds_view(payload)
+                seed_payload = cast(SeedStateUpdatePayload, payload)
+                self.dashboard.update_seeds_view(seed_payload)
             elif event.event_type == EventType.GERMINATION:
                 # Log germination events
-                seed_id = payload['seed_id']
+                germination_payload = cast(GerminationPayload, payload)
+                seed_id = germination_payload["seed_id"]
                 self.dashboard.add_live_event(
-                    "GERMINATION", 
-                    f"Seed L{seed_id[0]}_S{seed_id[1]} germinated at epoch {payload['epoch']}", 
-                    {}
+                    "GERMINATION",
+                    f"Seed L{seed_id[0]}_S{seed_id[1]} germinated at epoch {germination_payload['epoch']}",
+                    {},
                 )
 
         try:
             with self.log_file_path.open("a", encoding="utf-8") as f:
                 f.write(event.to_json() + "\n")
-        except (OSError, PermissionError) as e:
+        except OSError as e:
             # Propagate I/O errors to the caller for specific handling
             raise e
-        except TypeError as e:
+        except TypeError:
             # Propagate serialization errors
-            raise e
+            raise
 
     def log_system_init(self, config: dict) -> None:
         """Log a system initialization event."""
