@@ -152,7 +152,15 @@ class ExperimentLogger:
         payload = SystemShutdownPayload(final_stats=final_stats, timestamp=time.time())
         self._log_event(event_type=EventType.SYSTEM_SHUTDOWN, payload=payload)
 
+    def log_info(self, message: str) -> None:
+        """Log a general informational event."""
+        payload = LogPayload(message=message, level="INFO", timestamp=time.time())
+        self._log_event(event_type=EventType.LOG_EVENT, payload=payload)
 
+    def log_error(self, message: str) -> None:
+        """Log an error event."""
+        payload = LogPayload(message=message, level="ERROR", timestamp=time.time())
+        self._log_event(event_type=EventType.LOG_EVENT, payload=payload)
 
     def log_seed_event_detailed(self, epoch: int, event_type: str, message: str, data: dict[str, Any] | None = None) -> None:
         """Log a detailed seed event for the timeline."""

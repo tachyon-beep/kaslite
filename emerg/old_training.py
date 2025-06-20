@@ -31,39 +31,38 @@ MLFLOW_AVAILABLE = not TESTING_MODE
 _last_report: Dict[str, str] = defaultdict(lambda: "")
 
 
-def _get_seed_training_batch(info: SeedInfo, device: torch.device) -> torch.Tensor | None:
-    """Get a training batch from a seed's buffer if available."""
-    buf = info["buffer"]
-    if len(buf) < 10:  # Require a minimum buffer size to train
-        return None
-
-    sample_tensors = random.sample(list(buf), min(64, len(buf)))
-    batch = torch.cat(sample_tensors, dim=0)
-    if batch.size(0) > 64:
-        idx = torch.randperm(batch.size(0), device=batch.device)[:64]
-        batch = batch[idx]
-    return batch.to(device)
-
-
-def _perform_per_step_seed_updates(
-    seed_manager: "SeedManager", device: torch.device, epoch: int | None
-):
-    """Handle continuous, per-step seed activities like training and blending."""
+def handle_seed_training(seed_manager: "SeedManager", device: torch.device, epoch: int | None = None):
+    """Handle background seed training and blending for all seeds."""
     for info in seed_manager.seeds.values():
         seed = info["module"]
+
+        # Store the latest epoch for logging purposes
         if epoch is not None:
-            info["last_epoch"] = epoch
+            info['last_epoch'] = epoch
 
-        batch = _get_seed_training_batch(info, device)
+        # Get batch data for this seed (for training or validation)
+        batch = None
+        buf = info["buffer"]
+        if len(buf) >= 10:
+            sample_tensors = random.sample(list(buf), min(64, len(buf)))
+            batch = torch.cat(sample_tensors, dim=0)
+            if batch.size(0) > 64:
+                idx = torch.randperm(batch.size(0), device=batch.device)[:64]
+                batch = batch[idx]
+            batch = batch.to(device)
 
-        # A seed in the TRAINING state trains its child network on its buffer data.
+        # Train if in training state
         if seed.state == SeedState.TRAINING.value and batch is not None:
-            if hasattr(seed, "train_child_step"):
-                seed.train_child_step(batch, epoch=epoch)
-
-        # Blending alpha is a continuous value that can be updated per-step.
-        if hasattr(seed, "update_blending"):
-            seed.update_blending(epoch)
+            seed.train_child_step(batch, epoch=epoch)
+            
+        # Update all lifecycle phases (some need fresh loss measurements)
+        seed.update_blending(epoch)
+        if batch is not None:
+            seed.update_shadowing(epoch, batch)
+            seed.update_probationary(epoch, batch)
+        else:
+            seed.update_shadowing(epoch)
+            seed.update_probationary(epoch)
 
 
 def train_epoch(
@@ -89,12 +88,7 @@ def train_epoch(
             optimiser.step()
 
         total_loss += loss.item()
-
-        # Handle continuous, per-step seed activities
-        _perform_per_step_seed_updates(seed_manager, device, epoch)
-
-    # After all batches for an epoch are done, major state transitions
-    # are handled by KasminaMicro.assess_and_update_seeds.
+        handle_seed_training(seed_manager, device, epoch)
 
     if scheduler:
         scheduler.step()
@@ -172,51 +166,10 @@ def execute_phase_1(
     return {"best_acc": best_acc}
 
 
-def _rebuild_optimizer(model: nn.Module, config: dict[str, Any]) -> torch.optim.Optimizer | None:
-    """Rebuilds the optimizer to only include trainable parameters."""
-    params = [p for p in model.parameters() if p.requires_grad]
-    if not params:
-        return None
-    return torch.optim.AdamW(params, lr=config["lr"] * 0.1, weight_decay=config.get("weight_decay", 1e-4))
-
-
-def _update_post_germination_stats(
-    epoch: int,
-    germ_epoch: int,
-    acc_pre: float,
-    val_acc: float,
-    acc_post: float | None,
-    t_recover: int | None,
-) -> tuple[float | None, int | None]:
-    """Updates accuracy dip and recovery time stats after seed germination."""
-    if epoch == germ_epoch + 1:
-        acc_post = val_acc
-    if t_recover is None and acc_pre is not None and val_acc >= acc_pre:
-        t_recover = epoch - germ_epoch
-    return acc_post, t_recover
-
-
-def _log_phase2_metrics(
-    epoch: int,
-    metrics: dict[str, Any],
-    logger: ExperimentLogger,
-    tb_writer: "SummaryWriter",
-):
-    """Logs all relevant metrics for a single epoch in phase 2."""
-    logger.log_metrics_update(epoch, metrics)
-    tb_writer.add_scalar("train/loss_phase2", metrics["train_loss"], epoch)
-    tb_writer.add_scalar("validation/loss_phase2", metrics["val_loss"], epoch)
-    tb_writer.add_scalar("validation/accuracy_phase2", metrics["val_acc"], epoch)
-    if MLFLOW_AVAILABLE and mlflow.active_run():
-        mlflow.log_metrics(
-            {"train_loss_p2": metrics["train_loss"], "val_loss_p2": metrics["val_loss"], "val_acc_p2": metrics["val_acc"]},
-            step=epoch,
-        )
-
-
 def execute_phase_2(
     model: nn.Module,
     seed_manager: SeedManager,
+    karn: Any,  # Placeholder for Karn agent
     tamiyo: KasminaMicro,
     train_loader: DataLoader,
     val_loader: DataLoader,
@@ -229,58 +182,83 @@ def execute_phase_2(
     """
     Runs the adaptation phase, reporting all progress via the logger.
     """
+    warm_up_epochs = config["warm_up_epochs"]
     adaptation_epochs = config["adaptation_epochs"]
     criterion = nn.CrossEntropyLoss().to(device)
-    optimiser = torch.optim.AdamW(
-        model.parameters(), lr=config["lr"], weight_decay=config.get("weight_decay", 1e-4)
-    )
 
-    # Initialize tracking variables
+    model.freeze_backbone()
+
+    def rebuild_opt(m):
+        params = [p for p in m.parameters() if p.requires_grad]
+        return torch.optim.AdamW(params, lr=config["lr"] * 0.1, weight_decay=config.get("weight_decay", 1e-4)) if params else None
+
+    optimiser = rebuild_opt(model)
+
+    # Carry over stats from phase 1
     best_acc = final_stats.get("best_acc", 0.0)
     acc_pre, acc_post, t_recover, germ_epoch = None, None, None, None
     seeds_activated = False
 
     logger.log_phase_update(
-        epoch=config["warm_up_epochs"],
+        epoch=warm_up_epochs,
         from_phase="Warm-up",
         to_phase="Adaptation",
         total_epochs_in_phase=adaptation_epochs,
     )
 
-    for epoch_offset in range(1, adaptation_epochs + 1):
-        epoch = config["warm_up_epochs"] + epoch_offset
-
-        # Train for one epoch first.
-        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, epoch=epoch)
-
-        # Now, evaluate performance *after* training.
+    for epoch in range(warm_up_epochs + 1, warm_up_epochs + adaptation_epochs + 1):
+        train_loss = 0.0
+        if optimiser:
+            train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, epoch=epoch)
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 
-        # Let Tamiyo decide if it's time to activate seeds based on the *current* performance.
-        if not seeds_activated and tamiyo.step(epoch, val_loss, val_acc):
-            seeds_activated, germ_epoch, acc_pre = True, epoch, val_acc
-            # Rebuild optimizer to include any newly activated seed parameters for the *next* epoch.
-            optimiser = _rebuild_optimizer(model, config)
-
-        # Assess seeds and handle all other epoch-level state transitions.
+        # Assess seeds BEFORE the step function, so Tamiyo has the latest state
         if hasattr(tamiyo, "assess_and_update_seeds"):
             tamiyo.assess_and_update_seeds(epoch)
 
+        if not seeds_activated and tamiyo.step(epoch, val_loss, val_acc):
+            seeds_activated, germ_epoch, acc_pre = True, epoch, val_acc
+            optimiser = rebuild_opt(model)
+
         if germ_epoch:
-            acc_post, t_recover = _update_post_germination_stats(
-                epoch, germ_epoch, acc_pre, val_acc, acc_post, t_recover
+            if epoch == germ_epoch + 1:
+                acc_post = val_acc
+            if t_recover is None and acc_pre is not None and val_acc >= acc_pre:
+                t_recover = epoch - germ_epoch
+
+        metrics = {
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "val_acc": val_acc,
+            "best_acc": best_acc,
+        }
+        logger.log_metrics_update(epoch, metrics)
+
+        # NOTE: The comprehensive seed state update is now handled by
+        # tamiyo.assess_and_update_seeds() called earlier in the loop.
+
+        # Update other loggers
+        tb_writer.add_scalar("train/loss_phase2", train_loss, epoch)
+        tb_writer.add_scalar("validation/loss_phase2", val_loss, epoch)
+        tb_writer.add_scalar("validation/accuracy_phase2", val_acc, epoch)
+        if MLFLOW_AVAILABLE and mlflow.active_run():
+            mlflow.log_metrics(
+                {"train_loss_p2": train_loss, "val_loss_p2": val_loss, "val_acc_p2": val_acc},
+                step=epoch,
             )
 
-        metrics = {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc, "best_acc": best_acc}
-        _log_phase2_metrics(epoch, metrics, logger, tb_writer)
-
-    # Combine and return final results
+    # Combine results
     final_stats.update(
-        {"best_acc": best_acc}
+        {
+            "best_acc": best_acc,
+            "accuracy_dip": (acc_pre - acc_post) if acc_pre is not None and acc_post is not None else None,
+            "recovery_time": t_recover,
+            "seeds_activated": seeds_activated,
+            "acc_pre": acc_pre,
+            "acc_post": acc_post,
+        }
     )
-    if acc_post is not None:
-        final_stats.update({"acc_post_germination": acc_post, "time_to_recover": t_recover})
     return final_stats
 
 

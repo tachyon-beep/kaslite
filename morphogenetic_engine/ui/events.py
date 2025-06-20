@@ -26,13 +26,11 @@ class EventManager:
         self.seed_log_events: deque[str] = deque(maxlen=MAX_SEED_EVENTS)
 
     def log_event(self, payload: LogPayload) -> None:
-        """Add a new event to be displayed in the main experiment log."""
-        event_str = f"[{payload['event_type'].upper()}] {payload['message']}"
-        data = payload.get("data")
-        if data:
-            data_str = ", ".join([f"{k}={v}" for k, v in data.items() if v is not None])
-            if data_str:
-                event_str += f" ({data_str})"
+        """Log a generic event to the timeline."""
+        # Use the 'level' from the payload, not 'event_type' which does not exist
+        level = payload.get("level", "INFO").upper()
+        message = payload.get("message", "")
+        event_str = f"[{level}] {message}"
         self.last_events.append(event_str)
 
     def log_seed_event(self, payload: SeedLogPayload) -> None:

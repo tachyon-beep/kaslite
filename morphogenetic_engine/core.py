@@ -221,70 +221,75 @@ class KasminaMicro:
         self.plateau = 0
         self.prev_loss = float("inf")
         self.logger = logger
+        self.cull_embargo_epochs = 50 # Number of epochs to wait before replacing a culled seed
 
-    def assess_and_update_seeds(self, epoch: int) -> None:
-        """Assess all seeds, update their metrics, and log changes."""
-        if not self.logger:
-            return
-
-        # Collect all seed information for batch logging
-        from .events import SeedInfo, SeedState
-
-        seed_infos = []
+    def _handle_culled_seeds(self, epoch: int):
+        """Check for culled seeds whose embargo period has expired and replace them."""
+        parent_net = None
+        # This is a bit of a hack to get the parent_net. A better solution would be to pass it in.
+        with self.seed_manager.lock:
+            for seed_info in self.seed_manager.seeds.values():
+                if hasattr(seed_info["module"], "parent_net_ref"):
+                    parent_net = seed_info["module"].parent_net_ref()
+                    if parent_net:
+                        break
+        
+        if not parent_net:
+            return # Cannot proceed without a reference to the parent network
 
         with self.seed_manager.lock:
             for seed_id, seed_info in self.seed_manager.seeds.items():
+                if seed_info.get("state") == SeedState.CULLED.value:
+                    culling_epoch = seed_info.get("culling_epoch")
+                    if culling_epoch is not None and epoch > culling_epoch + self.cull_embargo_epochs:
+                        logging.info(f"Embargo lifted for culled seed {seed_id}. Replacing.")
+                        parent_net.reset_culled_seed(seed_id)
+
+    def assess_and_update_seeds(self, epoch: int) -> None:
+        """Assess all seeds, apply state transitions, and handle culled seed replacement."""
+        with self.seed_manager.lock:
+            for seed_info in self.seed_manager.seeds.values():
                 module = seed_info["module"]
+                # This single call now handles all state transitions for the epoch
+                if hasattr(module, "assess_and_transition_state"):
+                    module.assess_and_transition_state(epoch)
 
-                # Store previous state for comparison
-                prev_state = module.state
+        # After handling state transitions, check for any culled seeds that need replacing.
+        self._handle_culled_seeds(epoch)
 
-                # This method should update the seed's internal state
-                module.update_state(epoch=epoch)
+        # The rest of the logging can be done here if needed, or moved to a separate method.
+        if self.logger:
+            self.log_all_seed_states(epoch)
 
-                # Convert string state to SeedState enum if needed
-                if isinstance(module.state, str):
-                    try:
-                        state_enum = SeedState[module.state.upper()]
-                    except KeyError:
-                        state_enum = SeedState.DORMANT  # Default fallback
-                else:
-                    state_enum = module.state
+    def log_all_seed_states(self, epoch: int):
+        """Logs the current state of all seeds."""
+        if not self.logger:
+            return
 
-                # Collect seed info for batch logging
+        from .events import SeedInfo, SeedState
+        seed_infos = []
+        with self.seed_manager.lock:
+            for seed_id, seed_info in self.seed_manager.seeds.items():
+                module = seed_info["module"]
+                try:
+                    state_enum = SeedState(module.state)
+                except (ValueError, KeyError):
+                    state_enum = SeedState.DORMANT # Default fallback
+
                 layer_idx, seed_idx = seed_id
-                seed_info_obj = SeedInfo(
+                seed_infos.append(SeedInfo(
                     id=seed_id,
                     state=state_enum,
                     layer=layer_idx,
                     index_in_layer=seed_idx,
                     metrics={
                         "alpha": module.alpha,
-                        "grad_norm": module.get_gradient_norm(),
-                        "patience": getattr(module, "patience_counter", None),
+                        "grad_norm": 0.0, # Placeholder, consider adding get_gradient_norm back if needed
+                        "patience": seed_info.get("val_patience_counter", 0),
+                        "current_loss": seed_info.get("current_loss", 0.0),
                     },
-                )
-                seed_infos.append(seed_info_obj)
-
-                # Log a specific event only if the state has changed
-                if module.state != prev_state:
-                    self.logger.log_seed_event_detailed(
-                        epoch=epoch,
-                        event_type="STATE_CHANGE",
-                        message=f"Seed L{layer_idx}_S{seed_idx} changed from {prev_state} to {module.state}",
-                        data={
-                            "seed_id": f"L{layer_idx}_S{seed_idx}",
-                            "from_state": prev_state,
-                            "to_state": module.state,
-                            "epoch": epoch,
-                        },
-                    )
-
-        # Log all seed states in one batch
+                ))
         self.logger.log_seed_state_update(epoch, seed_infos)
-        
-        # Check if we need to start training the next seed in the queue
-        self.start_training_next_seed(epoch=epoch)
 
     def step(self, epoch: int, val_loss: float, val_acc: float) -> bool:
         """
@@ -325,17 +330,30 @@ class KasminaMicro:
         return False
 
     def _select_seed(self) -> Optional[tuple[int, int]]:
+        """Selects the best DORMANT seed to germinate based on the worst health signal."""
         candidate_id: Optional[tuple[int, int]] = None
         worst_signal = float("inf")  # Start with worst possible value
 
         with self.seed_manager.lock:
             for sid, info in self.seed_manager.seeds.items():
-                if info["status"] == "dormant":
+                # Only consider dormant seeds that are not under a culling embargo
+                if info.get("state") == SeedState.DORMANT.value:
                     # Calculate health signal (lower = worse bottleneck)
-                    signal = info["module"].get_health_signal()
-                    if signal < worst_signal:
-                        worst_signal = signal
-                        candidate_id = sid
+                    # This requires the module to have a get_health_signal method.
+                    if hasattr(info["module"], "get_health_signal"):
+                        signal = info["module"].get_health_signal()
+                        if signal < worst_signal:
+                            worst_signal = signal
+                            candidate_id = sid
+                    else:
+                        # Fallback if method doesn't exist, though it should
+                        logging.warning(f"Seed {sid} has no get_health_signal method.")
+
+        if candidate_id:
+            logging.info(f"Selected seed {candidate_id} for germination with health signal: {worst_signal:.4f}")
+        else:
+            logging.info("No suitable dormant seeds available for germination.")
+
         return candidate_id
 
     def is_any_seed_training(self) -> bool:

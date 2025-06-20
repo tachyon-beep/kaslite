@@ -70,53 +70,6 @@ class SentinelSeed(nn.Module):
         self.seed_manager = seed_manager
         self.seed_manager.register_seed(self, seed_id)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the sentinel seed, with behavior determined by its current state.
-        """
-
-        # In DORMANT state, the primary job is to buffer activations for health signal calculation.
-        if self.state == SeedState.DORMANT.value:
-            self.seed_manager.append_to_buffer(self.seed_id, x)
-            return x
-
-        # In several states, the seed should act as a pass-through identity function
-        # and not interfere with the parent network's forward pass.
-        # TRAINING: The child network trains on its buffer in the background, not in the forward pass.
-        # SHADOWING: The child is validated in the background; the forward pass remains inert.
-        if self.state in [
-            SeedState.CULLED.value,
-            SeedState.GERMINATED.value,
-            SeedState.TRAINING.value,
-            SeedState.SHADOWING.value,
-        ]:
-            return x
-
-        # For the active states, we compute the child's output.
-        child_out = self.child(x)
-
-        # In BLENDING state, we smoothly interpolate between the original path and the child path.
-        if self.state == SeedState.BLENDING.value:
-            output = (1 - self.alpha) * x + self.alpha * child_out
-        
-        # In PROBATIONARY and FOSSILIZED states, the child is fully active as a residual connection.
-        elif self.state in [SeedState.PROBATIONARY.value, SeedState.FOSSILIZED.value]:
-            output = x + child_out
-        else:
-            # Default fallback case, should not be reached in normal operation.
-            return x
-
-        # Monitor interface drift for any state where the output is being modified.
-        if self.state in [SeedState.BLENDING.value, SeedState.PROBATIONARY.value]:
-            with torch.no_grad():
-                cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
-                drift = 1.0 - cos_sim.item()
-                if self.drift_warn > 0 and drift > self.drift_warn:
-                    logging.warning("High drift %.4f at %s (%s)", drift, self.seed_id, self.state)
-                self.seed_manager.record_drift(self.seed_id, drift)
-                
-        return output
-
     # ------------------------------------------------------------------
     def _set_state(self, new_state: str | SeedState, epoch: int | None = None):
         """Set the seed state, validating against allowed transitions."""
@@ -146,14 +99,11 @@ class SentinelSeed(nn.Module):
         elif new_state == SeedState.CULLED:
             info["status"] = "culled"
 
-        # Use provided epoch or get the last known one for the record.
-        current_epoch = epoch if epoch is not None else info.get('last_epoch', 0)
-        
-        # Specifically record the culling epoch when a seed is culled.
-        if new_state == SeedState.CULLED:
-            info["culling_epoch"] = current_epoch
+        # If epoch is not provided, try to get it from the seed's own record
+        if epoch is None:
+            epoch = info.get('last_epoch', 0)
             
-        self.seed_manager.record_transition(self.seed_id, old_state, new_state.value, epoch=current_epoch)
+        self.seed_manager.record_transition(self.seed_id, old_state, new_state.value, epoch=epoch)
 
     def _initialize_as_identity(self):
         """Initialize to near-zero output (identity function)"""
@@ -189,87 +139,86 @@ class SentinelSeed(nn.Module):
         self.seed_manager.seeds[self.seed_id]["current_loss"] = None
         self.seed_manager.seeds[self.seed_id]["training_steps"] = 0
         
-        # Create a local train/val split from the seed's buffer for early stopping
-        self.create_train_val_split()
-
         # Only transition to GERMINATED state (parking lot)
         # The seed will transition to TRAINING when training starts
         self._set_state(SeedState.GERMINATED, epoch=epoch)
 
+    # ------------------------------------------------------------------
     def train_child_step(self, inputs: torch.Tensor, epoch: int | None = None):
-        """
-        Per-step: Train the child network for one step and record metrics.
-        DOES NOT change the state.
-        """
+        """Train the child network on input data when in training state."""
         if self.state != SeedState.TRAINING.value or inputs.numel() == 0:
             return
+        
+        # Safety check: optimizer must exist for training
         if self.child_optim is None:
-            raise RuntimeError("Optimizer not initialized.")
-        inputs = inputs.detach()
+            raise RuntimeError(f"Seed {self.seed_id} is in TRAINING state but optimizer is None. Call initialize_child() first.")
+        
+        inputs = inputs.detach()  # block trunk grads
+
         self.child_optim.zero_grad(set_to_none=True)
         outputs = self.child(inputs)
         loss = self.child_loss(outputs, inputs)
         loss.backward()
+        
+        # Calculate and store gradient norm before optimizer step
+        total_norm = 0.0
+        param_count = 0
+        for p in self.child.parameters():
+            if p.grad is not None:
+                total_norm += p.grad.data.norm(2).item() ** 2
+                param_count += 1
+        current_grad_norm = (total_norm**0.5) if param_count > 0 else 0.0
+        
         self.child_optim.step()
+
+        # Track loss and gradient norm for performance evaluation
         current_loss = loss.item()
         seed_info = self.seed_manager.seeds[self.seed_id]
+        
+        # Set baseline on first training step
         if seed_info["baseline_loss"] is None:
             seed_info["baseline_loss"] = current_loss
+        
         seed_info["current_loss"] = current_loss
+        seed_info["gradient_norm"] = current_grad_norm
         seed_info["training_steps"] += 1
+
+        # Track loss history for convergence detection
         self.loss_history.append(current_loss)
-        # All state transition logic has been REMOVED from this method.
-
-    def create_train_val_split(self, split_ratio: float = 0.8):
-        """Create train/validation split from seed's data buffer to prevent overfitting."""
-        seed_info = self.seed_manager.seeds[self.seed_id]
-        buffer = seed_info.get("buffer")
-        if not buffer or len(buffer) < 10:
-            # Not enough data to create a meaningful split
-            seed_info["train_indices"] = None
-            seed_info["val_indices"] = None
-            seed_info["best_val_loss"] = float('inf')
-            seed_info["val_patience_counter"] = 0
-            seed_info["val_patience_limit"] = 10 # Default patience
-            return
-
-        buffer_data = torch.cat(list(buffer), dim=0)
-        buffer_size = len(buffer_data)
-        indices = torch.randperm(buffer_size)
-        train_size = int(buffer_size * split_ratio)
-
-        seed_info["train_indices"] = indices[:train_size]
-        seed_info["val_indices"] = indices[train_size:]
-        seed_info["best_val_loss"] = float('inf')
-        seed_info["val_patience_counter"] = 0
-        seed_info["val_patience_limit"] = 10 # Default patience
-
-    def validate_on_holdout(self) -> float:
-        """Evaluate the child network on its local validation data to check for overfitting."""
-        seed_info = self.seed_manager.seeds[self.seed_id]
-        val_indices = seed_info.get("val_indices")
-        buffer = seed_info.get("buffer")
-
-        # If there's no validation set, return the last known training loss to avoid breaking logic.
-        if val_indices is None or buffer is None or len(val_indices) == 0 or len(buffer) == 0:
-            return seed_info.get("current_loss", float('inf'))
-
-        buffer_data = torch.cat(list(buffer), dim=0)
         
-        # Ensure indices are within the current buffer's bounds
-        valid_val_indices = val_indices[val_indices < len(buffer_data)]
-        if len(valid_val_indices) == 0:
-            return seed_info.get("current_loss", float('inf'))
-
-        # Use a small, random sample from the validation set for efficiency
-        val_batch_indices = valid_val_indices[torch.randperm(len(valid_val_indices))[:min(32, len(valid_val_indices))]]
-        val_batch = buffer_data[val_batch_indices]
+        # Keep loss history manageable (2x convergence window)
+        if len(self.loss_history) > self.convergence_window * 2:
+            self.loss_history.pop(0)
         
-        # Use the main evaluation method to get the loss on this validation batch
-        return self.evaluate_loss(val_batch)
+        # Early stopping check every few steps to prevent overfitting
+        if seed_info["training_steps"] % 5 == 0:  # Check every 5 steps
+            # Simple overfitting detection: if loss is extremely low but not improving
+            recent_losses = self.loss_history[-5:] if len(self.loss_history) >= 5 else self.loss_history
+            if len(recent_losses) >= 3:
+                avg_recent_loss = sum(recent_losses) / len(recent_losses)
+                
+                # If loss is very low (potential overfitting) and convergence detected, transition early
+                if avg_recent_loss < 0.001 and self.check_convergence():
+                    self._set_state(SeedState.BLENDING, epoch=epoch)
+                    self.alpha = 0.0
+                    return
+        
+        # Alpha remains 0 during training - only increases during blending
+        if self.state == SeedState.TRAINING.value:
+            self.alpha = 0.0  # Keep at 0 during training
+        
+        # Check for convergence and transition to blending if training has converged
+        if self.check_convergence():
+            self._set_state(SeedState.BLENDING, epoch=epoch)
+            # Start blending with alpha at 0
+            self.alpha = 0.0
+        
+        # Always sync alpha and training_steps to seed manager dict
+        seed_info["alpha"] = self.alpha
+        seed_info["training_steps"] = seed_info.get("training_steps", 0)  # Ensure key exists
 
     def evaluate_loss(self, inputs: torch.Tensor) -> float:
-        """Evaluate current loss without training (for validation or stability checks)."""
+        """Evaluate current loss without training (for validation phases)."""
         if inputs.numel() == 0:
             return 0.0
             
@@ -292,6 +241,10 @@ class SentinelSeed(nn.Module):
         if self.state == SeedState.BLENDING.value:
             self.alpha = min(1.0, self.alpha + 1 / self.blend_steps)
             self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
+                
+            if self.alpha >= 0.99:
+                # Blending complete - transition to shadowing phase
+                self._set_state(SeedState.SHADOWING, epoch=epoch)
 
     def update_shadowing(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
         """Stage 1 validation - monitor for internal stability during shadowing phase."""
@@ -319,6 +272,20 @@ class SentinelSeed(nn.Module):
             if len(seed_info["stability_history"]) > 20:
                 seed_info["stability_history"].pop(0)
             
+            # Require minimum steps AND stability before advancing
+            min_shadowing_steps = self.probationary_steps // 2  # e.g., 25 steps
+            if seed_info["shadowing_steps"] >= min_shadowing_steps:
+                # Check stability: loss should be relatively stable
+                if len(seed_info["stability_history"]) >= 10:
+                    recent_losses = seed_info["stability_history"][-10:]
+                    loss_variance = sum((x - sum(recent_losses)/len(recent_losses))**2 for x in recent_losses) / len(recent_losses)
+                    
+                    # Only advance if loss is stable (low variance)
+                    if loss_variance < 0.01:  # Configurable stability threshold
+                        self._set_state(SeedState.PROBATIONARY, epoch=epoch)
+                        # Reset counter for probationary phase  
+                        seed_info["probationary_steps"] = 0
+
     def update_probationary(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
         """Stage 2 validation - monitor for systemic impact during probationary period."""
         if self.state == SeedState.PROBATIONARY.value:
@@ -334,127 +301,193 @@ class SentinelSeed(nn.Module):
             # Update loss metrics for final evaluation
             if inputs is not None:
                 self.evaluate_loss(inputs)
+            
+            # Require minimum observation period for systemic impact assessment
+            min_probationary_steps = self.probationary_steps  # e.g., 50 steps
+            if seed_info["probationary_steps"] >= min_probationary_steps:
+                # In a real implementation, this would check global performance metrics
+                # For now, we'll use a simple success criteria
+                self._evaluate_and_complete(epoch)
 
-    def _handle_training_transition(self, seed_info: dict, epoch: int | None):
-        """Handles the transition logic for a seed in the TRAINING state."""
-        # --- Early Stopping Check ---
-        current_val_loss = self.validate_on_holdout()
-        if current_val_loss < seed_info.get("best_val_loss", float('inf')):
-            seed_info["best_val_loss"] = current_val_loss
-            seed_info["val_patience_counter"] = 0
-        else:
-            seed_info["val_patience_counter"] += 1
+    def update_state(self, epoch: int | None = None):
+        """Update the seed's state based on its current metrics and progress."""
+        # This method is called by KasminaMicro to assess and potentially update state
+        # For now, we'll implement basic state transitions based on existing logic
 
-        # Transition if validation loss stagnates (early stopping)
-        if seed_info.get("val_patience_counter", 0) >= seed_info.get("val_patience_limit", 10):
-            logging.warning(f"Early stopping for {self.seed_id} at epoch {epoch} due to validation loss.")
-            self._set_state(SeedState.BLENDING, epoch=epoch)
-        # Transition if training loss converges
-        elif self.check_convergence():
-            logging.info(f"Convergence detected for {self.seed_id} at epoch {epoch}.")
-            self._set_state(SeedState.BLENDING, epoch=epoch)
+        # Update metrics in seed manager
+        self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
 
-    def _handle_blending_transition(self, epoch: int | None):
-        """Handles the transition logic for a seed in the BLENDING state."""
-        if self.alpha >= 0.99:
-            self._set_state(SeedState.SHADOWING, epoch=epoch)
+    def get_gradient_norm(self) -> float:
+        """Get the gradient norm for this seed's parameters."""
+        if self.state in [SeedState.DORMANT.value]:
+            return 0.0
 
-    def _handle_shadowing_transition(self, seed_info: dict, epoch: int | None):
-        """Handles the transition logic for a seed in the SHADOWING state."""
-        min_shadowing_steps = self.probationary_steps // 2
-        if seed_info.get("shadowing_steps", 0) < min_shadowing_steps:
-            return
-
-        stability_history = seed_info.get("stability_history", [])
-        if len(stability_history) < 10:
-            return
-
-        recent_losses = stability_history[-10:]
-        loss_variance = torch.tensor(recent_losses).var().item()
-        # Only advance if loss is stable (low variance)
-        if loss_variance < 0.01:  # Configurable stability threshold
-            self._set_state(SeedState.PROBATIONARY, epoch=epoch)
-            seed_info["probationary_steps"] = 0 # Reset for next phase
-
-    def _handle_probationary_transition(self, seed_info: dict, epoch: int | None):
-        """Handles the transition logic for a seed in the PROBATIONARY state."""
-        if seed_info.get("probationary_steps", 0) >= self.probationary_steps:
-            self._evaluate_and_complete(epoch)
-
-    def assess_and_transition_state(self, epoch: int | None = None):
-        """
-        Checks if the seed should transition to a new state.
-        This method contains all primary lifecycle transition logic and should be
-        called once per epoch, after per-step updates are complete.
-        It ensures at most one transition occurs per invocation.
-        """
+        # Return the stored gradient norm from the last training step
         seed_info = self.seed_manager.seeds[self.seed_id]
+        return seed_info.get("gradient_norm", 0.0)
 
-        match self.state:
-            case SeedState.TRAINING.value:
-                self._handle_training_transition(seed_info, epoch)
-            case SeedState.BLENDING.value:
-                self._handle_blending_transition(epoch)
-            case SeedState.SHADOWING.value:
-                self._handle_shadowing_transition(seed_info, epoch)
-            case SeedState.PROBATIONARY.value:
-                self._handle_probationary_transition(seed_info, epoch)
-            case _:
-                # No transitions for other states (DORMANT, FOSSILIZED, CULLED)
-                pass
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the sentinel seed."""
 
-    def check_convergence(self) -> bool:
-        """Checks if the training loss has converged."""
-        if len(self.loss_history) < self.convergence_window:
-            return False
+        # Buffer activations for dormant seeds to gauge health
+        if self.state == SeedState.DORMANT.value:
+            self.seed_manager.append_to_buffer(self.seed_id, x)
+            return x
+
+        # For culled or pre-training seeds, act as an identity function.
+        # TRAINING seeds train on the buffer, not in the forward pass.
+        if self.state in [
+            SeedState.CULLED.value,
+            SeedState.GERMINATED.value,
+            SeedState.TRAINING.value,
+        ]:
+            return x
+
+        # For blending state, gradually mix input with child output
+        if self.state == SeedState.BLENDING.value:
+            child_out = self.child(x)
+            output = (1 - self.alpha) * x + self.alpha * child_out
+            
+        # For shadowing state, return input unmodified (inert validation)
+        elif self.state == SeedState.SHADOWING.value:
+            return x
+            
+        # For probationary and fossilized states, apply child network additively
+        elif self.state in [SeedState.PROBATIONARY.value, SeedState.FOSSILIZED.value]:
+            child_out = self.child(x)
+            output = x + child_out
+        else:
+            # Default case - should not reach here
+            return x
+
+        # Monitor drift for active states only
+        if self.state in [SeedState.BLENDING.value, SeedState.PROBATIONARY.value]:
+            with torch.no_grad():
+                cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
+                drift = 1.0 - cos_sim.item()
+                # only warn during blending and probationary periods
+                if drift > self.drift_warn > 0:
+                    logging.warning("High drift %.4f at %s (%s)", drift, self.seed_id, self.state)
+            # always record drift for telemetry
+            self.seed_manager.record_drift(self.seed_id, drift)
+            
+        return output
+
+    def get_health_signal(self) -> float:
+        """Health signal = activation variance (LOWER = worse bottleneck)"""
+        buffer = self.seed_manager.seeds[self.seed_id]["buffer"]
+        if len(buffer) < 10:  # Need sufficient samples
+            return float("inf")  # Return worst possible signal if insufficient data
+
+        # Calculate variance across all buffered activations
+        return torch.var(torch.cat(list(buffer)), dim=0).mean().item()
+
+    def _evaluate_and_complete(self, epoch: int | None = None):
+        """Evaluate seed performance and transition to final state (fossilized or culled)."""
+        # Get performance metrics
+        baseline_loss = self.seed_manager.seeds[self.seed_id].get("baseline_loss")
+        current_loss = self.seed_manager.seeds[self.seed_id].get("current_loss") 
         
-        recent_losses = self.loss_history[-self.convergence_window:]
-        loss_tensor = torch.tensor(recent_losses)
+        # If we don't have baseline, assume improvement and fossilize
+        if baseline_loss is None:
+            self._fossilize_seed(epoch)
+            return
+            
+        # Calculate improvement
+        improvement = baseline_loss - current_loss if current_loss else 0
+        improvement_threshold = 0.01  # Minimum improvement required
         
-        # Check for reduction in loss (ensures it's not stuck at a high value)
-        if (loss_tensor.mean() > self.convergence_threshold * 10): # Avoid premature convergence at high loss
-             return False
+        if improvement > improvement_threshold:
+            self._fossilize_seed(epoch)
+        else:
+            self._cull_seed(epoch)
+    
+    def _fossilize_seed(self, epoch: int | None = None):
+        """Permanently integrate the seed into the parent network (grafting)."""
+        self._set_state(SeedState.FOSSILIZED, epoch=epoch)
+        
+        # Log the fossilization event
+        if hasattr(self.seed_manager, 'logger') and self.seed_manager.logger:
+            self.seed_manager.logger.log_seed_event_detailed(
+                epoch=epoch or 0,
+                event_type="FOSSILIZATION",
+                message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} fossilized!",
+                data={"seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}", "improvement": True}
+            )
+        
+        # Graft the trained network into the parent permanently
+        # In a full implementation, this would modify the parent network architecture
+        # to replace the sentinel seed with the trained child network
+        self._graft_into_parent()
+        
+        # Save the modified model
+        parent = self.parent_net_ref()
+        if parent:
+            parent.save_grafted_model()
+        
+        # Start training the next seed in the queue
+        self.seed_manager.start_training_next_seed()
+        
+    def _graft_into_parent(self):
+        """Physically replaces this seed with its trained child in the parent network."""
+        parent = self.parent_net_ref()
+        if not parent:
+            logging.warning("Cannot graft seed: parent_net reference not found.")
+            return
 
-        # Check for low variance (stability)
-        variance = loss_tensor.var()
-        return variance < self.convergence_threshold
+        # 1. Create the permanent, grafted module
+        # The child network is already trained and will be frozen.
+        for p in self.child.parameters():
+            p.requires_grad = False
+        grafted_module = GraftedChild(self.child)
 
+        # 2. Instruct the parent network to replace this seed
+        parent.replace_seed(self.seed_id, grafted_module)
+        
     def _cull_seed(self, epoch: int | None = None):
-        """Marks the seed as CULLED, records the epoch, freezes the child, and advances the training queue."""
+        """Remove the seed due to poor performance."""
         self._set_state(SeedState.CULLED, epoch=epoch)
+        
+        # Log the culling event
+        if hasattr(self.seed_manager, 'logger') and self.seed_manager.logger:
+            self.seed_manager.logger.log_seed_event_detailed(
+                epoch=epoch or 0,
+                event_type="CULLING", 
+                message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} culled!",
+                data={"seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}", "improvement": False}
+            )
+        
+        # Deactivate the seed - set alpha to 0 so it has no effect
+        self.alpha = 0.0
+        self.seed_manager.seeds[self.seed_id]["alpha"] = 0.0
         
         # Freeze parameters to save computation
         for p in self.child.parameters():
             p.requires_grad = False
-        
-        # Log the culling event for the embargo mechanism
-        self.seed_manager.seeds[self.seed_id]["culling_epoch"] = epoch
-        
-        logging.info(f"Seed {self.seed_id} culled at epoch {epoch}. Embargo started.")
-        
-        # IMPORTANT: Allow the next seed in the queue to start training immediately
+            
+        # Start training the next seed in the queue
         self.seed_manager.start_training_next_seed()
 
-    def _evaluate_and_complete(self, epoch: int | None = None):
-        """Final evaluation to decide between Fossilization and Culling."""
-        seed_info = self.seed_manager.seeds[self.seed_id]
+    def check_convergence(self) -> bool:
+        """Check if the loss has converged using standard deviation of recent losses.
         
-        # Use the holdout validation loss for the final decision
-        final_val_loss = self.validate_on_holdout()
-        baseline_loss = seed_info.get("baseline_loss")
-
-        # Ensure baseline_loss is valid before comparison
-        if baseline_loss is None or not isinstance(baseline_loss, (int, float)):
-             logging.warning(f"Seed {self.seed_id}: No valid baseline loss recorded. Defaulting to CULL.")
-             self._cull_seed(epoch=epoch)
-             return
-
-        # Fossilize if the new component provides a significant improvement
-        # Use a relative improvement threshold
-        if final_val_loss < baseline_loss * 0.95: # e.g., 5% improvement
-            self._set_state(SeedState.FOSSILIZED, epoch=epoch)
-        else:
-            self._cull_seed(epoch=epoch)
+        Returns:
+            True if loss has converged (low variance) and training should move to blending phase
+        """
+        if len(self.loss_history) < self.convergence_window:
+            return False
+            
+        # Calculate standard deviation of recent losses for stability check
+        recent_losses = self.loss_history[-self.convergence_window:]
+        loss_tensor = torch.tensor(recent_losses, dtype=torch.float32)
+        stdev = torch.std(loss_tensor, dim=0).item()
+        
+        # Also check that we have a reasonable minimum number of training steps
+        # to avoid premature convergence on easy initialization
+        min_training_steps = max(20, self.convergence_window * 2)
+        has_enough_steps = len(self.loss_history) >= min_training_steps
+        
+        return stdev < self.convergence_threshold and has_enough_steps
 
 
 class GraftedChild(nn.Module):
@@ -490,7 +523,6 @@ class BaseNet(nn.Module):
         num_layers: int = 8,
         seeds_per_layer: int = 1,
         blend_steps: int = 30,
-        probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.1,
     ):
@@ -513,13 +545,6 @@ class BaseNet(nn.Module):
         self.hidden_dim = hidden_dim
         self.input_dim = input_dim
         self.output_dim = output_dim
-
-        # Store seed creation parameters for replacing culled seeds
-        self.seed_manager_ref = seed_manager
-        self.seed_blend_steps = blend_steps
-        self.seed_probationary_steps = probationary_steps
-        self.seed_shadow_lr = shadow_lr
-        self.seed_drift_warn = drift_warn
 
         # Create input layer
         self.input_layer = nn.Linear(input_dim, hidden_dim)
@@ -544,7 +569,6 @@ class BaseNet(nn.Module):
                     seed_manager,
                     parent_net=self,  # Pass a reference to the parent network
                     blend_steps=blend_steps,
-                    probationary_steps=probationary_steps,
                     shadow_lr=shadow_lr,
                     drift_warn=drift_warn,
                 )
@@ -571,35 +595,6 @@ class BaseNet(nn.Module):
         # Perform the physical replacement in the ModuleList
         self.all_seeds[flat_idx] = new_module
         logging.info(f"Seed {seed_id} physically replaced in the network graph.")
-
-    def reset_culled_seed(self, seed_id: tuple[int, int]):
-        """
-        Replaces a culled seed at a specific ID with a new, dormant one.
-        """
-        layer_idx, seed_idx_in_layer = seed_id
-        flat_idx = layer_idx * self.seeds_per_layer + seed_idx_in_layer
-
-        if flat_idx < 0 or flat_idx >= len(self.all_seeds):
-            logging.error(f"Cannot reset seed: index {flat_idx} for ID {seed_id} is out of bounds.")
-            return
-
-        # Create a new seed with the original configuration
-        new_seed = SentinelSeed(
-            seed_id=seed_id,
-            dim=self.hidden_dim,
-            seed_manager=self.seed_manager_ref,
-            parent_net=self,
-            blend_steps=self.seed_blend_steps,
-            probationary_steps=self.seed_probationary_steps,
-            shadow_lr=self.seed_shadow_lr,
-            drift_warn=self.seed_drift_warn,
-        )
-
-        # The old seed module is replaced in the network's ModuleList.
-        # The new seed's __init__ will handle re-registering with the SeedManager,
-        # overwriting the old entry for that seed_id.
-        self.all_seeds[flat_idx] = new_seed
-        logging.info(f"Culled seed {seed_id} has been replaced with a new dormant seed.")
 
     def save_grafted_model(self, path: str = "grafted_model.pth"):
         """Saves the state dictionary of the modified network."""
@@ -666,3 +661,61 @@ class BaseNet(nn.Module):
         return self.out(x)
 
     # ------------------------------------------------------------------
+    def create_train_val_split(self, split_ratio: float = 0.8):
+        """Create train/validation split from seed's data buffer to prevent overfitting.
+        
+        Args:
+            split_ratio: Fraction of data to use for training (rest for validation)
+        """
+        seed_info = self.seed_manager.seeds[self.seed_id]
+        
+        # Get the seed's data buffer (if it exists)
+        if "data_buffer" not in seed_info or seed_info["data_buffer"] is None:
+            # No buffer yet - will be created when data flows through
+            return
+            
+        buffer_data = seed_info["data_buffer"]
+        buffer_size = len(buffer_data)
+        
+        if buffer_size < 10:  # Need minimum data for meaningful split
+            return
+            
+        # Create random split indices
+        indices = torch.randperm(buffer_size)
+        train_size = int(buffer_size * split_ratio)
+        
+        train_indices = indices[:train_size]
+        val_indices = indices[train_size:]
+        
+        # Store split indices for later use
+        seed_info["train_indices"] = train_indices
+        seed_info["val_indices"] = val_indices
+        seed_info["best_val_loss"] = float('inf')
+        seed_info["val_patience_counter"] = 0
+        seed_info["val_patience_limit"] = 10  # Stop if validation doesn't improve for 10 steps
+
+    def validate_on_holdout(self) -> float:
+        """Evaluate the child network on validation data to check for overfitting.
+        
+        Returns:
+            Validation loss, or current training loss if no validation data available
+        """
+        seed_info = self.seed_manager.seeds[self.seed_id]
+        
+        # Check if we have validation split
+        if "val_indices" not in seed_info or seed_info["data_buffer"] is None:
+            # No validation data - return current training loss
+            return seed_info.get("current_loss", float('inf'))
+        
+        val_indices = seed_info["val_indices"]
+        buffer_data = seed_info["data_buffer"]
+        
+        if len(val_indices) == 0:
+            return seed_info.get("current_loss", float('inf'))
+        
+        # Sample validation batch
+        val_batch_indices = val_indices[torch.randperm(len(val_indices))[:min(8, len(val_indices))]]
+        val_batch = buffer_data[val_batch_indices]
+        
+        # Evaluate on validation data
+        return self.evaluate_loss(val_batch)

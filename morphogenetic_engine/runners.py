@@ -261,11 +261,18 @@ def run_experiment(args: Dict[str, Any]):
                 config["input_shape"] = input_shape
 
                 # --- Model and Agent Initialization ---
-                model, seed_manager, karn, tamiyo = build_model_and_agents(
-                    **config,
-                    logger=logger,
-                    tb_writer=tb_writer,
-                )
+                logger.log_info("Building model and agents...")
+                try:
+                    # Unpack the argparse namespace and pass infrastructure objects
+                    model, seed_manager, _, tamiyo = build_model_and_agents(
+                        **vars(args),
+                        logger=logger,
+                        tb_writer=tb_writer,
+                    )
+                except Exception as e:
+                    logger.log_error(f"Error during model and agent initialization: {e}")
+                    raise
+
                 model.to(device)
 
                 # --- Training Phases ---
@@ -286,7 +293,6 @@ def run_experiment(args: Dict[str, Any]):
                 final_metrics = execute_phase_2(
                     model=model,
                     seed_manager=seed_manager,
-                    karn=karn,
                     tamiyo=tamiyo,
                     train_loader=train_loader,
                     val_loader=val_loader,
