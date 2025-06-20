@@ -389,6 +389,13 @@ class RichDashboard:
             border_style="green",
         )
 
+    def _sort_seed_id_key(self, seed_id: str | tuple) -> tuple[int, int]:
+        """Convert a seed ID (string like 'L1_S2' or tuple (1, 2)) into a sortable tuple."""
+        parsed = self._parse_seed_id(seed_id)
+        if parsed[0] is not None and parsed[1] is not None:
+            return (parsed[0], parsed[1])
+        return (9999, 9999)  # Place unparseable IDs at the end
+
     def _create_seeds_training_table(self) -> Table:
         """Generate the table for detailed seed training metrics."""
         table = Table(show_header=True, header_style="bold yellow", expand=True)
@@ -398,8 +405,8 @@ class RichDashboard:
         table.add_column("∇ Norm", justify="right", style="yellow")
         table.add_column("Pat.", justify="right", style="dim")
 
-        # Sort seeds for stable display order
-        sorted_seed_ids = sorted(self.seed_states.keys())
+        # Sort seeds for stable display order, handling string keys
+        sorted_seed_ids = sorted(self.seed_states.keys(), key=self._sort_seed_id_key)
 
         for seed_id in sorted_seed_ids:
             data = self.seed_states[seed_id]
@@ -413,11 +420,8 @@ class RichDashboard:
             grad_norm = data.get("grad_norm")
             patience = data.get("patience")
 
-            # Convert tuple seed_id back to string for display
-            seed_id_str = f"L{seed_id[0]}_S{seed_id[1]}"
-
             table.add_row(
-                seed_id_str,
+                seed_id,
                 state_str,
                 f"{alpha:.3f}",
                 f"{grad_norm:.2e}" if grad_norm is not None else "N/A",
@@ -516,14 +520,15 @@ class RichDashboard:
 
     def _create_seed_legend_panel(self) -> Panel:
         """Generate the legend for the seed box."""
-        legend_text = Text.from_markup(
-            f"{self.SEED_EMOJI_MAP[SeedState.ACTIVE]} Active  "
-            f"{self.SEED_EMOJI_MAP[SeedState.BLENDING]} Blending  "
-            f"{self.SEED_EMOJI_MAP[SeedState.GERMINATED]} Germinated  "
-            f"{self.SEED_EMOJI_MAP[SeedState.DORMANT]} Dormant  "
-            f"{self.SEED_EMOJI_MAP[SeedState.FOSSILIZED]} Fossilized  "
-            f"{self.EMPTY_CELL_EMOJI} Empty"
-        )
+        legend_parts = [
+            f"{self.SEED_EMOJI_MAP[SeedState.ACTIVE]} Active",
+            f"{self.SEED_EMOJI_MAP[SeedState.BLENDING]} Blending",
+            f"{self.SEED_EMOJI_MAP[SeedState.GERMINATED]} Germinated",
+            f"{self.SEED_EMOJI_MAP[SeedState.DORMANT]} Dormant",
+            f"{self.SEED_EMOJI_MAP[SeedState.FOSSILIZED]} Fossilized",
+            f"{self.EMPTY_CELL_EMOJI} Empty",
+        ]
+        legend_text = Text("  ".join(legend_parts))
         return Panel(
             Align.center(legend_text),
             box=box.MINIMAL,
@@ -534,13 +539,14 @@ class RichDashboard:
 
     def _create_strain_legend_panel(self) -> Panel:
         """Generate the legend for the network strain."""
-        legend_text = Text.from_markup(
-            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.NONE]} None  "
-            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.LOW]} Low  "
-            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.MEDIUM]} Medium  "
-            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.HIGH]} High  "
-            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.FIRED]} Fired"
-        )
+        legend_parts = [
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.NONE]} None",
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.LOW]} Low",
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.MEDIUM]} Medium",
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.HIGH]} High",
+            f"{self.STRAIN_EMOJI_MAP[NetworkStrain.FIRED]} Fired",
+        ]
+        legend_text = Text("  ".join(legend_parts))
         return Panel(
             Align.center(legend_text),
             box=box.MINIMAL,
@@ -579,6 +585,14 @@ class RichDashboard:
 
     def update_progress(self, epoch: int, metrics: dict[str, Any]):
         """Handle epoch progress event and update progress bars."""
+        if epoch < 0:
+            self.add_live_event("error", "Invalid epoch value", {"epoch": epoch})
+            return
+
+        #if not isinstance(metrics, dict):
+        #    self.add_live_event("error", "Invalid metrics data type", {"type": type(metrics).__name__})
+        #    return
+
         # Update total progress
         self.total_progress.update(self.total_task, completed=epoch + 1)
 
@@ -604,8 +618,8 @@ class RichDashboard:
 
     def update_seed(
         self,
-        seed_id: str,
-        state: SeedState,
+        seed_id: str | tuple,
+        state: SeedState | str,
         alpha: float = 0.0,
         from_state: str = "unknown",
         activation_epoch: int | None = None,
@@ -613,21 +627,40 @@ class RichDashboard:
         weight_norm: float | None = None,
         patience: int | None = None,
     ):
-        """Update the state and metrics of a single seed."""
+        """Update the state and metrics of a single seed, normalizing the ID."""
+
+        # Normalize seed_id to string representation
+        if isinstance(seed_id, tuple):
+            seed_id = f"L{seed_id[0]}_S{seed_id[1]}"
+
+        if not isinstance(seed_id, str) or not seed_id:
+            self.add_live_event("error", "Invalid seed_id", {"seed_id": seed_id})
+            return
+
+        # Normalize state from string to enum
+        if isinstance(state, str):
+            try:
+                state = SeedState[state.upper()]
+            except KeyError:
+                self.add_live_event(
+                    "error", f"Invalid seed state value: '{state}'", {"seed_id": seed_id}
+                )
+                return
+
         if seed_id not in self.seed_states:
             self.seed_states[seed_id] = {}
 
-        # Store the raw enum member
+        # Store the raw enum member and validated metrics
         self.seed_states[seed_id]["state"] = state
-        self.seed_states[seed_id]["alpha"] = alpha
+        self.seed_states[seed_id]["alpha"] = float(alpha)
         if activation_epoch is not None:
-            self.seed_states[seed_id]["activation_epoch"] = activation_epoch
+            self.seed_states[seed_id]["activation_epoch"] = int(activation_epoch)
         if grad_norm is not None:
-            self.seed_states[seed_id]["grad_norm"] = grad_norm
+            self.seed_states[seed_id]["grad_norm"] = float(grad_norm)
         if weight_norm is not None:
-            self.seed_states[seed_id]["weight_norm"] = weight_norm
+            self.seed_states[seed_id]["weight_norm"] = float(weight_norm)
         if patience is not None:
-            self.seed_states[seed_id]["patience"] = patience
+            self.seed_states[seed_id]["patience"] = int(patience)
 
         # The from_state is for logging, can remain a string
         message = f"Seed {seed_id} changed from {from_state} to {state.name}"
@@ -657,11 +690,25 @@ class RichDashboard:
         self.add_seed_log_event("germination", f"Seed {seed_id[:12]}... germinated!", {"epoch": epoch})
 
     def start(self):
-        """Start the live dashboard display."""
-        if not self.live:
+        """Start the live dashboard display, with error handling."""
+        if self.live:
+            return
+        try:
             self._setup_layout()
-            self.live = Live(self.layout, console=self.console, screen=True, auto_refresh=True)
-            self.live.start()
+            if self.layout:
+                self.live = Live(
+                    self.layout,
+                    console=self.console,
+                    screen=True,
+                    auto_refresh=True,
+                )
+                self.live.start()
+        except (Exception, KeyboardInterrupt):
+            # If start fails, ensure we stop to restore the terminal.
+            if self.live:
+                self.live.stop()
+            # Re-raise the exception to not swallow it.
+            raise
 
     def stop(self):
         """Stop the live dashboard display."""
@@ -678,6 +725,8 @@ class RichDashboard:
 
     def update_grid_view(self, payload: NetworkStrainGridUpdatePayload) -> None:
         """Receives a grid update and refreshes the view."""
+        if not self.layout:
+            return
         num_layers = self.experiment_params.get("num_layers", 8)
         seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
         grid_table = self._create_grid_table(
@@ -692,6 +741,8 @@ class RichDashboard:
 
     def update_seeds_view(self, payload: SeedStateUpdatePayload) -> None:
         """Receives a seed state update and refreshes the view."""
+        if not self.layout:
+            return
         num_layers = self.experiment_params.get("num_layers", 8)
         seeds_per_layer = self.experiment_params.get("seeds_per_layer", 1)
         grid_table = self._create_grid_table(
@@ -703,87 +754,3 @@ class RichDashboard:
             border_style="green",
         )
         self.layout["seed_box_panel"].update(panel)
-
-
-def demo_dashboard():
-    """Demo function to showcase the dashboard's new layout."""
-    console = Console()
-    params = {
-        "epochs": 200,
-        "num_layers": 5,
-        "seeds_per_layer": 8,  # Match the grid columns
-        "problem_type": "spirals",
-        "n_samples": 1000,
-        "input_dim": 3,
-        "learning_rate": 0.001,
-        "seed": 42,
-    }
-    num_layers: int = cast(int, params.get("num_layers", 0))
-    seeds_per_layer: int = cast(int, params.get("seeds_per_layer", 0))
-    print("Starting dashboard demo...")
-    with RichDashboard(console, experiment_params=params) as dashboard:
-        dashboard.add_live_event("INFO", "Dashboard Initialized", {"run_id": "demo_run_123"})
-        time.sleep(1)
-
-        # --- Phase 1: Seeding and Initial Training ---
-        dashboard.show_phase_transition("SEEDING", 0, total_epochs=50)
-        for i in range(50):
-            dashboard.update_progress(i, {"train_loss": 1.0 - i * 0.01, "val_acc": 0.5 + i * 0.005})
-            if i < num_layers * seeds_per_layer:
-                layer = i // seeds_per_layer
-                seed_idx = i % seeds_per_layer
-                if layer < num_layers:
-                    seed_id = f"L{layer}_S{seed_idx}"
-                    dashboard.update_seed(seed_id, "dormant")
-            time.sleep(0.02)
-        dashboard.add_live_event("INFO", "Seeding complete", {"seeded_count": 40})
-
-        # --- Phase 2: Activation and Blending ---
-        dashboard.show_phase_transition("ACTIVATION", 50, from_phase="SEEDING", total_epochs=50)
-        time.sleep(1)
-        # Activate some seeds
-        for i in range(4):
-            dashboard.update_seed(f"L{i}_S{i}", "active", from_state="dormant")
-            dashboard.add_seed_log_event("activation", f"Seed L{i}_S{i} activated.", {"epoch": 50 + i})
-            time.sleep(0.2)
-
-        # Blend a seed
-        dashboard.update_seed("L1_S1", "blending", from_state="active", alpha=0.3)
-        dashboard.add_seed_log_event("blending", "Seed L1_S1 starts blending.", {"alpha": 0.3})
-        time.sleep(0.5)
-
-        for i in range(50, 100):
-            dashboard.update_progress(i, {"train_loss": 0.5 - (i - 50) * 0.008, "val_acc": 0.7 + (i - 50) * 0.003})
-            if i == 75:
-                dashboard.update_seed("L1_S1", "blending", from_state="blending", alpha=0.8)
-                dashboard.add_seed_log_event("blending", "Seed L1_S1 blend factor increased.", {"alpha": 0.8})
-            time.sleep(0.02)
-
-        # --- Phase 3: Germination and Pruning ---
-        dashboard.show_phase_transition("EVOLUTION", 100, from_phase="ACTIVATION", total_epochs=100)
-        time.sleep(1)
-
-        # Germinate a seed
-        dashboard.update_seed("L1_S1", "germinated", from_state="blending")
-        dashboard.show_germination_event("L1_S1", epoch=101)  # Specific event for seed log
-        time.sleep(0.5)
-
-        # Prune a seed
-        dashboard.update_seed("L3_S3", "pruned", from_state="active")
-        dashboard.add_seed_log_event("pruning", "Seed L3_S3 pruned due to low performance.", {"reason": "low_val_acc"})
-        time.sleep(0.5)
-
-        # A seed fails
-        dashboard.update_seed("L0_S0", "failed", from_state="active")
-        dashboard.add_seed_log_event("error", "Seed L0_S0 failed during update.", {"details": "NaN loss detected"})
-        time.sleep(0.5)
-
-        for i in range(100, 200):
-            dashboard.update_progress(i, {"train_loss": 0.1 - (i - 100) * 0.0005, "val_acc": 0.85 + (i - 100) * 0.0001})
-            time.sleep(0.02)
-
-    console.print("\n[bold green]✅ Demo completed![/bold green]")
-
-
-if __name__ == "__main__":
-    demo_dashboard()
