@@ -80,12 +80,12 @@ class ExperimentLogger:
         try:
             with self.log_file_path.open("a", encoding="utf-8") as f:
                 f.write(event.to_json() + "\n")
-        except OSError as e:
+        except OSError:
             # Propagate I/O errors to the caller for specific handling
-            raise e
-        except TypeError:
-            # Propagate serialization errors
             raise
+        except TypeError as e:
+            # Add context to serialization errors before propagating
+            raise TypeError(f"Failed to serialize log event: {e}") from e
 
     def log_system_init(self, config: dict) -> None:
         """Log a system initialization event."""

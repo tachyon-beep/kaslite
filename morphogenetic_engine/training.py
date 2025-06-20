@@ -129,7 +129,7 @@ def execute_phase_1(
     """
     Runs the initial warm-up phase, reporting all progress via the logger.
     """
-    optimiser = torch.optim.Adam(model.parameters(), lr=config["lr"])
+    optimiser = torch.optim.AdamW(model.parameters(), lr=config["lr"], weight_decay=config.get("weight_decay", 1e-4))
     scheduler = torch.optim.lr_scheduler.StepLR(optimiser, 20, 0.1)
     criterion = nn.CrossEntropyLoss().to(device)
     best_acc = 0.0
@@ -199,7 +199,7 @@ def execute_phase_2(
 
     def rebuild_opt(m):
         params = [p for p in m.parameters() if p.requires_grad]
-        return torch.optim.Adam(params, lr=config["lr"] * 0.1) if params else None
+        return torch.optim.AdamW(params, lr=config["lr"] * 0.1, weight_decay=config.get("weight_decay", 1e-4)) if params else None
 
     optimiser = rebuild_opt(model)
 
