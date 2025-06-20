@@ -49,7 +49,7 @@ class EventManager:
         """Generate the panel for experiment event log."""
         event_text = "\n".join(self.last_events)
         content = Text.from_markup(event_text)
-        return Panel(content, title="Experiment Log", border_style="blue")
+        return Panel(content, title="Event Log", border_style="blue")
 
     def create_seed_timeline_panel(self) -> Panel:
         """Generate the panel for the seed event log."""

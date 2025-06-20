@@ -16,6 +16,7 @@ from rich.live import Live
 from morphogenetic_engine.events import (
     LogPayload,
     MetricsUpdatePayload,
+    NetworkStrain,
     NetworkStrainGridUpdatePayload,
     PhaseUpdatePayload,
     SeedLogPayload,
@@ -36,6 +37,28 @@ class RichDashboard:
     """A Rich CLI dashboard for experiment monitoring with progress bars."""
 
     GRID_SIZE = GRID_SIZE
+
+    # EMOJI MAPS
+    SEED_EMOJI_MAP = {
+        SeedState.ACTIVE: "🟢",
+        SeedState.DORMANT: "⚪",
+        SeedState.BLENDING: "🟡",
+        SeedState.GERMINATED: "🌱",
+        SeedState.FOSSILIZED: "🦴",
+        SeedState.CULLED: "🥀",
+    }
+
+    STRAIN_EMOJI_MAP = {
+        NetworkStrain.NONE: "🔵",
+        NetworkStrain.LOW: "🟢",
+        NetworkStrain.MEDIUM: "🟡",
+        NetworkStrain.HIGH: "🔴",
+        NetworkStrain.FIRED: "💥",
+    }
+
+    # Common
+    EMPTY_CELL_EMOJI = "⚫"
+    STYLE_BOLD_BLUE = "bold blue"
 
     def __init__(self, console: Console | None = None, experiment_params: dict[str, Any] | None = None):
         self.console = console or Console()
@@ -81,15 +104,21 @@ class RichDashboard:
     def _populate_initial_panels(self) -> None:
         """Populate all panels with initial content."""
         self.layout_manager.update_panel("info_panel", self.panel_factory.create_info_panel())
-        self.layout_manager.update_panel(
-            "metrics_table_panel", self.metrics_manager.create_metrics_table_panel(self.experiment_params)
-        )
+        self.layout_manager.update_panel("metrics_table_panel", self.metrics_manager.create_metrics_table_panel())
         self.layout_manager.update_panel("sparkline_panel", self.metrics_manager.create_sparkline_panel())
         self.layout_manager.update_panel("event_log_panel", self.event_manager.create_event_log_panel())
         self.layout_manager.update_panel("kasima_panel", self.panel_factory.create_kasima_panel())
         self.layout_manager.update_panel("tamiyo_panel", self.panel_factory.create_tamiyo_panel())
         self.layout_manager.update_panel("karn_panel", self.panel_factory.create_karn_panel())
         self.layout_manager.update_panel("crucible_panel", self.panel_factory.create_crucible_panel())
+        
+        # Add a test seed event to verify the seed timeline panel works
+        self.event_manager.log_seed_event({
+            "event_type": "initialization", 
+            "message": "Seed timeline initialized", 
+            "data": {"status": "ready"}
+        })
+        
         self.layout_manager.update_panel("seed_timeline_panel", self.event_manager.create_seed_timeline_panel())
         self.layout_manager.update_panel("seed_box_panel", self.grid_manager.create_seed_box_panel(self.experiment_params))
         self.layout_manager.update_panel("seed_legend_panel", self.grid_manager.create_seed_legend_panel())
@@ -132,10 +161,18 @@ class RichDashboard:
         self.event_manager.log_metrics_update(epoch, metrics)
 
         # Update the metrics panels with the latest data
-        self.layout_manager.update_panel(
-            "metrics_table_panel", self.metrics_manager.create_metrics_table_panel(self.experiment_params)
-        )
+        self.layout_manager.update_panel("metrics_table_panel", self.metrics_manager.create_metrics_table_panel())
         self.layout_manager.update_panel("sparkline_panel", self.metrics_manager.create_sparkline_panel())
+        
+        # Update the info panel to show current epoch
+        self.layout_manager.update_panel("info_panel", self.panel_factory.create_info_panel())
+        
+        # Update the event log panel to show the new metrics event
+        self.layout_manager.update_panel("event_log_panel", self.event_manager.create_event_log_panel())
+        
+        # Collect and update real seed metrics for the Kasima table
+        self._collect_seed_metrics_from_manager()
+        self.layout_manager.update_panel("kasima_panel", self.panel_factory.create_kasima_panel())
 
     def update_seed_metrics(self, payload: SeedMetricsUpdatePayload) -> None:
         """Update the state and metrics of a single seed from a payload."""
@@ -173,6 +210,58 @@ class RichDashboard:
         # Refresh the Kasima panel to show the updated data
         self.layout_manager.update_panel("kasima_panel", self.panel_factory.create_kasima_panel())
 
+    def update_network_strain_grid(self, payload: NetworkStrainGridUpdatePayload) -> None:
+        """Receives a grid update and refreshes the view."""
+        panel = self.grid_manager.update_strain_grid_from_payload(payload["grid"], self.experiment_params)
+        self.layout_manager.update_panel("network_strain_panel", panel)
+
+    def update_seed_states_grid(self, payload: SeedStateUpdatePayload) -> None:
+        """Receives a seed state update and refreshes the view."""
+        # Update the internal seed_states dictionary for the Kasima table
+        self._update_seed_states_from_grid(payload["grid"])
+        
+        # Collect real metrics from seed manager if available
+        self._collect_seed_metrics_from_manager()
+        
+        # Update the grid panel
+        panel = self.grid_manager.update_seed_grid_from_payload(payload["grid"], self.experiment_params)
+        self.layout_manager.update_panel("seed_box_panel", panel)
+        
+        # Update the Kasima table panel
+        kasima_panel = self.panel_factory.create_kasima_panel()
+        self.layout_manager.update_panel("kasima_panel", kasima_panel)
+
+    def _update_seed_states_from_grid(self, grid_data: dict[int, list[SeedState | None]]) -> None:
+        """Update the internal seed_states dictionary from grid data."""
+        for layer_idx, states in grid_data.items():
+            for seed_idx, state in enumerate(states):
+                if state is not None:
+                    self._update_seed_entry(layer_idx, seed_idx, state)
+
+    def _update_seed_entry(self, layer_idx: int, seed_idx: int, state: SeedState) -> None:
+        """Update a single seed entry in the seed_states dictionary."""
+        # Create seed ID string matching log format (L3_S0, etc.)
+        seed_id = f"L{layer_idx}_S{seed_idx}"
+        
+        # Update or create seed state entry
+        if seed_id not in self.seed_states:
+            self.seed_states[seed_id] = {}
+        
+        self.seed_states[seed_id]["state"] = state
+        # Initialize other fields if not present
+        self._initialize_seed_defaults(seed_id)
+
+    def _initialize_seed_defaults(self, seed_id: str) -> None:
+        """Initialize default values for a seed entry."""
+        defaults = {
+            "alpha": 0.0,
+            "grad_norm": None,
+            "patience": None,
+        }
+        for key, value in defaults.items():
+            if key not in self.seed_states[seed_id]:
+                self.seed_states[seed_id][key] = value
+
     def transition_phase(self, payload: PhaseUpdatePayload) -> None:
         """Handle phase transition event and reset phase progress bar."""
         self.event_manager.log_phase_transition(payload["from_phase"], payload["to_phase"], payload["epoch"])
@@ -184,6 +273,9 @@ class RichDashboard:
                 self.current_phase_epochs = total_epochs_in_phase
                 phase_description = payload["to_phase"].replace("_", " ").title()
                 self.layout_manager.reset_phase_progress(total_epochs_in_phase, phase_description)
+        
+        # Update the event log panel to show the phase transition
+        self.layout_manager.update_panel("event_log_panel", self.event_manager.create_event_log_panel())
 
     def log_event(self, payload: LogPayload) -> None:
         """Add a new event to be displayed in the main experiment log."""
@@ -230,15 +322,14 @@ class RichDashboard:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
 
-    def update_network_strain_grid(self, payload: NetworkStrainGridUpdatePayload) -> None:
-        """Receives a grid update and refreshes the view."""
-        panel = self.grid_manager.update_strain_grid_from_payload(payload["grid"], self.experiment_params)
-        self.layout_manager.update_panel("network_strain_panel", panel)
+    # Configuration methods for metrics
+    def configure_sparklines(self, **kwargs) -> None:
+        """Allow runtime configuration of sparkline behavior."""
+        self.metrics_manager.configure_sparklines(**kwargs)
 
-    def update_seed_states_grid(self, payload: SeedStateUpdatePayload) -> None:
-        """Receives a seed state update and refreshes the view."""
-        panel = self.grid_manager.update_seed_grid_from_payload(payload["grid"], self.experiment_params)
-        self.layout_manager.update_panel("seed_box_panel", panel)
+    def add_metric_type(self, metric_key: str, inverted: bool = False, color: str = "white") -> None:
+        """Register a new metric type for sparkline rendering."""
+        self.metrics_manager.add_metric_type(metric_key, inverted, color)
 
     def initialize_experiment(self, config: dict[str, Any]) -> None:
         """Initialize experiment with configuration data."""
@@ -258,11 +349,72 @@ class RichDashboard:
         if total_planned_epochs > 0 and self.layout_manager.total_task is not None:
             self.layout_manager.total_progress.update(self.layout_manager.total_task, total=total_planned_epochs)
 
-    # Configuration methods for metrics
-    def configure_sparklines(self, **kwargs) -> None:
-        """Allow runtime configuration of sparkline behavior."""
-        self.metrics_manager.configure_sparklines(**kwargs)
+    def _collect_seed_metrics_from_manager(self) -> None:
+        """Collect real metrics from the seed manager if available."""
+        try:
+            from morphogenetic_engine.core import SeedManager
+            seed_manager = SeedManager()
+            
+            if hasattr(seed_manager, 'seeds') and seed_manager.seeds:
+                with seed_manager.lock:
+                    for seed_id, seed_info in seed_manager.seeds.items():
+                        self._update_seed_metrics_from_manager(seed_id, seed_info)
+                                
+        except Exception as e:
+            # Log the specific error instead of swallowing it silently
+            import logging
+            logging.warning(f"Failed to collect seed metrics from manager: {e}")
 
-    def add_metric_type(self, metric_key: str, inverted: bool = False, color: str = "white") -> None:
-        """Register a new metric type for sparkline rendering."""
-        self.metrics_manager.add_metric_type(metric_key, inverted, color)
+    def _update_seed_metrics_from_manager(self, seed_id: tuple[int, int], seed_info: dict) -> None:
+        """Update metrics for a single seed from the seed manager."""
+        seed_id_str = f"L{seed_id[0]}_S{seed_id[1]}"
+        
+        # Ensure seed exists in dashboard state
+        if seed_id_str not in self.seed_states:
+            self.seed_states[seed_id_str] = {}
+        
+        self._update_alpha_metric(seed_id_str, seed_info)
+        self._update_gradient_norm_metric(seed_id_str, seed_info)
+        self._update_patience_metric(seed_id_str, seed_info)
+        self._update_state_from_status(seed_id_str, seed_info)
+
+    def _update_alpha_metric(self, seed_id_str: str, seed_info: dict) -> None:
+        """Update alpha metric for a seed."""
+        if "alpha" in seed_info:
+            self.seed_states[seed_id_str]["alpha"] = seed_info["alpha"]
+        
+        if "module" in seed_info and hasattr(seed_info["module"], "alpha"):
+            self.seed_states[seed_id_str]["alpha"] = seed_info["module"].alpha
+
+    def _update_gradient_norm_metric(self, seed_id_str: str, seed_info: dict) -> None:
+        """Update gradient norm metric for a seed."""
+        if "module" in seed_info and hasattr(seed_info["module"], "get_gradient_norm"):
+            try:
+                grad_norm = seed_info["module"].get_gradient_norm()
+                self.seed_states[seed_id_str]["grad_norm"] = grad_norm
+            except (AttributeError, TypeError) as e:
+                import logging
+                logging.warning(f"Failed to get gradient norm for {seed_id_str}: {e}")
+
+    def _update_patience_metric(self, seed_id_str: str, seed_info: dict) -> None:
+        """Update patience metric for a seed."""
+        # Use actual training steps as a more meaningful patience metric
+        if "training_steps" in seed_info:
+            training_steps = seed_info["training_steps"]
+            self.seed_states[seed_id_str]["patience"] = training_steps
+        elif "module" in seed_info and hasattr(seed_info["module"], "training_progress"):
+            # Fallback to old calculation if training_steps not available
+            training_progress = seed_info["module"].training_progress
+            patience = max(0, int((1.0 - training_progress) * 100))
+            self.seed_states[seed_id_str]["patience"] = patience
+
+    def _update_state_from_status(self, seed_id_str: str, seed_info: dict) -> None:
+        """Update seed state from status in seed info."""
+        if "status" in seed_info:
+            status = seed_info["status"]
+            if status == "active":
+                self.seed_states[seed_id_str]["state"] = SeedState.ACTIVE
+            elif status == "dormant":
+                self.seed_states[seed_id_str]["state"] = SeedState.DORMANT
+            elif status == "failed":
+                self.seed_states[seed_id_str]["state"] = SeedState.CULLED

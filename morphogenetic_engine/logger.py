@@ -182,13 +182,18 @@ class ExperimentLogger:
         )
         self._log_event(event_type=EventType.SEED_LOG_EVENT, payload=payload)
 
-    def log_seed_event(self, epoch: int, _seed_id: tuple[int, int], old_state: str, new_state: str) -> None:
+    def log_seed_event(self, epoch: int, seed_id: tuple[int, int], old_state: str, new_state: str) -> None:
         """Log a seed state transition event (convenience method)."""
-        # For now, just log the phase transition
-        self.log_phase_update(
+        self.log_seed_event_detailed(
             epoch=epoch,
-            from_phase=old_state,
-            to_phase=new_state,
+            event_type="STATE_TRANSITION",
+            message=f"Seed L{seed_id[0]}_S{seed_id[1]}: {old_state} → {new_state}",
+            data={
+                "seed_id": f"L{seed_id[0]}_S{seed_id[1]}",
+                "from_state": old_state,
+                "to_state": new_state,
+                "epoch": epoch,
+            }
         )
 
     def generate_final_report(self) -> dict[str, int]:

@@ -6,6 +6,7 @@ experiment setup, data loading, training phases, and result collection.
 """
 
 import logging
+import math
 import random
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -134,7 +135,7 @@ def log_final_summary(logger: ExperimentLogger, final_stats: dict[str, Any]):
     """Logs the final summary and system shutdown event."""
     if final_stats.get("acc_pre") is not None and final_stats.get("acc_post") is not None:
         logging.info(
-            f"Final Accuracy: Pre-Adaptation {final_stats['acc_pre']:.4f}, " f"Post-Adaptation {final_stats['acc_post']:.4f}"
+            f"Final Accuracy: Pre-Adaptation {final_stats['acc_pre']:.4f}, Post-Adaptation {final_stats['acc_post']:.4f}"
         )
     logger.log_system_shutdown(final_stats=final_stats)
 
@@ -299,11 +300,33 @@ def run_experiment(args: Dict[str, Any]):
                 # --- Finalization ---
                 logging.info("Experiment finished.")
                 logger.log_system_shutdown(final_stats=final_metrics)
-                export_metrics_for_dvc(final_metrics, project_root, slug)
+                export_metrics_for_dvc(final_metrics, slug, project_root)
 
                 # Log final metrics and close TensorBoard writer
-                mlflow.log_metrics(final_metrics)
+                # Clean up final metrics - set meaningful defaults for None values
+                clean_final_metrics = {}
+                for k, v in final_metrics.items():
+                    if v is None:
+                        # Set meaningful defaults for metrics that are None when seeds don't activate
+                        if k == "accuracy_dip":
+                            clean_final_metrics[k] = 0.0  # No dip if seeds didn't activate
+                        elif k in ["acc_pre", "acc_post"]:
+                            clean_final_metrics[k] = final_metrics.get("best_acc", 0.0)  # Use best_acc as fallback
+                        elif k == "t_recover":
+                            clean_final_metrics[k] = 0.0  # No recovery time if seeds didn't activate
+                        elif k == "germ_epoch":
+                            clean_final_metrics[k] = -1.0  # -1 indicates no germination occurred
+                        else:
+                            clean_final_metrics[k] = 0.0  # Generic fallback for other None values
+                    elif isinstance(v, float) and math.isnan(v):
+                        clean_final_metrics[k] = 0.0  # Replace NaN with 0
+                    else:
+                        clean_final_metrics[k] = v
+
+                mlflow.log_metrics(clean_final_metrics)
                 tb_writer.close()
+                
+                return clean_final_metrics
 
     except (KeyboardInterrupt, Exception) as e:
         logging.error(f"Experiment interrupted or failed: {e}", exc_info=True)

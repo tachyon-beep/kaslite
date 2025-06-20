@@ -206,7 +206,7 @@ class GridManager:
         empty_emoji: str,
     ) -> list[str]:
         """Helper to create a single row for a grid table."""
-        row = [f"{layer_index + 1}"]
+        row = [f"{layer_index}"]  # Use 0-based indexing to match logs
         if layer_index < num_layers:
             states = layer_data.get(layer_index, [])
             for j in range(seeds_per_layer):

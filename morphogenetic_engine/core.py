@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import torch
 
+from .events import SeedState
 from .logger import ExperimentLogger
 from .monitoring import get_monitor
 from .ui_dashboard import RichDashboard
@@ -77,8 +78,9 @@ class SeedManager:
                 return False
 
             try:
+                # Germinate seed but don't start training yet - it goes to the "parking lot"
                 seed_info["module"].initialize_child()
-                seed_info["status"] = "active"
+                seed_info["status"] = "germinated"  # Parking lot state
                 self._log_event(seed_id, True)
                 if self.logger is not None:
                     self.logger.log_germination(epoch, seed_id)
@@ -133,6 +135,59 @@ class SeedManager:
             if cls._instance is not None:
                 cls._instance.reset()
                 cls._instance = None
+
+    def get_currently_training_seed(self) -> tuple[int, int] | None:
+        """Get the seed that is currently training (active state), if any."""
+        with self.lock:
+            for seed_id, seed_info in self.seeds.items():
+                if seed_info["status"] == "active":
+                    return seed_id
+            return None
+
+    def get_next_germinated_seed(self) -> tuple[int, int] | None:
+        """Get the next seed in the germinated queue waiting to start training."""
+        with self.lock:
+            # Find the oldest germinated seed (first one added)
+            oldest_time = float('inf')
+            oldest_seed = None
+            for seed_id, seed_info in self.seeds.items():
+                if seed_info["status"] == "germinated":
+                    # Use germination log to find oldest
+                    for log_entry in self.germination_log:
+                        if (log_entry.get("seed_id") == f"L{seed_id[0]}_S{seed_id[1]}" and 
+                            log_entry.get("success", False) and
+                            log_entry.get("timestamp", float('inf')) < oldest_time):
+                            oldest_time = log_entry["timestamp"]
+                            oldest_seed = seed_id
+            return oldest_seed
+
+    def start_training_next_seed(self) -> tuple[int, int] | None:
+        """Start training the next seed in the germinated queue, if no seed is currently training."""
+        with self.lock:
+            # Check if any seed is currently training
+            if self.get_currently_training_seed() is not None:
+                return None  # Another seed is already training
+            
+            # Get the next germinated seed
+            next_seed = self.get_next_germinated_seed()
+            if next_seed is None:
+                return None  # No seeds waiting
+            
+            # Start training this seed
+            seed_info = self.seeds[next_seed]
+            seed_info["status"] = "active"
+            seed_info["module"]._set_state("active")
+            
+            # Log the training start
+            if self.logger is not None:
+                self.logger.log_seed_event_detailed(
+                    epoch=0,  # We don't have epoch context here
+                    event_type="TRAINING_START",
+                    message=f"Seed L{next_seed[0]}_S{next_seed[1]} started training",
+                    data={"seed_id": f"L{next_seed[0]}_S{next_seed[1]}"}
+                )
+            
+            return next_seed
 
 
 class KasminaMicro:
@@ -219,6 +274,9 @@ class KasminaMicro:
 
         # Log all seed states in one batch
         self.logger.log_seed_state_update(epoch, seed_infos)
+        
+        # Check if we need to start training the next seed in the queue
+        self.start_training_next_seed()
 
     def step(self, epoch: int, val_loss: float, val_acc: float) -> bool:
         """
@@ -280,3 +338,35 @@ class KasminaMicro:
                         worst_signal = signal
                         candidate_id = sid
         return candidate_id
+
+    def is_any_seed_training(self) -> bool:
+        """Check if any seed is currently in ACTIVE state (training)."""
+        with self.seed_manager.lock:
+            for seed_info in self.seed_manager.seeds.values():
+                if seed_info.get("state") == SeedState.ACTIVE.value:
+                    return True
+        return False
+
+    def start_training_next_seed(self) -> bool:
+        """Start training the next germinated seed if no seed is currently training."""
+        if self.is_any_seed_training():
+            return False  # Another seed is already training
+        
+        # Find the first seed in GERMINATED state (waiting in parking lot)
+        with self.seed_manager.lock:
+            for seed_id, seed_info in self.seed_manager.seeds.items():
+                if seed_info.get("state") == SeedState.GERMINATED.value:
+                    # Start training this seed
+                    if "module" in seed_info:
+                        seed_info["module"]._set_state(SeedState.ACTIVE)
+                        
+                        # Log the training start
+                        if self.logger:
+                            self.logger.log_seed_event_detailed(
+                                epoch=0,  # We don't have epoch context here
+                                event_type="TRAINING_START", 
+                                message=f"Seed L{seed_id[0]}_S{seed_id[1]} started training!",
+                                data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}"},
+                            )
+                        return True
+        return False  # No seeds waiting to train

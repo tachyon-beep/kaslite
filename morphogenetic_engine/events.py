@@ -31,15 +31,17 @@ class EventType(Enum):
     SEED_LOG_EVENT = "seed_log_event"
 
 
+# Import SeedState from the authoritative source in components
+# Note: This creates a circular import, so we'll define it here as the authority
 class SeedState(Enum):
     """Enumeration of possible states for a morphogenetic seed."""
 
-    ACTIVE = "active"
-    DORMANT = "dormant"
-    BLENDING = "blending"
-    GERMINATED = "germinated"
-    FOSSILIZED = "fossilized"
-    CULLED = "culled"
+    DORMANT = "dormant"        # Seed is inactive, just monitoring
+    GERMINATED = "germinated"  # Seed has been activated but not training yet
+    ACTIVE = "active"          # Seed is actively training its child network  
+    BLENDING = "blending"      # Seed finished training, now blending into parent
+    FOSSILIZED = "fossilized"  # Successfully integrated into parent network
+    CULLED = "culled"          # Removed due to poor performance
 
 
 class NetworkStrain(Enum):

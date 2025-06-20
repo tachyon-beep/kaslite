@@ -1,11 +1,13 @@
 """Components module for morphogenetic engine."""
 
 import logging
+from enum import Enum
 
 import torch
 from torch import nn
 
 from morphogenetic_engine.core import SeedManager
+from morphogenetic_engine.events import SeedState
 
 
 class SentinelSeed(nn.Module):
@@ -62,25 +64,34 @@ class SentinelSeed(nn.Module):
         self.seed_manager.register_seed(self, seed_id)
 
     # ------------------------------------------------------------------
-    def _set_state(self, new_state: str):
-        # Validate state
-        valid_states = {"dormant", "training", "blending", "active"}
-        if new_state not in valid_states:
-            raise ValueError(f"Invalid state: {new_state}. Must be one of {valid_states}")
-
-        if self.state == new_state:
+    def _set_state(self, new_state: str | SeedState):
+        """Set the seed state, validating against allowed transitions."""
+        # Convert string to enum if needed
+        if isinstance(new_state, str):
+            try:
+                new_state = SeedState(new_state)
+            except ValueError:
+                raise ValueError(f"Invalid state: {new_state}. Must be one of {[s.value for s in SeedState]}")
+        
+        if self.state == new_state.value:
             return  # redundant transition guard
+        
         old_state = self.state
-        self.state = new_state
+        self.state = new_state.value
         info = self.seed_manager.seeds[self.seed_id]
-        info["state"] = new_state
-        if new_state == "active":
+        info["state"] = new_state.value
+        
+        # Update status mapping for backward compatibility  
+        if new_state in [SeedState.ACTIVE, SeedState.GERMINATED, SeedState.BLENDING]:
             info["status"] = "active"
-        elif new_state == "dormant":
+        elif new_state == SeedState.DORMANT:
             info["status"] = "dormant"
-        else:  # training or blending
-            info["status"] = "pending"
-        self.seed_manager.record_transition(self.seed_id, old_state, new_state)
+        elif new_state == SeedState.FOSSILIZED:
+            info["status"] = "fossilized"
+        elif new_state == SeedState.CULLED:
+            info["status"] = "culled"
+            
+        self.seed_manager.record_transition(self.seed_id, old_state, new_state.value)
 
     def _initialize_as_identity(self):
         """Initialize to near-zero output (identity function)"""
@@ -94,7 +105,7 @@ class SentinelSeed(nn.Module):
             p.requires_grad = False
 
     def initialize_child(self):
-        """Proper initialization when germinating"""
+        """Proper initialization when germinating - goes to parking lot (GERMINATED state)"""
         for m in self.child.modules():
             if isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
@@ -103,12 +114,20 @@ class SentinelSeed(nn.Module):
         # Make parameters trainable
         for p in self.child.parameters():
             p.requires_grad = True
-        self._set_state("training")
+        
+        # Capture baseline performance for later evaluation
+        self.seed_manager.seeds[self.seed_id]["baseline_loss"] = None
+        self.seed_manager.seeds[self.seed_id]["current_loss"] = None
+        self.seed_manager.seeds[self.seed_id]["training_steps"] = 0
+        
+        # Only transition to GERMINATED state (parking lot)
+        # The seed will transition to ACTIVE when training starts
+        self._set_state(SeedState.GERMINATED)
 
     # ------------------------------------------------------------------
     def train_child_step(self, inputs: torch.Tensor):
         """Train the child network on input data when in training state."""
-        if self.state != "training" or inputs.numel() == 0:
+        if self.state != SeedState.ACTIVE.value or inputs.numel() == 0:
             return
         inputs = inputs.detach()  # block trunk grads
 
@@ -118,20 +137,40 @@ class SentinelSeed(nn.Module):
         loss.backward()
         self.child_optim.step()
 
+        # Track loss for performance evaluation
+        current_loss = loss.item()
+        seed_info = self.seed_manager.seeds[self.seed_id]
+        
+        # Set baseline on first training step
+        if seed_info["baseline_loss"] is None:
+            seed_info["baseline_loss"] = current_loss
+        
+        seed_info["current_loss"] = current_loss
+        seed_info["training_steps"] += 1
+
+        # Update training progress and alpha during active training
         self.training_progress = min(1.0, self.training_progress + 0.01)
+        
+        # Update alpha gradually during training (not just blending)
+        if self.state == SeedState.ACTIVE.value:
+            self.alpha = min(0.5, self.alpha + 0.002)  # Gradual increase during training
+        
         if self.training_progress > self.progress_thresh:
-            self._set_state("blending")
-            self.alpha = 0.0
+            self._set_state(SeedState.BLENDING)
+            # Keep current alpha and continue increasing during blending
+        
+        # Always sync alpha to seed manager
         self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
 
     # ------------------------------------------------------------------
     def update_blending(self):
         """Update the blending alpha value during blending phase."""
-        if self.state == "blending":
+        if self.state == SeedState.BLENDING.value:
             self.alpha = min(1.0, self.alpha + 1 / self.blend_steps)
             self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
             if self.alpha >= 0.99:
-                self._set_state("active")
+                # Blending complete - evaluate performance and decide final state
+                self._evaluate_and_complete()
 
     def update_state(self):
         """Update the seed's state based on its current metrics and progress."""
@@ -199,6 +238,86 @@ class SentinelSeed(nn.Module):
         # Calculate variance across all buffered activations
         return torch.var(torch.cat(list(buffer)), dim=0).mean().item()
 
+    def _evaluate_and_complete(self):
+        """Evaluate seed performance and transition to final state (fossilized or culled)."""
+        # Get performance metrics
+        baseline_loss = self.seed_manager.seeds[self.seed_id].get("baseline_loss")
+        current_loss = self.seed_manager.seeds[self.seed_id].get("current_loss") 
+        
+        # If we don't have baseline, assume improvement and fossilize
+        if baseline_loss is None:
+            self._fossilize_seed()
+            return
+            
+        # Calculate improvement
+        improvement = baseline_loss - current_loss if current_loss else 0
+        improvement_threshold = 0.01  # Minimum improvement required
+        
+        if improvement > improvement_threshold:
+            self._fossilize_seed()
+        else:
+            self._cull_seed()
+    
+    def _fossilize_seed(self):
+        """Permanently integrate the seed into the parent network (grafting)."""
+        self._set_state(SeedState.FOSSILIZED)
+        
+        # Log the fossilization event
+        if hasattr(self.seed_manager, 'logger') and self.seed_manager.logger:
+            self.seed_manager.logger.log_seed_event_detailed(
+                epoch=0,  # Would need actual epoch from context
+                event_type="FOSSILIZATION",
+                message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} fossilized!",
+                data={"seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}", "improvement": True}
+            )
+        
+        # Graft the trained network into the parent permanently
+        # In a full implementation, this would modify the parent network architecture
+        # to replace the sentinel seed with the trained child network
+        self._graft_into_parent()
+        
+    def _graft_into_parent(self):
+        """Permanently integrate the trained child network into the parent."""
+        # Mark as permanently integrated - child network replaces seed functionality
+        self.alpha = 1.0  # Full blend - child network always active
+        self.seed_manager.seeds[self.seed_id]["alpha"] = 1.0
+        
+        # Freeze the child network parameters since it's now part of the permanent architecture
+        for p in self.child.parameters():
+            p.requires_grad = False
+            
+        # In a full implementation, we would:
+        # 1. Modify the parent network to directly include the child's weights
+        # 2. Remove the sentinel seed mechanism for this position
+        # 3. Update the network topology permanently
+        # For now, we keep the seed but mark it as fossilized and permanently active
+        
+        # Start training the next seed in the queue
+        self.seed_manager.start_training_next_seed()
+        
+    def _cull_seed(self):
+        """Remove the seed due to poor performance."""
+        self._set_state(SeedState.CULLED)
+        
+        # Log the culling event
+        if hasattr(self.seed_manager, 'logger') and self.seed_manager.logger:
+            self.seed_manager.logger.log_seed_event_detailed(
+                epoch=0,  # Would need actual epoch from context
+                event_type="CULLING", 
+                message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} culled!",
+                data={"seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}", "improvement": False}
+            )
+        
+        # Deactivate the seed - set alpha to 0 so it has no effect
+        self.alpha = 0.0
+        self.seed_manager.seeds[self.seed_id]["alpha"] = 0.0
+        
+        # Freeze parameters to save computation
+        for p in self.child.parameters():
+            p.requires_grad = False
+            
+        # Start training the next seed in the queue
+        self.seed_manager.start_training_next_seed()
 
 class BaseNet(nn.Module):
     """

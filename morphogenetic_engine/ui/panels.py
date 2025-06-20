@@ -148,7 +148,14 @@ class PanelFactory:
         """Add a section of parameters to the info table."""
         for _, (key, label) in enumerate(params):
             value = self.experiment_params.get(key)
-            value_str = str(value) if value is not None else "N/A"
+            if value is not None:
+                # Special formatting for learning rate in exponential notation
+                if key == "lr" and isinstance(value, (int, float)):
+                    value_str = f"{value:.2e}"
+                else:
+                    value_str = str(value)
+            else:
+                value_str = "N/A"
             table.add_row(f"{label}:", value_str)
 
     def _format_start_time(self) -> str:
@@ -184,6 +191,35 @@ class PanelFactory:
 
         return (None, None)
 
+    def _sort_seed_by_priority(self, seed_id: str | tuple) -> tuple[int, int, int]:
+        """Sort seeds by state priority: active training first, then others, dormant last."""
+        # Define state priority order (lower number = higher priority)
+        state_priority = {
+            SeedState.ACTIVE: 0,        # Currently training - highest priority
+            SeedState.BLENDING: 1,      # Finishing training
+            SeedState.GERMINATED: 2,    # Waiting in parking lot
+            SeedState.FOSSILIZED: 3,    # Permanently integrated
+            SeedState.CULLED: 4,        # Removed due to poor performance
+            SeedState.DORMANT: 5,       # Inactive - lowest priority
+        }
+        
+        # Get seed data and state
+        seed_data = self.seed_states.get(seed_id, {})
+        state = seed_data.get("state")
+        
+        # Determine priority based on state
+        if isinstance(state, SeedState):
+            priority = state_priority.get(state, 6)  # Unknown states go to end
+        else:
+            priority = 7  # Non-SeedState values go to very end
+        
+        # Get position info for secondary sorting
+        layer, seed_idx = self._parse_seed_id(seed_id)
+        if layer is None or seed_idx is None:
+            layer, seed_idx = 9999, 9999
+        
+        return (priority, layer, seed_idx)
+
     def _create_seeds_training_table(self) -> Table:
         """Generate the table for detailed seed training metrics."""
         table = Table(show_header=True, header_style="bold yellow", expand=True)
@@ -191,10 +227,10 @@ class PanelFactory:
         table.add_column("State", style="green")
         table.add_column("α", justify="right", style="magenta")
         table.add_column("∇ Norm", justify="right", style="yellow")
-        table.add_column("Pat.", justify="right", style="dim")
+        table.add_column("Steps", justify="right", style="dim")
 
-        # Sort seeds for stable display order, handling string keys
-        sorted_seed_ids = sorted(self.seed_states.keys(), key=self._sort_seed_id_key)
+        # Sort seeds by state priority, then by ID
+        sorted_seed_ids = sorted(self.seed_states.keys(), key=self._sort_seed_by_priority)
 
         for seed_id in sorted_seed_ids:
             data = self.seed_states[seed_id]

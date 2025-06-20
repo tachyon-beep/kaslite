@@ -15,7 +15,7 @@ from rich import box
 from rich.panel import Panel
 from rich.table import Table
 
-from .config import DEFAULT_SPARKLINE_CONFIG, METRIC_TYPES, STYLE_BOLD_BLUE
+from .config import DEFAULT_SPARKLINE_CONFIG, METRIC_TYPES
 
 
 class MetricsManager:
@@ -104,59 +104,168 @@ class MetricsManager:
         if isinstance(value, (int, float)) and not math.isnan(value):
             self.metric_histories[metric_key].append(value)
 
-    def create_metrics_table_panel(self, experiment_params: dict[str, Any]) -> Panel:
-        """Generate the panel for current training metrics."""
-        metrics_table = Table(show_header=False, expand=True, box=box.MINIMAL)
-        metrics_table.add_column("Metric", style=STYLE_BOLD_BLUE, ratio=1)
-        metrics_table.add_column("Value", ratio=1)
+    def create_metrics_table_panel(self) -> Panel:
+        """Generate the panel for the live metrics table with comprehensive training data."""
+        metrics_table = Table(show_header=True, header_style="bold magenta", box=box.MINIMAL, padding=(0, 0))
+        metrics_table.add_column("Metric", justify="left", style="cyan", no_wrap=True)
+        metrics_table.add_column("Curr", justify="center", style="green")
+        metrics_table.add_column("Prev", justify="center", style="yellow")
+        metrics_table.add_column("Chg", justify="center", style="red")
 
-        # Calculate performance metrics
-        avg_epoch_time = self.latest_metrics.get("avg_epoch_time")
-        if avg_epoch_time:
-            samples_per_epoch = experiment_params.get("n_samples", 1000)
-            samples_per_sec = samples_per_epoch / avg_epoch_time
-            self.latest_metrics["samples_per_sec"] = samples_per_sec
+        # Define metrics to display with their formatting and priority
+        metrics_config = self._get_metrics_display_config()
 
-        # Core metrics with formatting
-        metrics_display = [
-            ("Train Loss", "train_loss", "{:.6f}"),
-            ("Val Loss", "val_loss", "{:.6f}"),
-            ("Val Accuracy", "val_acc", "{:.4f}"),
-            ("Learning Rate", "lr", "{:.6f}"),
-            ("Samples/Sec", "samples_per_sec", "{:.1f}"),
-            ("Avg Epoch Time", "avg_epoch_time", "{:.2f}s"),
+        for metric_key, display_name, fmt in metrics_config:
+            current_str, previous_str, change_str = self._format_metric_row(metric_key, fmt)
+            metrics_table.add_row(display_name, current_str, previous_str, change_str)
+
+        # Center the table both horizontally and vertically
+        from rich.align import Align
+
+        centered_table = Align.center(metrics_table, vertical="middle")
+        return Panel(centered_table, title="Live Training Metrics", border_style="cyan")
+
+    def _get_metrics_display_config(self) -> list[tuple[str, str, str]]:
+        """Get the configuration for metrics display."""
+        return [
+            # Core training metrics
+            ("train_loss", "Train Loss", ".4f"),
+            ("val_loss", "Val Loss", ".4f"),
+            ("val_acc", "Val Accuracy", ".4f"),
+            ("best_acc", "Best Accuracy", ".4f"),
+            # Training dynamics
+            ("loss_change", "Loss Δ", "+.4f"),
+            ("acc_change", "Acc Δ", "+.4f"),
+            ("loss_improvement", "Loss ↗", "+.4f"),
+            # Timing and performance
+            ("avg_epoch_time", "Epoch Time (s)", ".2f"),
+            ("samples_per_sec", "Samples/sec", ".1f"),
+            ("total_time", "Total Time", ".0f"),
+            ("eta_seconds", "ETA", ".0f"),
         ]
 
-        for display_name, key, fmt in metrics_display:
-            value = self.latest_metrics.get(key)
-            if value is not None:
-                formatted_value = fmt.format(value)
-            else:
-                formatted_value = "N/A"
-            metrics_table.add_row(display_name, formatted_value)
+    def _format_metric_row(self, metric_key: str, fmt: str) -> tuple[str, str, str]:
+        """Format a single metric row for display."""
+        current_val = self.latest_metrics.get(metric_key)
+        previous_val = self.previous_metrics.get(metric_key)
 
-        return Panel(metrics_table, title="Current Metrics", border_style="cyan")
+        # Format current value
+        current_str = self._format_metric_value(current_val, fmt, metric_key)
+
+        # For time metrics, don't show previous value or change
+        if metric_key in ["total_time", "eta_seconds"]:
+            previous_str = "-"
+            change_str = "-"
+        else:
+            # Format previous value
+            previous_str = self._format_metric_value(previous_val, fmt, metric_key)
+            # Calculate and format change
+            change_str = self._calculate_metric_change(current_val, previous_val, fmt, metric_key)
+
+        return current_str, previous_str, change_str
+
+    def _format_metric_value(self, value: Any, fmt: str, metric_key: str = "") -> str:
+        """Format a single metric value."""
+        if value is not None:
+            # Special formatting for time metrics - mm:ss until 59:59, then hh:mm
+            if metric_key in ["total_time", "eta_seconds"] and isinstance(value, (int, float)):
+                if value < 3600:  # Less than 1 hour, show mm:ss
+                    minutes = int(value // 60)
+                    seconds = int(value % 60)
+                    return f"{minutes:02d}:{seconds:02d}"
+                else:  # 1 hour or more, show hh:mm
+                    hours = int(value // 3600)
+                    minutes = int((value % 3600) // 60)
+                    return f"{hours:02d}:{minutes:02d}"
+            elif isinstance(value, float):
+                return f"{value:{fmt}}"
+            return str(value)
+        return "N/A"
+
+    def _calculate_metric_change(self, current_val: Any, previous_val: Any, fmt: str, metric_key: str = "") -> str:
+        """Calculate and format the change between two metric values."""
+        if not (
+            current_val is not None
+            and previous_val is not None
+            and isinstance(current_val, (int, float))
+            and isinstance(previous_val, (int, float))
+        ):
+            return "N/A"
+
+        change = current_val - previous_val
+        if abs(change) <= 1e-6:  # No meaningful change
+            return self._format_zero_change(fmt, metric_key)
+
+        # Format meaningful changes
+        return self._format_meaningful_change(change, fmt, metric_key)
+
+    def _format_zero_change(self, fmt: str, metric_key: str) -> str:
+        """Format zero change with appropriate precision."""
+        if ".3f" in fmt:
+            return "0.000"
+        elif ".2f" in fmt:
+            return "0.00"
+        elif ".1f" in fmt:
+            return "0.0"
+        elif ".0f" in fmt:
+            return "0"
+        elif ".2e" in fmt or metric_key == "learning_rate":
+            return "0.00e+00"
+        else:
+            return "0.000"
+
+    def _format_meaningful_change(self, change: float, fmt: str, metric_key: str) -> str:
+        """Format meaningful change values."""
+        # Special handling for learning rate - show in exponential format
+        if metric_key == "learning_rate":
+            return f"{change:+.2e}"
+        # Use the same format as the metric, but with + sign for positive changes
+        elif fmt.startswith("+"):
+            return f"{change:{fmt}}"
+        else:
+            return f"{change:+{fmt}}"
 
     def create_sparkline_panel(self) -> Panel:
-        """Generate the panel containing sparklines for key metrics."""
-        sparkline_table = Table(show_header=False, expand=True, box=box.MINIMAL)
-        sparkline_table.add_column("Metric", style=STYLE_BOLD_BLUE, ratio=1)
-        sparkline_table.add_column("Trend", ratio=3)
+        """Generate the panel for metric trends and sparklines."""
+        sparkline_table = Table(show_header=True, header_style="bold cyan", expand=True, box=box.MINIMAL)
+        sparkline_table.add_column("Metric", style="cyan", no_wrap=True)
+        sparkline_table.add_column("Current", justify="center", style="green")
+        sparkline_table.add_column("Change", justify="center", style="yellow")
+        sparkline_table.add_column("Trend", style="dim", ratio=4)
 
-        # Key metrics to show sparklines for
-        sparkline_metrics = [
-            ("Train Loss", "train_loss"),
-            ("Val Loss", "val_loss"),
-            ("Val Accuracy", "val_acc"),
-            ("Loss Change", "loss_change"),
-            ("Learning Rate", "learning_rate"),
+        # Define metrics useful for tracking trends (updated per user request)
+        trend_metrics = [
+            ("train_loss", "Train Loss", ".3f"),
+            ("val_loss", "Val Loss", ".3f"),
+            ("val_acc", "Val Accuracy", ".3f"),
+            ("loss_change", "Loss Δ", "+.3f"),
+            ("acc_change", "Acc Δ", "+.3f"),
+            ("loss_improvement", "Loss ↗", "+.3f"),
+            ("samples_per_sec", "Samples/sec", ".1f"),
         ]
 
-        for display_name, metric_key in sparkline_metrics:
-            sparkline = self._generate_sparkline(metric_key)
-            sparkline_table.add_row(display_name, sparkline)
+        for metric_key, display_name, fmt in trend_metrics:
+            current_val = self.latest_metrics.get(metric_key)
+            previous_val = self.previous_metrics.get(metric_key)
 
-        return Panel(sparkline_table, title="Metric Trends", border_style="magenta")
+            # Format current value
+            if current_val is not None:
+                if isinstance(current_val, float):
+                    current_str = f"{current_val:{fmt}}"
+                else:
+                    current_str = str(current_val)
+            else:
+                current_str = "N/A"
+
+            # Calculate change
+            change_str = self._calculate_metric_change(current_val, previous_val, fmt, metric_key)
+
+            # Generate dynamic sparkline
+            trend_indicator = self._generate_sparkline(metric_key)
+
+            sparkline_table.add_row(display_name, current_str, change_str, trend_indicator)
+
+        return Panel(sparkline_table, title="Trends", border_style="cyan")
 
     def _normalize_values(self, values: list[float], inverted: bool = False) -> list[int]:
         """Normalize values to 0-6 range for ASCII levels."""
