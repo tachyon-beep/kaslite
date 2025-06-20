@@ -32,7 +32,7 @@ _last_report: Dict[str, str] = defaultdict(lambda: "")
 
 
 def handle_seed_training(seed_manager: "SeedManager", device: torch.device, epoch: int | None = None):
-    """Handle background seed training and blending for all seeds."""
+    """Handle background seed training and blending for all seeds (per-step logic only)."""
     for info in seed_manager.seeds.values():
         seed = info["module"]
 
@@ -51,18 +51,21 @@ def handle_seed_training(seed_manager: "SeedManager", device: torch.device, epoc
                 batch = batch[idx]
             batch = batch.to(device)
 
-        # Train if in training state
+        # Per-step logic: only update the relevant phase for the current state
         if seed.state == SeedState.TRAINING.value and batch is not None:
             seed.train_child_step(batch, epoch=epoch)
-            
-        # Update all lifecycle phases (some need fresh loss measurements)
-        seed.update_blending(epoch)
-        if batch is not None:
-            seed.update_shadowing(epoch, batch)
-            seed.update_probationary(epoch, batch)
-        else:
-            seed.update_shadowing(epoch)
-            seed.update_probationary(epoch)
+        elif seed.state == SeedState.BLENDING.value:
+            seed.update_blending(epoch)
+        elif seed.state == SeedState.SHADOWING.value:
+            if batch is not None:
+                seed.update_shadowing(epoch, batch)
+            else:
+                seed.update_shadowing(epoch)
+        elif seed.state == SeedState.PROBATIONARY.value:
+            if batch is not None:
+                seed.update_probationary(epoch, batch)
+            else:
+                seed.update_probationary(epoch)
 
 
 def train_epoch(
@@ -89,6 +92,11 @@ def train_epoch(
 
         total_loss += loss.item()
         handle_seed_training(seed_manager, device, epoch)
+
+    # After all batches, perform per-epoch state transitions for all seeds
+    for info in seed_manager.seeds.values():
+        seed = info["module"]
+        seed.apply_epoch_transitions(epoch)
 
     if scheduler:
         scheduler.step()
