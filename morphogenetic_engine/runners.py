@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from torch.utils.tensorboard import SummaryWriter
 
 from morphogenetic_engine import datasets
-from morphogenetic_engine.cli_dashboard import RichDashboard
+from morphogenetic_engine.ui_dashboard import RichDashboard
 from morphogenetic_engine.experiment import build_model_and_agents
 from morphogenetic_engine.logger import ExperimentLogger
 from morphogenetic_engine.events import SeedState

@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import torch
 
-from .cli_dashboard import RichDashboard
+from .ui_dashboard import RichDashboard
 from .logger import ExperimentLogger
 from .monitoring import get_monitor
 

@@ -5,7 +5,7 @@ Quick test to verify layout stability fixes are working.
 
 import time
 from rich.console import Console
-from morphogenetic_engine.cli_dashboard import RichDashboard
+from morphogenetic_engine.ui_dashboard import RichDashboard
 
 
 def quick_test():

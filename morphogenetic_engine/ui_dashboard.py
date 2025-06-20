@@ -72,6 +72,13 @@ class RichDashboard:
         self.seed_states: dict[str, dict[str, Any]] = {}
         self.latest_metrics: dict[str, Any] = {}
         self.previous_metrics: dict[str, Any] = {}
+        
+        # Enhanced tracking for metrics and timing
+        self.metrics_history: list[dict[str, Any]] = []
+        self.epoch_start_time: float | None = None
+        self.epoch_times: list[float] = []
+        self.experiment_start_time: float = time.time()
+        self.total_planned_epochs: int | None = None
 
         # Progress Bars
         self.total_progress = Progress(
@@ -148,20 +155,20 @@ class RichDashboard:
         # --- Left Column ---
         bottom_left = Layout(name="bottom_left_area")
         bottom_left.split_column(
-            Layout(name="event_log_panel"),
-            Layout(name="seed_timeline_panel"),
+            Layout(name="event_log_panel", ratio=1),
+            Layout(name="seed_timeline_panel", ratio=1),
         )
         self.layout["left_column"].split_column(
-            Layout(name="top_left_area"),
+            Layout(name="top_left_area", size=34),  # 20 + 14 = fixed total (was 31)
             bottom_left,
         )
         self.layout["top_left_area"].split_column(
-            Layout(name="top_row"),
-            Layout(name="sparkline_panel"),
+            Layout(name="top_row", size=20),
+            Layout(name="sparkline_panel", size=14),  # increased from 11 to 14
         )
         self.layout["top_row"].split_row(
-            Layout(name="info_panel"),
-            Layout(name="metrics_table_panel"),
+            Layout(name="info_panel", ratio=2),
+            Layout(name="metrics_table_panel", ratio=3),
         )
 
         # --- Center Column ---
@@ -204,65 +211,201 @@ class RichDashboard:
         self._layout_initialized = True
 
     def _create_info_panel(self) -> Panel:
-        """Generate the panel for experiment parameters."""
-        info_table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1))
-        info_table.add_column("Param", style="bold yellow")
-        info_table.add_column("Value")
+        """Generate the panel for comprehensive experiment parameters."""
+        info_table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 0))
+        info_table.add_column("Param", style="cyan", ratio=1)
+        info_table.add_column("Value", style="white", ratio=1)
 
-        # Add a few key parameters
-        params_to_show = {
-            "problem_type": "Problem",
-            "n_samples": "Samples",
-            "input_dim": "Input Dim",
-            "learning_rate": "LR",
-            "seed": "Seed",
-        }
-        for key, label in params_to_show.items():
+        # Architecture section
+        arch_params = [
+            ("hidden_dim", "Hidden Dim"),
+            ("num_layers", "Layers"),
+            ("seeds_per_layer", "Seeds/Layer"),
+            ("input_dim", "Input Dim"),
+        ]
+        self._add_info_section(info_table, arch_params)
+
+        # Training section
+        train_params = [
+            ("warm_up_epochs", "Warmup Epochs"),
+            ("adaptation_epochs", "Adapt Epochs"),
+            ("lr", "Learning Rate"),
+            ("batch_size", "Batch Size"),
+        ]
+        self._add_info_section(info_table, train_params)
+
+        # Data section
+        data_params = [
+            ("problem_type", "Problem"),
+            ("n_samples", "Samples"),
+            ("train_frac", "Train Fraction"),
+        ]
+        self._add_info_section(info_table, data_params)
+
+        # System section
+        sys_params = [
+            ("device", "Device"),
+            ("seed", "Random Seed"),
+        ]
+        self._add_info_section(info_table, sys_params)
+
+        # Experiment section
+        experiment_info = [
+            ("start_time", "Started", self._format_start_time()),
+            ("planned_epochs", "Total Epochs", str(self.total_planned_epochs) if self.total_planned_epochs else "Unknown"),
+            ("current_epoch", "Current Epoch", str(self.latest_metrics.get("epoch_num", 0))),
+        ]
+        
+        for i, (key, label, value) in enumerate(experiment_info):
+            info_table.add_row(f"{label}:", value)
+
+        return Panel(info_table, title="Experiment Info", border_style="yellow")
+
+    def _add_info_section(self, table: Table, params: list[tuple[str, str]]) -> None:
+        """Add a section of parameters to the info table."""
+        for i, (key, label) in enumerate(params):
             value = self.experiment_params.get(key)
-            if value is not None:
-                info_table.add_row(f"{label}:", str(value))
+            value_str = str(value) if value is not None else "N/A"
+            table.add_row(f"{label}:", value_str)
 
-        return Panel(info_table, title="Info", border_style="yellow")
+    def _format_start_time(self) -> str:
+        """Format the experiment start time for display."""
+        from datetime import datetime
+        start_dt = datetime.fromtimestamp(self.experiment_start_time)
+        return start_dt.strftime("%H:%M:%S")
 
     def _create_metrics_table_panel(self) -> Panel:
-        """Generate the panel for the live metrics table."""
-        metrics_table = Table(show_header=True, header_style="bold magenta", expand=True)
+        """Generate the panel for the live metrics table with comprehensive training data."""
+        metrics_table = Table(show_header=True, header_style="bold magenta", expand=True, box=box.MINIMAL, padding=(0, 0))
         metrics_table.add_column("Metric", justify="left", style="cyan", no_wrap=True)
-        metrics_table.add_column("Last", justify="center", style="green")
-        metrics_table.add_column("Previous", justify="center", style="yellow")
+        metrics_table.add_column("Curr", justify="center", style="green")
+        metrics_table.add_column("Prev", justify="center", style="yellow")
+        metrics_table.add_column("Chg", justify="center", style="red")
 
-        # Populate with latest and previous metrics
-        metrics_to_show = sorted(self.latest_metrics.keys())
-        for metric in metrics_to_show:
-            current_val = self.latest_metrics.get(metric)
-            last_val = self.previous_metrics.get(metric)
+        # Define metrics to display with their formatting and priority
+        metrics_config = self._get_metrics_display_config()
 
-            current_str = f"{current_val:.4f}" if isinstance(current_val, float) else str(current_val)
-            last_str = f"{last_val:.4f}" if isinstance(last_val, float) else "N/A"
+        for metric_key, display_name, fmt in metrics_config:
+            current_str, previous_str, change_str = self._format_metric_row(metric_key, fmt)
+            metrics_table.add_row(display_name, current_str, previous_str, change_str)
 
-            metrics_table.add_row(metric, current_str, last_str)
+        return Panel(metrics_table, title="Live Training Metrics", border_style="cyan")
 
-        return Panel(metrics_table, title="Live Metrics", border_style="cyan")
+    def _get_metrics_display_config(self) -> list[tuple[str, str, str]]:
+        """Get the configuration for metrics display."""
+        return [
+            # Core training metrics
+            ("train_loss", "Train Loss", ".4f"),
+            ("val_loss", "Val Loss", ".4f"),
+            ("val_acc", "Val Accuracy", ".4f"),
+            ("best_acc", "Best Accuracy", ".4f"),
+            
+            # Training dynamics
+            ("loss_change", "Loss Δ", "+.4f"),
+            ("acc_change", "Acc Δ", "+.4f"),
+            ("loss_improvement", "Loss ↗", "+.4f"),
+            
+            # Optimization metrics
+            ("learning_rate", "Learning Rate", ".2e"),
+            
+            # Timing and performance
+            ("avg_epoch_time", "Epoch Time (s)", ".2f"),
+            ("total_time", "Total Time (s)", ".0f"),
+            ("samples_per_sec", "Samples/sec", ".1f"),
+            ("eta_seconds", "ETA (s)", ".0f"),
+        ]
+
+    def _format_metric_row(self, metric_key: str, fmt: str) -> tuple[str, str, str]:
+        """Format a single metric row for display."""
+        current_val = self.latest_metrics.get(metric_key)
+        previous_val = self.previous_metrics.get(metric_key)
+        
+        # Format current value
+        current_str = self._format_metric_value(current_val, fmt)
+        
+        # Format previous value
+        previous_str = self._format_metric_value(previous_val, fmt)
+        
+        # Calculate and format change
+        change_str = self._calculate_metric_change(current_val, previous_val, fmt, metric_key)
+        
+        return current_str, previous_str, change_str
+
+    def _format_metric_value(self, value: Any, fmt: str) -> str:
+        """Format a single metric value."""
+        if value is not None:
+            if isinstance(value, float):
+                return f"{value:{fmt}}"
+            return str(value)
+        return "N/A"
+
+    def _calculate_metric_change(self, current_val: Any, previous_val: Any, fmt: str, metric_key: str = "") -> str:
+        """Calculate and format the change between two metric values."""
+        if current_val is not None and previous_val is not None and isinstance(current_val, (int, float)) and isinstance(previous_val, (int, float)):
+            change = current_val - previous_val
+            if abs(change) > 1e-6:  # Only show meaningful changes
+                # Special handling for learning rate - show in exponential format
+                if metric_key == "learning_rate":
+                    return f"{change:+.2e}"
+                # Use the same format as the metric, but with + sign for positive changes
+                elif fmt.startswith("+"):
+                    return f"{change:{fmt}}"
+                else:
+                    return f"{change:+{fmt}}"
+            # Return zero with appropriate precision
+            if ".3f" in fmt:
+                return "0.000"
+            elif ".2f" in fmt:
+                return "0.00"
+            elif ".1f" in fmt:
+                return "0.0"
+            elif ".0f" in fmt:
+                return "0"
+            elif ".2e" in fmt or metric_key == "learning_rate":
+                return "0.00e+00"  # Show in exponential format for learning rate
+            else:
+                return "0.000"  # Default fallback
+        return "N/A"
 
     def _create_sparkline_panel(self) -> Panel:
-        """Generate the panel for metric sparklines."""
+        """Generate the panel for metric trends and sparklines."""
         sparkline_table = Table(show_header=True, header_style="bold cyan", expand=True, box=box.MINIMAL)
         sparkline_table.add_column("Metric", style="cyan", no_wrap=True)
-        sparkline_table.add_column("Trend / Sparkline", style="green", ratio=2)
-        sparkline_table.add_column("Average", justify="right")
+        sparkline_table.add_column("Current", justify="center", style="green")
+        sparkline_table.add_column("Change", justify="center", style="yellow")
+        sparkline_table.add_column("Trend", style="dim", ratio=4)
 
-        # Add rows for key metrics with placeholders
-        metrics_to_track = ["train_loss", "val_acc"]
-        for metric in metrics_to_track:
-            latest_val = self.latest_metrics.get(metric)
-            # For now, "Average" will just show the latest value.
-            avg_val_str = f"{latest_val:.4f}" if isinstance(latest_val, float) else "N/A"
+        # Define metrics useful for tracking trends
+        trend_metrics = [
+            ("train_loss", "Train Loss", ".3f"),
+            ("val_loss", "Val Loss", ".3f"),
+            ("val_acc", "Val Accuracy", ".3f"),
+            ("loss_change", "Loss Δ", "+.3f"),
+            ("acc_change", "Acc Δ", "+.3f"),
+            ("loss_improvement", "Loss ↗", "+.3f"),
+            ("learning_rate", "Learning Rate", ".2e"),
+        ]
 
-            sparkline_table.add_row(
-                metric,
-                "[dim]...plotting area...[/dim]",
-                avg_val_str,
-            )
+        for metric_key, display_name, fmt in trend_metrics:
+            current_val = self.latest_metrics.get(metric_key)
+            previous_val = self.previous_metrics.get(metric_key)
+            
+            # Format current value
+            if current_val is not None:
+                if isinstance(current_val, float):
+                    current_str = f"{current_val:{fmt}}"
+                else:
+                    current_str = str(current_val)
+            else:
+                current_str = "N/A"
+            
+            # Calculate change
+            change_str = self._calculate_metric_change(current_val, previous_val, fmt, metric_key)
+            
+            # Trend placeholder - longer sparkline to fill the expanded column
+            trend_indicator = "[dim]···○···○···○···○···○···○···○···○···○···[/dim]" if current_val is not None else "[dim]----------------------------------------[/dim]"
+
+            sparkline_table.add_row(display_name, current_str, change_str, trend_indicator)
 
         return Panel(sparkline_table, title="Trends", border_style="cyan")
 
@@ -570,14 +713,74 @@ class RichDashboard:
         content = Text.from_markup(event_text)
         return Panel(content, title="Seed Timeline", border_style="red")
 
+    def _add_derived_metrics(self, epoch: int, timestamp: float) -> None:
+        """Calculate and add derived metrics to latest_metrics."""
+        # Timing metrics
+        if self.epoch_times:
+            avg_epoch_time = sum(self.epoch_times) / len(self.epoch_times)
+            self.latest_metrics["avg_epoch_time"] = avg_epoch_time
+            
+            # Estimate remaining time
+            if self.total_planned_epochs and epoch > 0:
+                remaining_epochs = self.total_planned_epochs - epoch
+                eta_seconds = remaining_epochs * avg_epoch_time
+                self.latest_metrics["eta_seconds"] = eta_seconds
+        
+        # Training progress metrics
+        total_time = timestamp - self.experiment_start_time
+        self.latest_metrics["total_time"] = total_time
+        self.latest_metrics["epoch_num"] = epoch
+        
+        # Loss and accuracy derivatives if we have previous metrics
+        if self.previous_metrics:
+            # Loss change
+            prev_loss = self.previous_metrics.get("train_loss")
+            curr_loss = self.latest_metrics.get("train_loss")
+            if prev_loss is not None and curr_loss is not None:
+                loss_change = curr_loss - prev_loss
+                self.latest_metrics["loss_change"] = loss_change
+                self.latest_metrics["loss_improvement"] = -loss_change  # Negative change is improvement
+            
+            # Accuracy change
+            prev_acc = self.previous_metrics.get("val_acc")
+            curr_acc = self.latest_metrics.get("val_acc")
+            if prev_acc is not None and curr_acc is not None:
+                acc_change = curr_acc - prev_acc
+                self.latest_metrics["acc_change"] = acc_change
+        
+        # Calculate learning rate if available in config
+        base_lr = self.experiment_params.get("lr", 0.001)
+        # For now, assume constant LR unless we get scheduler info
+        self.latest_metrics["learning_rate"] = base_lr
+        
+        # Performance metrics (samples per second)
+        if self.epoch_times:
+            avg_time = sum(self.epoch_times) / len(self.epoch_times)
+            if avg_time > 0:
+                # Rough estimate - assumes one pass through data per epoch
+                n_samples = self.experiment_params.get("n_samples", 1000)
+                samples_per_sec = n_samples / avg_time
+                self.latest_metrics["samples_per_sec"] = samples_per_sec
+
     def update_metrics(self, payload: MetricsUpdatePayload) -> None:
         """Receives a metrics update and refreshes the view."""
         epoch = payload["epoch"]
         metrics = payload["metrics"]
+        timestamp = payload["timestamp"]
 
         if epoch < 0:
             self.log_event({"event_type": "error", "message": "Invalid epoch value", "data": {"epoch": epoch}})
             return
+
+        # Track timing information
+        current_time = time.time()
+        if self.epoch_start_time is not None:
+            epoch_duration = current_time - self.epoch_start_time
+            self.epoch_times.append(epoch_duration)
+            # Keep only recent epoch times for averaging
+            if len(self.epoch_times) > 50:
+                self.epoch_times = self.epoch_times[-50:]
+        self.epoch_start_time = current_time
 
         # Update phase progress (left bar) - progress within current phase
         current_phase_epoch = epoch - self.phase_start_epoch
@@ -588,7 +791,21 @@ class RichDashboard:
 
         # Store metrics for later use
         self.previous_metrics = self.latest_metrics.copy()
-        self.latest_metrics = metrics
+        self.latest_metrics = metrics.copy()
+        
+        # Add derived metrics
+        self._add_derived_metrics(epoch, timestamp)
+        
+        # Store in history for trend analysis
+        metrics_with_metadata = {
+            "epoch": epoch,
+            "timestamp": timestamp,
+            **metrics
+        }
+        self.metrics_history.append(metrics_with_metadata)
+        # Keep only recent history
+        if len(self.metrics_history) > 100:
+            self.metrics_history = self.metrics_history[-100:]
 
         # To avoid clutter, only show a few key metrics in the event log
         simple_metrics = {
@@ -811,3 +1028,16 @@ class RichDashboard:
             border_style="green",
         )
         self.layout["seed_box_panel"].update(panel)
+
+    def initialize_experiment(self, config: dict[str, Any]) -> None:
+        """Initialize experiment with configuration data."""
+        self.experiment_params.update(config)
+        
+        # Calculate total planned epochs from config
+        warm_up = config.get("warm_up_epochs", 0)
+        adaptation = config.get("adaptation_epochs", 0)
+        self.total_planned_epochs = warm_up + adaptation
+        
+        # Update total progress bar with planned epochs
+        if self.total_planned_epochs > 0:
+            self.total_progress.update(self.total_task, total=self.total_planned_epochs)

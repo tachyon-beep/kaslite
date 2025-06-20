@@ -270,21 +270,21 @@ def process_single_sweep_config(
         runners_module.setup_experiment = setup_func
 
         try:
-            # Run the experiment
-            experiment_results = run_experiment(run_args, run_slug)
+            # Run the experiment (returns None, results are logged internally)
+            run_experiment(run_args)
+            experiment_results = {"status": "completed"}  # Placeholder for now
 
             # Separate parameters from results
             run_record = {
                 "run_id": run_slug,
                 "run_slug": run_slug,
                 "parameters": combo,
-                "results": {k: v for k, v in experiment_results.items() if k not in ["run_id", "parameters"]},
+                "results": experiment_results.get("status", "unknown"),
             }
             config_runs.append(run_record)
 
-            print(f"  Final accuracy: {experiment_results.get('best_acc', 0.0):.4f}")
-            if experiment_results.get("error"):
-                print(f"  Error: {experiment_results['error']}")
+            print(f"  Status: {experiment_results.get('status', 'unknown')}")
+            # Note: Individual metrics are now logged via the experiment logger
 
         finally:
             # Restore original setup_experiment

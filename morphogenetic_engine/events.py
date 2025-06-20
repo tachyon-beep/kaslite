@@ -141,10 +141,10 @@ class SeedMetricsUpdatePayload(TypedDict, total=False):
     """Payload for updating a single seed's metrics. All fields are optional except seed_id."""
 
     seed_id: str | tuple[int, int]
-    state: SeedState | str
-    alpha: float
-    grad_norm: float
-    patience: int
+    state: SeedState | str | None
+    alpha: float | None
+    grad_norm: float | None
+    patience: int | None
 
 
 # A union of all possible event payloads for type-safe handling

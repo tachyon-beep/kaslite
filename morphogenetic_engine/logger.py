@@ -5,9 +5,9 @@ from __future__ import annotations
 import collections
 import time
 from pathlib import Path
-from typing import Optional, cast
+from typing import Any, Optional, cast
 
-from .cli_dashboard import RichDashboard
+from .ui_dashboard import RichDashboard
 from .events import (
     EventPayload,
     EventType,
@@ -48,6 +48,7 @@ class ExperimentLogger:
 
         # Map EventType to the corresponding RichDashboard method
         self.dashboard_dispatch_map = {
+            EventType.SYSTEM_INIT: lambda p: self.dashboard.initialize_experiment(cast(SystemInitPayload, p)['config']),
             EventType.METRICS_UPDATE: lambda p: self.dashboard.update_metrics(cast(MetricsUpdatePayload, p)),
             EventType.PHASE_UPDATE: lambda p: self.dashboard.transition_phase(cast(PhaseUpdatePayload, p)),
             EventType.SEED_STATE_UPDATE: lambda p: self.dashboard.update_seed_states_grid(cast(SeedStateUpdatePayload, p)),
@@ -165,14 +166,14 @@ class ExperimentLogger:
         )
         self._log_event(event_type=EventType.GERMINATION, payload=payload)
 
-    def log_seed_event_detailed(self, epoch: int, event_type: str, message: str, data: dict = None) -> None:
+    def log_seed_event_detailed(self, epoch: int, event_type: str, message: str, data: dict[str, Any] | None = None) -> None:
         """Log a detailed seed event for the timeline."""
         payload = SeedLogPayload(
             event_type=event_type,
             message=message,
             data=data or {},
-            timestamp=time.time()
         )
+        self._log_event(event_type=EventType.SEED_LOG_EVENT, payload=payload)
         self._log_event(event_type=EventType.SEED_LOG_EVENT, payload=payload)
 
     def log_seed_event(self, epoch: int, _seed_id: tuple[int, int], old_state: str, new_state: str) -> None:
