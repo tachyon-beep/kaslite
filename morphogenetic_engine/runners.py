@@ -239,93 +239,81 @@ def _create_serializable_model(original_model):
     return serializable
 
 
-def run_single_experiment(args) -> Dict[str, Any]:
-    """Run a single experiment with the given arguments and return results."""
-    torch.manual_seed(args.seed)
-    np.random.seed(args.seed)
-    random.seed(args.seed)
-
+def run_experiment(args: Dict[str, Any]):
+    """Main experiment execution function."""
     logger, tb_writer, device, config, slug, project_root = setup_experiment(args)
-    logger.log_system_init(config=config)
-    setup_mlflow_logging(config, slug)
 
-    # Calculate total epochs and pass to the dashboard
-    total_experiment_epochs = args.warm_up_epochs + args.adaptation_epochs
-    dashboard_params = vars(args).copy()
-    dashboard_params["epochs"] = total_experiment_epochs
-    dashboard = RichDashboard(experiment_params=dashboard_params)
+    # --- Dashboard Setup ---
+    dashboard = RichDashboard(experiment_params=config)
+    logger.dashboard = dashboard  # Connect the logger to the dashboard
 
-    # Connect the dashboard to the logger for real-time dispatching
-    logger.dashboard = dashboard
-
-    # Start the dashboard UI
-    dashboard.start()
-
-    # Initialize variables to ensure they exist for the `finally` block
-    model, seed_manager, final_stats = None, None, {}
+    final_metrics = {}
 
     try:
-        train_loader, val_loader, n_samples, input_shape = get_dataloaders(args)
-        config["n_samples"] = n_samples
-        config["input_shape"] = input_shape
+        with dashboard:  # Use a context manager to handle start/stop
+            # Log system initialization
+            logger.log_system_init(config=config)
 
-        model, seed_manager, karn, tamiyo = build_model_and_agents(
-            logger=logger,
-            tb_writer=tb_writer,
-            dashboard=dashboard,
-            **config,
-        )
+            # --- MLflow Tracking ---
+            with mlflow.start_run(run_name=slug) as run:
+                mlflow.log_params(config)
+                logging.info(f"MLflow Run ID: {run.info.run_id}")
 
-        # --- Phase 1: Warm-up ---
-        final_stats = execute_phase_1(
-            model=model,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            logger=logger,
-            tb_writer=tb_writer,
-            device=device,
-            config=config,
-            dashboard=dashboard,
-            seed_manager=seed_manager,
-        )
+                # --- Data Loading ---
+                train_loader, val_loader, n_samples, input_shape = get_dataloaders(args)
+                config["n_samples"] = n_samples
+                config["input_shape"] = input_shape
 
-        # --- Phase 2: Adaptation ---
-        if args.adaptation_epochs > 0:
-            final_stats = execute_phase_2(
-                model=model,
-                seed_manager=seed_manager,
-                karn=karn,
-                tamiyo=tamiyo,
-                train_loader=train_loader,
-                val_loader=val_loader,
-                logger=logger,
-                tb_writer=tb_writer,
-                device=device,
-                config=config,
-                dashboard=dashboard,
-                final_stats=final_stats,
-            )
+                # --- Model and Agent Initialization ---
+                model, seed_manager, karn, tamiyo = build_model_and_agents(
+                    **config,
+                    logger=logger,
+                    tb_writer=tb_writer,
+                )
+                model.to(device)
 
-    except (RuntimeError, ValueError, KeyError, TypeError) as e:
-        logging.error(f"Experiment failed: {e}")
-        # Return a result indicating failure
-        return {"status": "failed", "error": str(e), **final_stats}
+                # --- Training Phases ---
+                logging.info("Starting Phase 1: Initial Training...")
+                final_stats = execute_phase_1(
+                    model=model,
+                    train_loader=train_loader,
+                    val_loader=val_loader,
+                    logger=logger,
+                    tb_writer=tb_writer,
+                    device=device,
+                    config=config,
+                    seed_manager=seed_manager,
+                )
 
+                logging.info("Starting Phase 2: Morphogenetic Adaptation...")
+                final_metrics = execute_phase_2(
+                    model=model,
+                    seed_manager=seed_manager,
+                    karn=karn,
+                    tamiyo=tamiyo,
+                    train_loader=train_loader,
+                    val_loader=val_loader,
+                    logger=logger,
+                    tb_writer=tb_writer,
+                    device=device,
+                    config=config,
+                    final_stats=final_stats,
+                )
+
+                # --- Finalization ---
+                logging.info("Experiment finished.")
+                logger.log_system_shutdown(final_stats=final_metrics)
+                export_metrics_for_dvc(final_metrics, project_root, slug)
+
+                # Log final metrics and close TensorBoard writer
+                mlflow.log_metrics(final_metrics)
+                tb_writer.close()
+
+    except (KeyboardInterrupt, Exception) as e:
+        logging.error(f"Experiment interrupted or failed: {e}", exc_info=True)
+        # The `with dashboard:` block will handle stopping the dashboard.
+        raise  # Re-raise the exception after cleanup
     finally:
-        log_final_summary(logger, final_stats)
-        if model and seed_manager:
-            log_mlflow_metrics_and_artifacts(
-                final_stats, model, seed_manager, project_root, slug
-            )
-        # Stop the live dashboard
-        dashboard.stop()
-        tb_writer.close()
+        # Final cleanup
         cleanup_monitoring()
-        if mlflow.active_run():
-            mlflow.end_run()
-
-    # Export final metrics for DVC
-    export_metrics_for_dvc(final_stats, slug, project_root)
-
-    logging.info(f"Experiment {slug} completed.")
-    return {**final_stats, "status": "completed"}
+        logging.info("Cleanup complete.")

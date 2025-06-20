@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from morphogenetic_engine.cli.arguments import parse_experiment_arguments
-from morphogenetic_engine.runners import run_single_experiment
+from morphogenetic_engine.runners import run_experiment
 from morphogenetic_engine.sweeps.runner import run_parameter_sweep
 
 
@@ -27,7 +27,7 @@ def main():
         run_parameter_sweep(args)
     else:
         # Run single experiment
-        run_single_experiment(args)
+        run_experiment(args)
 
 
 if __name__ == "__main__":

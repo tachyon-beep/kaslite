@@ -19,7 +19,7 @@ import yaml
 from torch.utils.tensorboard import SummaryWriter
 
 from morphogenetic_engine.cli.arguments import get_valid_argument_names
-from morphogenetic_engine.runners import run_single_experiment, setup_experiment
+from morphogenetic_engine.runners import run_experiment, setup_experiment
 
 
 
@@ -271,7 +271,7 @@ def process_single_sweep_config(
 
         try:
             # Run the experiment
-            experiment_results = run_single_experiment(run_args, run_slug)
+            experiment_results = run_experiment(run_args, run_slug)
 
             # Separate parameters from results
             run_record = {

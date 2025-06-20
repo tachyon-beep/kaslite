@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from torch import nn
 
-from morphogenetic_engine.cli_dashboard import RichDashboard
 from morphogenetic_engine.components import BaseNet
 from morphogenetic_engine.core import KasminaMicro, SeedManager
 from morphogenetic_engine.logger import ExperimentLogger
@@ -31,7 +30,6 @@ def build_model_and_agents(
     # Infrastructure
     device: str,
     logger: ExperimentLogger,
-    dashboard: RichDashboard,
     tb_writer,  # Add type hint if available
     # Dataset-specific
     problem_type: str,
@@ -69,7 +67,6 @@ def build_model_and_agents(
         delta=5e-4,  # This could be parameterized
         acc_threshold=acc_threshold,
         logger=logger,
-        dashboard=dashboard,
     )
 
     # The `karn` agent is implicitly the training loop logic itself

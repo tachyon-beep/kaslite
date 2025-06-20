@@ -19,7 +19,6 @@ from torch import nn
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
-from .cli_dashboard import RichDashboard
 from .core import KasminaMicro, SeedManager
 from .events import SeedInfo
 from .logger import ExperimentLogger
@@ -123,7 +122,6 @@ def execute_phase_1(
     tb_writer: "SummaryWriter",
     device: torch.device,
     config: dict[str, Any],
-    dashboard: RichDashboard,
     seed_manager: SeedManager,
 ) -> dict[str, Any]:
     """
@@ -160,8 +158,7 @@ def execute_phase_1(
         seed_info = _get_seed_info_for_logging(seed_manager)
         logger.log_seed_state_update(epoch, seed_info)
 
-        # Update dashboard and other loggers
-        dashboard.update_progress(epoch, metrics)
+        # Update other loggers
         tb_writer.add_scalar("train/loss_phase1", train_loss, epoch)
         tb_writer.add_scalar("validation/loss_phase1", val_loss, epoch)
         tb_writer.add_scalar("validation/accuracy_phase1", val_acc, epoch)
@@ -185,7 +182,6 @@ def execute_phase_2(
     tb_writer: "SummaryWriter",
     device: torch.device,
     config: dict[str, Any],
-    dashboard: RichDashboard,
     final_stats: dict[str, Any],
 ) -> Dict[str, Any]:
     """
@@ -247,8 +243,7 @@ def execute_phase_2(
         seed_info = _get_seed_info_for_logging(seed_manager)
         logger.log_seed_state_update(epoch, seed_info)
 
-        # Update dashboard and other loggers
-        dashboard.update_progress(epoch, metrics)
+        # Update other loggers
         tb_writer.add_scalar("train/loss_phase2", train_loss, epoch)
         tb_writer.add_scalar("validation/loss_phase2", val_loss, epoch)
         tb_writer.add_scalar("validation/accuracy_phase2", val_acc, epoch)

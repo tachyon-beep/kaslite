@@ -13,9 +13,13 @@ from .events import (
     EventType,
     GerminationPayload,
     LogEvent,
+    LogPayload,
     MetricsUpdatePayload,
+    NetworkStrainGridUpdatePayload,
     PhaseUpdatePayload,
     SeedInfo,
+    SeedLogPayload,
+    SeedMetricsUpdatePayload,
     SeedState,
     SeedStateUpdatePayload,
     SystemInitPayload,
@@ -42,40 +46,31 @@ class ExperimentLogger:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_file_path.write_text("", encoding="utf-8")
 
+        # Map EventType to the corresponding RichDashboard method
+        self.dashboard_dispatch_map = {
+            EventType.METRICS_UPDATE: lambda p: self.dashboard.update_metrics(cast(MetricsUpdatePayload, p)),
+            EventType.PHASE_UPDATE: lambda p: self.dashboard.transition_phase(cast(PhaseUpdatePayload, p)),
+            EventType.SEED_STATE_UPDATE: lambda p: self.dashboard.update_seed_states_grid(cast(SeedStateUpdatePayload, p)),
+            EventType.NETWORK_STRAIN_UPDATE: lambda p: self.dashboard.update_network_strain_grid(cast(NetworkStrainGridUpdatePayload, p)),
+            EventType.GERMINATION: lambda p: self.dashboard.log_seed_event({
+                "event_type": "germination",
+                "message": f"Seed {cast(GerminationPayload, p)['seed_id']} germinated!",
+                "data": {"epoch": cast(GerminationPayload, p)['epoch']}
+            }),
+            # General logging events can be mapped to the dashboard's log methods
+            EventType.LOG_EVENT: lambda p: self.dashboard.log_event(cast(LogPayload, p)),
+            EventType.SEED_LOG_EVENT: lambda p: self.dashboard.log_seed_event(cast(SeedLogPayload, p)),
+        }
+
     def _log_event(self, event_type: EventType, payload: EventPayload) -> None:
         """Create, store, write, and dispatch a LogEvent."""
         event = LogEvent(event_type=event_type, payload=payload)
         self.events.append(event)
 
-        # Dispatch to dashboard if present
-        if self.dashboard:
-            if event.event_type == EventType.METRICS_UPDATE:
-                # The dashboard's update_progress method handles metrics
-                metrics_payload = cast(MetricsUpdatePayload, payload)
-                self.dashboard.update_progress(
-                    metrics_payload["epoch"], metrics_payload["metrics"]
-                )
-            elif event.event_type == EventType.PHASE_UPDATE:
-                phase_payload = cast(PhaseUpdatePayload, payload)
-                self.dashboard.show_phase_transition(
-                    to_phase=phase_payload["to_phase"],
-                    epoch=phase_payload["epoch"],
-                    from_phase=phase_payload["from_phase"],
-                    total_epochs=phase_payload.get("total_epochs_in_phase"),
-                )
-            elif event.event_type == EventType.SEED_STATE_UPDATE:
-                # Use the proper dashboard method for seed updates
-                seed_payload = cast(SeedStateUpdatePayload, payload)
-                self.dashboard.update_seeds_view(seed_payload)
-            elif event.event_type == EventType.GERMINATION:
-                # Log germination events
-                germination_payload = cast(GerminationPayload, payload)
-                seed_id = germination_payload["seed_id"]
-                self.dashboard.add_live_event(
-                    "GERMINATION",
-                    f"Seed L{seed_id[0]}_S{seed_id[1]} germinated at epoch {germination_payload['epoch']}",
-                    {},
-                )
+        # Dispatch to dashboard if present and a handler exists
+        if self.dashboard and event.event_type in self.dashboard_dispatch_map:
+            handler = self.dashboard_dispatch_map[event.event_type]
+            handler(payload)
 
         try:
             with self.log_file_path.open("a", encoding="utf-8") as f:

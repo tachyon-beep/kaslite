@@ -25,7 +25,10 @@ class EventType(Enum):
     METRICS_UPDATE = "metrics_update"
     PHASE_UPDATE = "phase_update"
     SEED_STATE_UPDATE = "seed_state_update"
+    NETWORK_STRAIN_UPDATE = "network_strain_update"
     GERMINATION = "germination"
+    LOG_EVENT = "log_event"
+    SEED_LOG_EVENT = "seed_log_event"
 
 
 class SeedState(Enum):
@@ -118,6 +121,32 @@ class GerminationPayload(TypedDict):
     timestamp: float
 
 
+class LogPayload(TypedDict):
+    """Payload for a generic log event."""
+
+    event_type: str
+    message: str
+    data: dict[str, Any] | None
+
+
+class SeedLogPayload(TypedDict):
+    """Payload for a seed-specific log event."""
+
+    event_type: str
+    message: str
+    data: dict[str, Any] | None
+
+
+class SeedMetricsUpdatePayload(TypedDict, total=False):
+    """Payload for updating a single seed's metrics. All fields are optional except seed_id."""
+
+    seed_id: str | tuple[int, int]
+    state: SeedState | str
+    alpha: float
+    grad_norm: float
+    patience: int
+
+
 # A union of all possible event payloads for type-safe handling
 EventPayload = Union[
     SystemInitPayload,
@@ -126,6 +155,9 @@ EventPayload = Union[
     PhaseUpdatePayload,
     SeedStateUpdatePayload,
     GerminationPayload,
+    LogPayload,
+    SeedLogPayload,
+    SeedMetricsUpdatePayload,
 ]
 
 

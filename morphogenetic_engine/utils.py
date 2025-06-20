@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from morphogenetic_engine.training import clear_seed_report_cache
+from .events import SeedInfo, SeedState
 
 
 def is_testing_mode() -> bool:
@@ -153,3 +154,8 @@ def export_metrics_for_dvc(final_stats: Dict[str, Any], slug: str, project_root:
     metrics_path.parent.mkdir(parents=True, exist_ok=True)  # Create results directory if it doesn't exist
     with open(metrics_path, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
+
+
+def count_active_seeds(seeds: list[SeedInfo]) -> int:
+    """Counts seeds in the 'active' state."""
+    return sum(1 for s in seeds if s['state'] == SeedState.ACTIVE)

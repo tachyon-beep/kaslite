@@ -23,10 +23,15 @@ from rich.table import Table
 from rich.text import Text
 
 from morphogenetic_engine.events import (
+    MetricsUpdatePayload,
     NetworkStrain,
     NetworkStrainGridUpdatePayload,
+    PhaseUpdatePayload,
+    SeedLogPayload,
+    SeedMetricsUpdatePayload,
     SeedState,
     SeedStateUpdatePayload,
+    LogPayload,
 )
 
 
@@ -561,37 +566,14 @@ class RichDashboard:
         content = Text.from_markup(f"[bold]Seed Events:[/bold]\n{event_text}")
         return Panel(content, title="Seed Timeline", border_style="red")
 
-    def add_live_event(self, event_type: str, message: str, data: dict[str, Any]):
-        """Add a new event to be displayed in the main experiment log."""
-        event_str = f"[{event_type.upper()}] {message}"
-        if data:
-            data_str = ", ".join([f"{k}={v}" for k, v in data.items() if v is not None])
-            if data_str:
-                event_str += f" ({data_str})"
-        self.last_events.append(event_str)
-        if self.layout:
-            self.layout["event_log_panel"].update(self._create_event_log_panel())
+    def update_metrics(self, payload: MetricsUpdatePayload) -> None:
+        """Receives a metrics update and refreshes the view."""
+        epoch = payload["epoch"]
+        metrics = payload["metrics"]
 
-    def add_seed_log_event(self, event_type: str, message: str, data: dict[str, Any]):
-        """Add a new event to the dedicated seed log."""
-        event_str = f"[{event_type.upper()}] {message}"
-        if data:
-            data_str = ", ".join([f"{k}={v}" for k, v in data.items() if v is not None])
-            if data_str:
-                event_str += f" ({data_str})"
-        self.seed_log_events.append(event_str)
-        if self.layout:
-            self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
-
-    def update_progress(self, epoch: int, metrics: dict[str, Any]):
-        """Handle epoch progress event and update progress bars."""
         if epoch < 0:
-            self.add_live_event("error", "Invalid epoch value", {"epoch": epoch})
+            self.log_event({"event_type": "error", "message": "Invalid epoch value", "data": {"epoch": epoch}})
             return
-
-        #if not isinstance(metrics, dict):
-        #    self.add_live_event("error", "Invalid metrics data type", {"type": type(metrics).__name__})
-        #    return
 
         # Update total progress
         self.total_progress.update(self.total_task, completed=epoch + 1)
@@ -609,12 +591,106 @@ class RichDashboard:
             "loss": f"{metrics.get('train_loss', 0.0):.4f}",
             "acc": f"{metrics.get('val_acc', 0.0):.4f}",
         }
-        self.add_live_event("epoch", f"Epoch {epoch} complete", simple_metrics)
+        self.log_event({"event_type": "epoch", "message": f"Epoch {epoch} complete", "data": simple_metrics})
 
         # Update the metrics panels with the latest data
         if self.layout:
             self.layout["metrics_table_panel"].update(self._create_metrics_table_panel())
             self.layout["sparkline_panel"].update(self._create_sparkline_panel())
+
+    def update_seed_metrics(self, payload: SeedMetricsUpdatePayload) -> None:
+        """Update the state and metrics of a single seed from a payload."""
+        seed_id = payload["seed_id"]
+        
+        # Normalize seed_id to string representation
+        if isinstance(seed_id, tuple):
+            seed_id = f"L{seed_id[0]}_S{seed_id[1]}"
+
+        if not isinstance(seed_id, str) or not seed_id:
+            self.log_event({"event_type": "error", "message": "Invalid seed_id", "data": {"seed_id": seed_id}})
+            return
+
+        if seed_id not in self.seed_states:
+            self.seed_states[seed_id] = {}
+
+        # Update state if present
+        if "state" in payload:
+            state = payload["state"]
+            if isinstance(state, str):
+                try:
+                    state = SeedState[state.upper()]
+                except KeyError:
+                    self.log_event({
+                        "event_type": "error", 
+                        "message": f"Invalid seed state value: '{state}'", 
+                        "data": {"seed_id": seed_id}
+                    })
+                    return
+            self.seed_states[seed_id]["state"] = state
+
+        # Update other metrics from the payload
+        for key, value in payload.items():
+            if key not in ["seed_id", "state"] and value is not None:
+                self.seed_states[seed_id][key] = value
+        
+        # Refresh the Kasima panel to show the updated data
+        if self.layout:
+            self.layout["kasima_panel"].update(self._create_kasima_panel())
+
+    def transition_phase(self, payload: PhaseUpdatePayload) -> None:
+        """Handle phase transition event and reset phase progress bar."""
+        self.log_event({
+            "event_type": "phase_transition", 
+            "message": f"Moving to {payload['to_phase']}", 
+            "data": {"from": payload['from_phase'], "epoch": payload['epoch']}
+        })
+
+        if payload.get("total_epochs") is not None:
+            self.phase_start_epoch = payload['epoch']
+            self.current_phase_epochs = payload['total_epochs']
+            self.phase_progress.reset(self.phase_task)
+            self.phase_progress.update(
+                self.phase_task,
+                total=payload['total_epochs'],
+                completed=0,
+                description=payload['to_phase'].replace("_", " ").title(),
+            )
+
+    def log_event(self, payload: LogPayload) -> None:
+        """Add a new event to be displayed in the main experiment log."""
+        event_str = f"[{payload['event_type'].upper()}] {payload['message']}"
+        data = payload.get("data")
+        if data:
+            data_str = ", ".join([f"{k}={v}" for k, v in data.items() if v is not None])
+            if data_str:
+                event_str += f" ({data_str})"
+        self.last_events.append(event_str)
+        if self.layout:
+            self.layout["event_log_panel"].update(self._create_event_log_panel())
+
+    def log_seed_event(self, payload: SeedLogPayload) -> None:
+        """Add a new event to the dedicated seed log."""
+        event_str = f"[{payload['event_type'].upper()}] {payload['message']}"
+        data = payload.get("data")
+        if data:
+            data_str = ", ".join([f"{k}={v}" for k, v in data.items() if v is not None])
+            if data_str:
+                event_str += f" ({data_str})"
+        self.seed_log_events.append(event_str)
+        if self.layout:
+            self.layout["seed_timeline_panel"].update(self._create_seed_timeline_panel())
+
+    def add_live_event(self, event_type: str, message: str, data: dict[str, Any]):
+        """DEPRECATED: Use log_event with LogPayload instead."""
+        self.log_event({"event_type": event_type, "message": message, "data": data})
+
+    def add_seed_log_event(self, event_type: str, message: str, data: dict[str, Any]):
+        """DEPRECATED: Use log_seed_event with SeedLogPayload instead."""
+        self.log_seed_event({"event_type": event_type, "message": message, "data": data})
+        
+    def update_progress(self, epoch: int, metrics: dict[str, Any]):
+        """DEPRECATED: Use update_metrics with MetricsUpdatePayload instead."""
+        self.update_metrics({"epoch": epoch, "metrics": metrics})
 
     def update_seed(
         self,
@@ -622,72 +698,46 @@ class RichDashboard:
         state: SeedState | str,
         alpha: float = 0.0,
         from_state: str = "unknown",
-        activation_epoch: int | None = None,
         grad_norm: float | None = None,
-        weight_norm: float | None = None,
         patience: int | None = None,
     ):
-        """Update the state and metrics of a single seed, normalizing the ID."""
-
-        # Normalize seed_id to string representation
-        if isinstance(seed_id, tuple):
-            seed_id = f"L{seed_id[0]}_S{seed_id[1]}"
-
-        if not isinstance(seed_id, str) or not seed_id:
-            self.add_live_event("error", "Invalid seed_id", {"seed_id": seed_id})
-            return
-
-        # Normalize state from string to enum
-        if isinstance(state, str):
-            try:
-                state = SeedState[state.upper()]
-            except KeyError:
-                self.add_live_event(
-                    "error", f"Invalid seed state value: '{state}'", {"seed_id": seed_id}
-                )
-                return
-
-        if seed_id not in self.seed_states:
-            self.seed_states[seed_id] = {}
-
-        # Store the raw enum member and validated metrics
-        self.seed_states[seed_id]["state"] = state
-        self.seed_states[seed_id]["alpha"] = float(alpha)
-        if activation_epoch is not None:
-            self.seed_states[seed_id]["activation_epoch"] = int(activation_epoch)
-        if grad_norm is not None:
-            self.seed_states[seed_id]["grad_norm"] = float(grad_norm)
-        if weight_norm is not None:
-            self.seed_states[seed_id]["weight_norm"] = float(weight_norm)
-        if patience is not None:
-            self.seed_states[seed_id]["patience"] = int(patience)
-
-        # The from_state is for logging, can remain a string
-        message = f"Seed {seed_id} changed from {from_state} to {state.name}"
-        self.add_seed_log_event(
-            "SEED_STATE_CHANGE", message, {"seed_id": seed_id, "to_state": state.name}
+        """DEPRECATED: Use update_seed_metrics with SeedMetricsUpdatePayload instead."""
+        payload = SeedMetricsUpdatePayload(
+            seed_id=seed_id,
+            state=state,
+            alpha=alpha,
+            grad_norm=grad_norm,
+            patience=patience,
         )
+        self.update_seed_metrics(payload)
+        
+        # Log the state change event separately
+        if "state" in payload:
+            message = f"Seed {seed_id} changed from {from_state} to {state.name if isinstance(state, SeedState) else state}"
+            self.log_seed_event({
+                "event_type": "SEED_STATE_CHANGE", 
+                "message": message, 
+                "data": {"seed_id": seed_id, "to_state": state.name if isinstance(state, SeedState) else state}
+            })
 
     def show_phase_transition(
         self, to_phase: str, epoch: int, from_phase: str = "", total_epochs: int | None = None
     ):
-        """Handle phase transition event and reset phase progress bar."""
-        self.add_live_event("phase_transition", f"Moving to {to_phase}", {"from": from_phase, "epoch": epoch})
-
-        if total_epochs is not None:
-            self.phase_start_epoch = epoch
-            self.current_phase_epochs = total_epochs
-            self.phase_progress.reset(self.phase_task)
-            self.phase_progress.update(
-                self.phase_task,
-                total=total_epochs,
-                completed=0,
-                description=to_phase.replace("_", " ").title(),
-            )
+        """DEPRECATED: Use transition_phase with PhaseTransitionPayload instead."""
+        self.transition_phase({
+            "to_phase": to_phase, 
+            "epoch": epoch, 
+            "from_phase": from_phase, 
+            "total_epochs": total_epochs
+        })
 
     def show_germination_event(self, seed_id: str, epoch: int):
-        """Handle seed germination event."""
-        self.add_seed_log_event("germination", f"Seed {seed_id[:12]}... germinated!", {"epoch": epoch})
+        """DEPRECATED: Use log_seed_event instead."""
+        self.log_seed_event({
+            "event_type": "germination", 
+            "message": f"Seed {seed_id[:12]}... germinated!", 
+            "data": {"epoch": epoch}
+        })
 
     def start(self):
         """Start the live dashboard display, with error handling."""
@@ -723,7 +773,7 @@ class RichDashboard:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
 
-    def update_grid_view(self, payload: NetworkStrainGridUpdatePayload) -> None:
+    def update_network_strain_grid(self, payload: NetworkStrainGridUpdatePayload) -> None:
         """Receives a grid update and refreshes the view."""
         if not self.layout:
             return
@@ -739,7 +789,7 @@ class RichDashboard:
         )
         self.layout["network_strain_panel"].update(panel)
 
-    def update_seeds_view(self, payload: SeedStateUpdatePayload) -> None:
+    def update_seed_states_grid(self, payload: SeedStateUpdatePayload) -> None:
         """Receives a seed state update and refreshes the view."""
         if not self.layout:
             return
