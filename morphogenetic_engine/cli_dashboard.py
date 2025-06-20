@@ -89,7 +89,11 @@ class RichDashboard:
             expand=True,
         )
 
-        self.total_epochs = self.experiment_params.get("epochs", 100)
+        # Calculate total epochs from warm_up_epochs + adaptation_epochs
+        warm_up_epochs = self.experiment_params.get("warm_up_epochs", 50)
+        adaptation_epochs = self.experiment_params.get("adaptation_epochs", 50)
+        self.total_epochs = warm_up_epochs + adaptation_epochs
+        
         self.total_task = self.total_progress.add_task("Overall", total=self.total_epochs)
         self.phase_task = self.phase_progress.add_task("Phase", total=100)  # Default, will be updated
 
@@ -265,7 +269,7 @@ class RichDashboard:
     def _create_event_log_panel(self) -> Panel:
         """Generate the panel for the scrolling event log."""
         event_text = "\n".join(self.last_events)
-        content = Text.from_markup(f"[bold]Experiment Log:[/bold]\n{event_text}")
+        content = Text.from_markup(event_text)
         return Panel(content, title="Event Log", border_style="blue")
 
     def _get_seed_states_by_layer(
@@ -563,7 +567,7 @@ class RichDashboard:
     def _create_seed_timeline_panel(self) -> Panel:
         """Generate the panel for the seed event log."""
         event_text = "\n".join(self.seed_log_events)
-        content = Text.from_markup(f"[bold]Seed Events:[/bold]\n{event_text}")
+        content = Text.from_markup(event_text)
         return Panel(content, title="Seed Timeline", border_style="red")
 
     def update_metrics(self, payload: MetricsUpdatePayload) -> None:
@@ -575,12 +579,12 @@ class RichDashboard:
             self.log_event({"event_type": "error", "message": "Invalid epoch value", "data": {"epoch": epoch}})
             return
 
-        # Update total progress
-        self.total_progress.update(self.total_task, completed=epoch + 1)
-
-        # Update phase progress
+        # Update phase progress (left bar) - progress within current phase
         current_phase_epoch = epoch - self.phase_start_epoch
         self.phase_progress.update(self.phase_task, completed=current_phase_epoch + 1)
+
+        # Update total progress (right bar) - overall experiment progress
+        self.total_progress.update(self.total_task, completed=epoch + 1)
 
         # Store metrics for later use
         self.previous_metrics = self.latest_metrics.copy()
@@ -645,13 +649,13 @@ class RichDashboard:
             "data": {"from": payload['from_phase'], "epoch": payload['epoch']}
         })
 
-        if payload.get("total_epochs") is not None:
+        if payload.get("total_epochs_in_phase") is not None:
             self.phase_start_epoch = payload['epoch']
-            self.current_phase_epochs = payload['total_epochs']
+            self.current_phase_epochs = payload['total_epochs_in_phase']
             self.phase_progress.reset(self.phase_task)
             self.phase_progress.update(
                 self.phase_task,
-                total=payload['total_epochs'],
+                total=payload['total_epochs_in_phase'],
                 completed=0,
                 description=payload['to_phase'].replace("_", " ").title(),
             )

@@ -91,29 +91,6 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device:
     return loss_accum / len(loader), correct / total
 
 
-def _get_seed_info_for_logging(seed_manager: SeedManager) -> list[SeedInfo]:
-    """Helper to gather all seed information into the standardized SeedInfo format."""
-    seed_infos: list[SeedInfo] = []
-    with seed_manager.lock:
-        for sid, data in seed_manager.seeds.items():
-            module = data["module"]
-            layer_idx, seed_idx_in_layer = sid
-            info = SeedInfo(
-                id=sid,
-                state=module.state,
-                layer=layer_idx,
-                index_in_layer=seed_idx_in_layer,
-                metrics={
-                    "alpha": getattr(module, "alpha", None),
-                    "grad_norm": getattr(module, "grad_norm", None),
-                    "weight_norm": getattr(module, "weight_norm", None),
-                    "patience": getattr(module, "patience", None),
-                },
-            )
-            seed_infos.append(info)
-    return seed_infos
-
-
 def execute_phase_1(
     model: nn.Module,
     train_loader: DataLoader,
@@ -123,6 +100,7 @@ def execute_phase_1(
     device: torch.device,
     config: dict[str, Any],
     seed_manager: SeedManager,
+    tamiyo: KasminaMicro,
 ) -> dict[str, Any]:
     """
     Runs the initial warm-up phase, reporting all progress via the logger.
@@ -154,9 +132,10 @@ def execute_phase_1(
         }
         logger.log_metrics_update(epoch, metrics)
 
-        # Log comprehensive seed state update
-        seed_info = _get_seed_info_for_logging(seed_manager)
-        logger.log_seed_state_update(epoch, seed_info)
+        # Assess seeds and log their state and metrics
+        # This single call now handles all detailed seed logging.
+        if hasattr(tamiyo, 'assess_and_update_seeds'):
+            tamiyo.assess_and_update_seeds(epoch)
 
         # Update other loggers
         tb_writer.add_scalar("train/loss_phase1", train_loss, epoch)
@@ -221,6 +200,10 @@ def execute_phase_2(
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
 
+        # Assess seeds BEFORE the step function, so Tamiyo has the latest state
+        if hasattr(tamiyo, 'assess_and_update_seeds'):
+            tamiyo.assess_and_update_seeds(epoch)
+
         if not seeds_activated and tamiyo.step(epoch, val_loss, val_acc):
             seeds_activated, germ_epoch, acc_pre = True, epoch, val_acc
             optimiser = rebuild_opt(model)
@@ -239,9 +222,8 @@ def execute_phase_2(
         }
         logger.log_metrics_update(epoch, metrics)
 
-        # Log comprehensive seed state update
-        seed_info = _get_seed_info_for_logging(seed_manager)
-        logger.log_seed_state_update(epoch, seed_info)
+        # NOTE: The comprehensive seed state update is now handled by 
+        # tamiyo.assess_and_update_seeds() called earlier in the loop.
 
         # Update other loggers
         tb_writer.add_scalar("train/loss_phase2", train_loss, epoch)

@@ -150,7 +150,6 @@ class KasminaMicro:
         delta: float = 1e-4,
         acc_threshold: float = 0.95,
         logger: ExperimentLogger | None = None,
-        dashboard: RichDashboard | None = None,
     ) -> None:
         self.seed_manager = seed_manager
         self.patience = patience
@@ -159,7 +158,66 @@ class KasminaMicro:
         self.plateau = 0
         self.prev_loss = float("inf")
         self.logger = logger
-        self.dashboard = dashboard
+
+    def assess_and_update_seeds(self, epoch: int) -> None:
+        """Assess all seeds, update their metrics, and log changes."""
+        if not self.logger:
+            return
+
+        # Collect all seed information for batch logging
+        from .events import SeedInfo, SeedState
+        seed_infos = []
+        
+        with self.seed_manager.lock:
+            for seed_id, seed_info in self.seed_manager.seeds.items():
+                module = seed_info["module"]
+                
+                # Store previous state for comparison
+                prev_state = module.state
+
+                # This method should update the seed's internal state
+                module.update_state()
+
+                # Convert string state to SeedState enum if needed
+                if isinstance(module.state, str):
+                    try:
+                        state_enum = SeedState[module.state.upper()]
+                    except KeyError:
+                        state_enum = SeedState.DORMANT  # Default fallback
+                else:
+                    state_enum = module.state
+
+                # Collect seed info for batch logging
+                layer_idx, seed_idx = seed_id
+                seed_info_obj = SeedInfo(
+                    id=seed_id,
+                    state=state_enum,
+                    layer=layer_idx,
+                    index_in_layer=seed_idx,
+                    metrics={
+                        "alpha": module.alpha,
+                        "grad_norm": module.get_gradient_norm(),
+                        "patience": getattr(module, 'patience_counter', None),
+                    }
+                )
+                seed_infos.append(seed_info_obj)
+
+                # Log a specific event only if the state has changed
+                if module.state != prev_state:
+                    self.logger.log_seed_event_detailed(
+                        epoch=epoch,
+                        event_type="STATE_CHANGE",
+                        message=f"Seed L{layer_idx}_S{seed_idx} changed from {prev_state} to {module.state}",
+                        data={
+                            "seed_id": f"L{layer_idx}_S{seed_idx}",
+                            "from_state": prev_state,
+                            "to_state": module.state,
+                            "epoch": epoch
+                        }
+                    )
+
+        # Log all seed states in one batch
+        self.logger.log_seed_state_update(epoch, seed_infos)
 
     def step(self, epoch: int, val_loss: float, val_acc: float) -> bool:
         """
@@ -191,17 +249,22 @@ class KasminaMicro:
         # 2. Loss plateau persists beyond patience
         if val_acc < self.acc_threshold and self.plateau >= self.patience:
             seed_id = self._select_seed()
-            if seed_id and self.seed_manager.request_germination(seed_id):
+            if seed_id and self.seed_manager.request_germination(seed_id, epoch=epoch): # Pass epoch
                 self.plateau = 0  # Reset plateau counter only on successful germination
                 # Record germination in monitoring
                 if monitor:
                     monitor.record_germination()
-                # Log the phase transition for germination
+                
+                # Log the germination event via the logger
                 if self.logger:
-                    self.logger.log_phase_update(
+                    self.logger.log_seed_event_detailed(
                         epoch=epoch,
-                        from_phase="Monitoring",
-                        to_phase="Germination",
+                        event_type="GERMINATION",
+                        message=f"Seed L{seed_id[0]}_S{seed_id[1]} germinated!",
+                        data={
+                            "seed_id": f"L{seed_id[0]}_S{seed_id[1]}",
+                            "epoch": epoch
+                        }
                     )
                 return True  # Signal germination occurred
         return False

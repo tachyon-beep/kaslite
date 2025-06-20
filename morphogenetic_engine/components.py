@@ -133,6 +133,35 @@ class SentinelSeed(nn.Module):
             if self.alpha >= 0.99:
                 self._set_state("active")
 
+    def update_state(self):
+        """Update the seed's state based on its current metrics and progress."""
+        # This method is called by KasminaMicro to assess and potentially update state
+        # For now, we'll implement basic state transitions based on existing logic
+
+        # Update metrics in seed manager
+        self.seed_manager.seeds[self.seed_id]["alpha"] = self.alpha
+
+        # State transition logic (simplified for now)
+        if self.state == "training" and self.training_progress > self.progress_thresh:
+            self._set_state("blending")
+            self.alpha = 0.0
+        elif self.state == "blending" and self.alpha >= 0.99:
+            self._set_state("active")
+
+    def get_gradient_norm(self) -> float:
+        """Get the gradient norm for this seed's parameters."""
+        if self.state in ["dormant"]:
+            return 0.0
+
+        total_norm = 0.0
+        param_count = 0
+        for p in self.child.parameters():
+            if p.grad is not None:
+                total_norm += p.grad.data.norm(2).item() ** 2
+                param_count += 1
+
+        return (total_norm ** 0.5) if param_count > 0 else 0.0
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the sentinel seed."""
 

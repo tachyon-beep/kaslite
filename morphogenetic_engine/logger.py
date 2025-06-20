@@ -165,6 +165,16 @@ class ExperimentLogger:
         )
         self._log_event(event_type=EventType.GERMINATION, payload=payload)
 
+    def log_seed_event_detailed(self, epoch: int, event_type: str, message: str, data: dict = None) -> None:
+        """Log a detailed seed event for the timeline."""
+        payload = SeedLogPayload(
+            event_type=event_type,
+            message=message,
+            data=data or {},
+            timestamp=time.time()
+        )
+        self._log_event(event_type=EventType.SEED_LOG_EVENT, payload=payload)
+
     def log_seed_event(self, epoch: int, _seed_id: tuple[int, int], old_state: str, new_state: str) -> None:
         """Log a seed state transition event (convenience method)."""
         # For now, just log the phase transition

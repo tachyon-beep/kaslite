@@ -283,6 +283,7 @@ def run_experiment(args: Dict[str, Any]):
                     device=device,
                     config=config,
                     seed_manager=seed_manager,
+                    tamiyo=tamiyo,
                 )
 
                 logging.info("Starting Phase 2: Morphogenetic Adaptation...")
