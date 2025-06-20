@@ -330,18 +330,19 @@ class RichDashboard:
         empty_emoji: str,
     ) -> list[str]:
         """Helper to create a single row for a grid table."""
-        row = [f"{layer_index + 1}", "│"]
+        #row = [f"{layer_index + 1}", "│"]
+        row = [f"{layer_index + 1}"]        
         if layer_index < num_layers:
             states = layer_data.get(layer_index, [])
-            for j in range(self.GRID_SIZE):
+            for j in range(seeds_per_layer):  # Use seeds_per_layer instead of GRID_SIZE
                 emoji = empty_emoji
-                if j < seeds_per_layer and j < len(states):
+                if j < len(states):
                     state = states[j]
                     if state:
                         emoji = emoji_map.get(state, empty_emoji)
                 row.append(emoji)
         else:
-            row.extend([empty_emoji] * self.GRID_SIZE)
+            row.extend([empty_emoji] * seeds_per_layer)  # Use seeds_per_layer instead of GRID_SIZE
         return row
 
     def _create_grid_table(
@@ -357,14 +358,14 @@ class RichDashboard:
             show_header=True, 
             header_style="bold magenta", 
             box=box.ROUNDED,
-            expand=True  # Force table to use full width
+            expand=False
         )
         table.add_column("L", justify="center")
-        table.add_column("", justify="center")  # Separator
-        for i in range(seeds_per_layer):  # Use actual seeds_per_layer instead of GRID_SIZE
-            table.add_column(f"{i}", justify="center")
+        #table.add_column("", justify="center")  # Separator
+        for i in range(seeds_per_layer):  # Use actual seeds_per_layer
+            table.add_column(f"{i}", justify="center", width=3)
 
-        for i in range(num_layers):  # Use num_layers instead of len(grid)
+        for i in range(num_layers):  # Use actual num_layers
             row = self._create_grid_row(
                 i, num_layers, seeds_per_layer, grid, emoji_map, self.EMPTY_CELL_EMOJI
             )
@@ -382,7 +383,11 @@ class RichDashboard:
         grid_table = self._create_grid_table(
             layer_data, self.SEED_EMOJI_MAP, num_layers, seeds_per_layer
         )
-        return Panel(grid_table, title="Seed States", border_style="green")
+        return Panel(
+            Align.center(grid_table, vertical="middle"),
+            title="Seed States",
+            border_style="green",
+        )
 
     def _create_seeds_training_table(self) -> Table:
         """Generate the table for detailed seed training metrics."""
@@ -460,7 +465,7 @@ class RichDashboard:
         karn_table.add_column("Value")
 
         karn_table.add_row("Status", "Exploiting Keystone Lineage")
-        karn_table.add_row("Archive Health", "81.2% Filled (21k blueprints)")
+        karn_table.add_row("Archive Size", "21,249 Blueprints (81.2%)")
         karn_table.add_row("Archive Quality (Mean)", "74.5 ELO")
         karn_table.add_row("Critic Loss", "0.051")
         karn_table.add_row("Exploration/Exploitation", "Exploiting (80%)")
@@ -468,10 +473,25 @@ class RichDashboard:
 
         return Panel(karn_table, title="Karn", border_style="blue")
 
+    def _create_crucible_table(self) -> Table:
+        """Generate the table for the Crucible panel with specific formatting."""
+        table = Table(show_header=False, expand=True, box=box.MINIMAL, padding=(0, 1))
+        table.add_column("Metric", style=self.STYLE_BOLD_BLUE, ratio=1)
+        table.add_column("Value", ratio=1)
+
+        # Static key-value pairs as requested, formatted like Tamiyo/Karn panels.
+        table.add_row(Text("ID", style="blue"), Text("---", style="dim"))
+        table.add_row(Text("State", style="blue"), Text("---", style="dim"))
+        table.add_row(Text("α", style="blue"), Text("---", style="dim"))
+        table.add_row(Text("∇ Norm", style="blue"), Text("---", style="dim"))
+        table.add_row(Text("Pat.", style="blue"), Text("---", style="dim"))
+
+        return table
+
     def _create_crucible_panel(self) -> Panel:
         """Generate the panel for detailed seed training data."""
         return Panel(
-            self._create_seeds_training_table(),
+            self._create_crucible_table(),
             title="Crucible",
             border_style="yellow",
         )
@@ -488,7 +508,11 @@ class RichDashboard:
         grid_table = self._create_grid_table(
             layer_data, self.STRAIN_EMOJI_MAP, num_layers, seeds_per_layer
         )
-        return Panel(grid_table, title="Network Strain", border_style="red")
+        return Panel(
+            Align.center(grid_table, vertical="middle"),
+            title="Network Strain",
+            border_style="red",
+        )
 
     def _create_seed_legend_panel(self) -> Panel:
         """Generate the legend for the seed box."""
@@ -659,7 +683,12 @@ class RichDashboard:
         grid_table = self._create_grid_table(
             payload["grid"], self.STRAIN_EMOJI_MAP, num_layers, seeds_per_layer
         )
-        self.layout["network_strain_panel"].update(grid_table)
+        panel = Panel(
+            Align.center(grid_table, vertical="middle"),
+            title="Network Strain",
+            border_style="red",
+        )
+        self.layout["network_strain_panel"].update(panel)
 
     def update_seeds_view(self, payload: SeedStateUpdatePayload) -> None:
         """Receives a seed state update and refreshes the view."""
@@ -668,7 +697,11 @@ class RichDashboard:
         grid_table = self._create_grid_table(
             payload["grid"], self.SEED_EMOJI_MAP, num_layers, seeds_per_layer
         )
-        panel = Panel(grid_table, title="Seed States", border_style="green")
+        panel = Panel(
+            Align.center(grid_table, vertical="middle"),
+            title="Seed States",
+            border_style="green",
+        )
         self.layout["seed_box_panel"].update(panel)
 
 
