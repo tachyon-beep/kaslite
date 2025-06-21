@@ -70,15 +70,18 @@ class PerformanceLinkedBlending(BlendingStrategy):
         current_loss = self.seed.validate_on_holdout()
         loss_reduction = max(0.0, start_loss - current_loss)
         
-        # Alpha scales with actual performance improvement
+        # Alpha scales with actual performance improvement, but progresses gradually
         if start_loss > 1e-12:  # Avoid division by zero
             improvement_ratio = loss_reduction / start_loss
-            # Alpha = improvement achieved (0 to 1.0)
-            new_alpha = min(1.0, improvement_ratio)
+            # Scale the improvement to a reasonable step size, with minimum progress
+            base_step = 1.0 / self.config.fixed_steps
+            performance_multiplier = max(0.5, min(3.0, improvement_ratio * 2.0))  # 0.5x to 3x speed
+            new_alpha = self.seed.alpha + (base_step * performance_multiplier)
         else:
-            new_alpha = self.seed.alpha  # No progress if baseline is zero
+            # If baseline is zero, use normal fixed progression
+            new_alpha = self.seed.alpha + (1.0 / self.config.fixed_steps)
             
-        return max(self.seed.alpha, new_alpha)  # Never go backwards
+        return min(1.0, new_alpha)  # Cap at 1.0
 
 
 class DriftControlledBlending(BlendingStrategy):
@@ -95,9 +98,7 @@ class DriftControlledBlending(BlendingStrategy):
         current_drift = info.get("telemetry", {}).get("drift", 0.0)
         drift_window.append(current_drift)
         
-        if len(drift_window) == 0:
-            return self.seed.alpha  # No drift data yet
-            
+        # Calculate average drift over the window
         avg_drift = sum(drift_window) / len(drift_window)
         
         # Dynamic step size based on stability

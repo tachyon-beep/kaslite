@@ -26,8 +26,19 @@ def mock_seed():
     """Create a mock SentinelSeed for testing strategies."""
     seed = Mock()
     seed.alpha = 0.0
-    seed.seed_info = {}
+    seed.seed_id = (0, 0)
     seed.validate_on_holdout = Mock(return_value=0.5)
+    
+    # Mock the seed manager and its seeds dict
+    mock_seed_manager = Mock()
+    mock_seed_info = {
+        "blend_initial_loss": 1.0,
+        "avg_grad_norm": 0.5,
+        "drift_window": [],
+    }
+    mock_seed_manager.seeds = {(0, 0): mock_seed_info}
+    seed.seed_manager = mock_seed_manager
+    
     return seed
 
 
@@ -84,7 +95,7 @@ class TestPerformanceLinkedBlending:
         strategy = PerformanceLinkedBlending(mock_seed, blend_config)
         
         # Set up loss improvement scenario
-        mock_seed.seed_info["blend_initial_loss"] = 1.0
+        mock_seed.seed_manager.seeds[mock_seed.seed_id]["blend_initial_loss"] = 1.0
         mock_seed.validate_on_holdout.return_value = 0.5  # 50% improvement
         
         new_alpha = strategy.update()
@@ -98,7 +109,7 @@ class TestPerformanceLinkedBlending:
         strategy = PerformanceLinkedBlending(mock_seed, blend_config)
         
         # Set up no improvement scenario
-        mock_seed.seed_info["blend_initial_loss"] = 1.0
+        mock_seed.seed_manager.seeds[mock_seed.seed_id]["blend_initial_loss"] = 1.0
         mock_seed.validate_on_holdout.return_value = 1.2  # Worse performance
         
         new_alpha = strategy.update()
@@ -115,7 +126,7 @@ class TestDriftControlledBlending:
         strategy = DriftControlledBlending(mock_seed, blend_config)
         
         # Set up low drift scenario
-        mock_seed.seed_info["drift_window"] = [0.01, 0.02, 0.01, 0.02, 0.01]  # Low drift
+        mock_seed.seed_manager.seeds[mock_seed.seed_id]["drift_window"] = [0.01, 0.02, 0.01, 0.02, 0.01]  # Low drift
         
         new_alpha = strategy.update()
         
@@ -128,7 +139,7 @@ class TestDriftControlledBlending:
         strategy = DriftControlledBlending(mock_seed, blend_config)
         
         # Set up high drift scenario
-        mock_seed.seed_info["drift_window"] = [0.15, 0.16, 0.14, 0.15, 0.17]  # High drift
+        mock_seed.seed_manager.seeds[mock_seed.seed_id]["drift_window"] = [0.15, 0.16, 0.14, 0.15, 0.17]  # High drift
         
         new_alpha = strategy.update()
         
@@ -144,7 +155,7 @@ class TestGradNormGatedBlending:
         strategy = GradNormGatedBlending(mock_seed, blend_config)
         
         # Set gradient norm in acceptable range
-        mock_seed.seed_info["avg_grad_norm"] = 0.5  # Between 0.1 and 1.0
+        mock_seed.seed_manager.seeds[mock_seed.seed_id]["avg_grad_norm"] = 0.5  # Between 0.1 and 1.0
         
         new_alpha = strategy.update()
         
@@ -157,7 +168,7 @@ class TestGradNormGatedBlending:
         strategy = GradNormGatedBlending(mock_seed, blend_config)
         
         # Set gradient norm too high
-        mock_seed.seed_info["avg_grad_norm"] = 2.0  # Above upper bound
+        mock_seed.seed_manager.seeds[mock_seed.seed_id]["avg_grad_norm"] = 2.0  # Above upper bound
         
         new_alpha = strategy.update()
         

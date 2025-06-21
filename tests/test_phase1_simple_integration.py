@@ -58,6 +58,8 @@ def mock_seed_and_manager(experiment_logger):
     mock_seed.state = SeedState.BLENDING.value
     mock_seed.get_health_signal = Mock(return_value=0.1)
     mock_seed.validate_on_holdout = Mock(return_value=0.5)
+    # Mock assess_and_transition_state to not change the state
+    mock_seed.assess_and_transition_state = Mock()
     
     # Register the mock seed with the manager
     seed_manager.seeds[(0, 0)] = {
@@ -78,7 +80,7 @@ class TestBlendingSystemIntegration:
     
     def test_strategy_selection_and_logging(self, mock_seed_and_manager, blend_config, experiment_logger):
         """Test that strategy selection works and events are logged properly."""
-        mock_seed, seed_manager = mock_seed_and_manager
+        _, seed_manager = mock_seed_and_manager
         
         # Create KasminaMicro with our test components
         tamiyo = KasminaMicro(
@@ -159,7 +161,7 @@ class TestBlendingSystemIntegration:
                 "name": "Good performance with stable gradients triggers GRAD_NORM_GATED",
                 "telemetry": {"drift": 0.01},
                 "health_signal": 0.1,  # Above threshold
-                "current_loss": 0.4,
+                "current_loss": 0.3,  # 0.3 < 0.5 * 0.8 = 0.4 ✓
                 "baseline_loss": 0.5,
                 "grad_norm": 0.5,
                 "expected_strategy": "GRAD_NORM_GATED"
@@ -205,7 +207,7 @@ class TestBlendingSystemIntegration:
     
     def test_import_safety_and_analytics_integration(self, mock_seed_and_manager, blend_config, experiment_logger):
         """Test that analytics integration works without breaking the system."""
-        mock_seed, seed_manager = mock_seed_and_manager
+        _, seed_manager = mock_seed_and_manager
         
         tamiyo = KasminaMicro(
             seed_manager=seed_manager,
@@ -219,20 +221,18 @@ class TestBlendingSystemIntegration:
         # This should work even if analytics import fails
         try:
             tamiyo.assess_and_update_seeds(epoch=1)
-            # If we get here, the system handled analytics gracefully
-            assert True
         except Exception as e:
             pytest.fail(f"System should handle analytics import gracefully, but got: {e}")
     
     def test_blending_config_propagation(self, blend_config):
         """Test that BlendingConfig is properly used throughout the system."""
-        # Test that the config values are accessible
+        # Test that the config values are accessible (using approximate equality for floats)
         assert blend_config.fixed_steps == 5
-        assert blend_config.high_drift_threshold == 0.05
-        assert blend_config.low_health_threshold == 1e-3
-        assert blend_config.performance_loss_factor == 0.8
-        assert blend_config.grad_norm_lower == 0.1
-        assert blend_config.grad_norm_upper == 1.0
+        assert abs(blend_config.high_drift_threshold - 0.05) < 1e-9
+        assert abs(blend_config.low_health_threshold - 1e-3) < 1e-9
+        assert abs(blend_config.performance_loss_factor - 0.8) < 1e-9
+        assert abs(blend_config.grad_norm_lower - 0.1) < 1e-9
+        assert abs(blend_config.grad_norm_upper - 1.0) < 1e-9
         
         # Test that strategies can be created with the config
         mock_seed = Mock()
