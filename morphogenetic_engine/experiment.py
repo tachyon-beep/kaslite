@@ -10,7 +10,7 @@ from __future__ import annotations
 from torch import nn
 
 from morphogenetic_engine.components import BaseNet
-from morphogenetic_engine.core import KasminaMicro, SeedManager
+from morphogenetic_engine.core import BlendingConfig, KasminaMicro, SeedManager
 from morphogenetic_engine.logger import ExperimentLogger
 
 
@@ -21,7 +21,6 @@ def build_model_and_agents(
     num_layers: int,
     seeds_per_layer: int,
     # Model behavior
-    blend_steps: int,
     shadow_lr: float,
     drift_warn: float,
     # Agents
@@ -29,13 +28,22 @@ def build_model_and_agents(
     # Infrastructure
     device: str,
     logger: ExperimentLogger,
-    tb_writer,  # Add type hint if available
     # Dataset-specific
     problem_type: str,
-    **kwargs,  # Capture any other unused args
+    # Optional blending configuration
+    blend_steps: int | None = None,  # Still accept for config creation
+    **kwargs,  # Capture any other unused args like sweep_config, tb_writer
 ):
     """Initialize the SeedManager, BaseNet model, loss function, and KasminaMicro."""
+    # kwargs intentionally captures unused parameters for compatibility with experiment runners
+    _ = kwargs  # Suppress unused parameter warning
     seed_manager = SeedManager(logger=logger)
+
+    # Create blending configuration with centralized parameters
+    blend_config = BlendingConfig(
+        fixed_steps=blend_steps if blend_steps is not None else 30,  # Default if not provided
+        # Other parameters use defaults for now
+    )
 
     # Determine number of classes based on problem type
     if problem_type == "cifar10":
@@ -51,12 +59,10 @@ def build_model_and_agents(
         output_dim=num_classes,
         num_layers=num_layers,
         seeds_per_layer=seeds_per_layer,
-        blend_steps=blend_steps,
         shadow_lr=shadow_lr,
         drift_warn=drift_warn,
+        blend_cfg=blend_config,  # Pass the centralized config
     ).to(device)
-
-    loss_fn = nn.CrossEntropyLoss().to(device)
 
     # The `tamiyo` agent from the high-level plan
     tamiyo = KasminaMicro(
@@ -65,6 +71,7 @@ def build_model_and_agents(
         delta=5e-4,  # This could be parameterized
         acc_threshold=acc_threshold,
         logger=logger,
+        blending_config=blend_config,  # Pass the same config instance
     )
 
     # The `karn` agent is implicitly the training loop logic itself

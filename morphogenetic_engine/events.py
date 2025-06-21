@@ -29,6 +29,8 @@ class EventType(Enum):
     GERMINATION = "germination"
     LOG_EVENT = "log_event"
     SEED_LOG_EVENT = "seed_log_event"
+    BLEND_STRATEGY_CHOSEN = "blend_strategy_chosen"
+    BLEND_COMPLETED = "blend_completed"
 
 
 # Import SeedState from the authoritative source in components
@@ -126,6 +128,30 @@ class GerminationPayload(TypedDict):
     timestamp: float
 
 
+class BlendStrategyChosenPayload(TypedDict):
+    """Payload for when a blending strategy is selected for a seed."""
+
+    seed_id: tuple[int, int]
+    epoch: int
+    strategy_name: str
+    telemetry: dict[str, float]  # e.g. {'health_signal':0.002,'drift':0.05,'baseline_loss':1.2,'current_loss':0.8}
+    timestamp: float
+
+
+class BlendCompletedPayload(TypedDict):
+    """Payload for when a seed finishes the blending phase."""
+
+    seed_id: tuple[int, int]
+    epoch: int
+    strategy_name: str
+    duration_epochs: int
+    initial_loss: float
+    final_loss: float
+    initial_drift: float
+    final_drift: float
+    timestamp: float
+
+
 class LogPayload(TypedDict):
     """Payload for a generic log event."""
 
@@ -159,7 +185,10 @@ EventPayload = Union[
     MetricsUpdatePayload,
     PhaseUpdatePayload,
     SeedStateUpdatePayload,
+    NetworkStrainGridUpdatePayload,
     GerminationPayload,
+    BlendStrategyChosenPayload,
+    BlendCompletedPayload,
     LogPayload,
     SeedLogPayload,
     SeedMetricsUpdatePayload,

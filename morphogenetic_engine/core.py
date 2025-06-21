@@ -6,6 +6,7 @@ import logging
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -14,6 +15,18 @@ from .events import SeedState
 from .logger import ExperimentLogger
 from .monitoring import get_monitor
 from .ui_dashboard import RichDashboard
+
+
+@dataclass(frozen=True)
+class BlendingConfig:
+    """Configuration for blending strategies."""
+
+    fixed_steps: int = 30
+    high_drift_threshold: float = 0.12
+    low_health_threshold: float = 1e-3
+    performance_loss_factor: float = 0.8
+    grad_norm_lower: float = 0.1
+    grad_norm_upper: float = 1.0
 
 
 class SeedManager:
@@ -77,7 +90,7 @@ class SeedManager:
                 "telemetry": {"drift": 0.0, "variance": 0.0},
             }
 
-    def append_to_buffer(self, seed_id: str, x: torch.Tensor) -> None:
+    def append_to_buffer(self, seed_id: tuple[int, int], x: torch.Tensor) -> None:
         """Append tensor data to the specified seed's buffer."""
         with self.lock:
             if seed_id in self.seeds:
@@ -188,6 +201,7 @@ class KasminaMicro:
         delta: float = 1e-4,
         acc_threshold: float = 0.95,
         logger: ExperimentLogger | None = None,
+        blending_config: BlendingConfig | None = None,  # Add new config
     ) -> None:
         self.seed_manager = seed_manager
         self.patience = patience
@@ -196,7 +210,8 @@ class KasminaMicro:
         self.plateau = 0
         self.prev_loss = float("inf")
         self.logger = logger
-        self.cull_embargo_epochs = 50 # Number of epochs to wait before replacing a culled seed
+        self.cull_embargo_epochs = 50  # Number of epochs to wait before replacing a culled seed
+        self.blend_cfg = blending_config or BlendingConfig()
 
     def _handle_culled_seeds(self, epoch: int):
         """Check for culled seeds whose embargo period has expired and replace them."""
@@ -228,11 +243,76 @@ class KasminaMicro:
         self._advance_training_queue(epoch)
 
         with self.seed_manager.lock:
-            for seed_info in self.seed_manager.seeds.values():
-                module = seed_info["module"]
-                # This single call now handles all other state transitions for the epoch
-                if hasattr(module, "assess_and_transition_state"):
-                    module.assess_and_transition_state(epoch)
+            seed_ids = list(self.seed_manager.seeds.keys())
+            for seed_id in seed_ids:
+                # It's possible a seed is removed during iteration, so check existence
+                if seed_id not in self.seed_manager.seeds:
+                    continue
+
+                info = self.seed_manager.seeds[seed_id]
+                module = info["module"]
+
+                # --- STRATEGY SELECTION ---
+                if module.state == SeedState.BLENDING.value and "blend_strategy" not in info:
+                    strategy_name = self._choose_blend_strategy(seed_id)
+                    info["blend_strategy"] = strategy_name
+                    
+                    # Capture comprehensive telemetry for logging
+                    health_signal = module.get_health_signal()
+                    drift = info.get("telemetry", {}).get("drift", 0.0)
+                    current_loss = info.get("current_loss", float('inf'))
+                    baseline_loss = info.get("baseline_loss", float('inf'))
+                    grad_norm = info.get("avg_grad_norm", 0.0)
+                    
+                    # Create rich telemetry dict
+                    telemetry_data = {
+                        "health_signal": health_signal,
+                        "drift": drift,
+                        "baseline_loss": baseline_loss,
+                        "current_loss": current_loss,
+                        "grad_norm": grad_norm
+                    }
+                    
+                    # Log the strategy choice with rich telemetry
+                    if self.logger:
+                        from .events import EventType, BlendStrategyChosenPayload, LogEvent
+                        import time
+                        payload = BlendStrategyChosenPayload(
+                            seed_id=seed_id,
+                            epoch=epoch,
+                            strategy_name=strategy_name,
+                            telemetry=telemetry_data,
+                            timestamp=time.time()
+                        )
+                        event = LogEvent(EventType.BLEND_STRATEGY_CHOSEN, payload)
+                        self.logger.log_event(epoch, event)
+                        
+                        # Record in analytics for Phase 2 dashboard
+                        try:
+                            from .blending_analytics import get_blending_analytics
+                            analytics = get_blending_analytics()
+                            analytics.record_strategy_chosen(payload)
+                        except ImportError:
+                            pass  # Analytics not available
+                        
+                        # Also log detailed telemetry
+                        self.logger.log_seed_event_detailed(
+                            epoch=epoch,
+                            event_type="BLEND_STRATEGY_CHOSEN",
+                            message=f"Seed L{seed_id[0]}_S{seed_id[1]} selected {strategy_name} strategy",
+                            data={
+                                "seed_id": f"L{seed_id[0]}_S{seed_id[1]}",
+                                "strategy_name": strategy_name,
+                                "telemetry": {
+                                    "health_signal": health_signal,
+                                    "drift": drift,
+                                    "baseline_loss": baseline_loss,
+                                    "current_loss": current_loss
+                                }
+                            }
+                        )
+
+                module.assess_and_transition_state(epoch)
 
         # After handling state transitions, check for any culled seeds that need replacing.
         self._handle_culled_seeds(epoch)
@@ -320,6 +400,35 @@ class KasminaMicro:
                     monitor.record_germination()
                 return True  # Signal germination occurred
         return False
+
+    def _choose_blend_strategy(self, seed_id: tuple[int, int]) -> str:
+        """Dynamically selects a blending strategy based on real-time telemetry."""
+        info = self.seed_manager.seeds[seed_id]
+        module = info["module"]
+        
+        # Gather real-time telemetry
+        health_signal = module.get_health_signal()
+        drift = info.get("telemetry", {}).get("drift", 0.0)
+        current_loss = info.get("current_loss", float('inf'))
+        baseline_loss = info.get("baseline_loss", float('inf'))
+        grad_norm = info.get("avg_grad_norm", 0.0)
+        
+        cfg = self.blend_cfg
+        
+        # Dynamic strategy selection based on current conditions
+        if drift > cfg.high_drift_threshold:
+            # High drift - need controlled, adaptive blending
+            return "DRIFT_CONTROLLED"
+        elif health_signal < cfg.low_health_threshold:
+            # Severe bottleneck - performance-driven blending
+            return "PERFORMANCE_LINKED"
+        elif (current_loss < baseline_loss * cfg.performance_loss_factor and 
+              cfg.grad_norm_lower < grad_norm < cfg.grad_norm_upper):
+            # Good performance and stable gradients - use gradient-aware blending
+            return "GRAD_NORM_GATED"
+        else:
+            # Default fallback
+            return "FIXED_RAMP"
 
     def _select_seed(self) -> Optional[tuple[int, int]]:
         """Selects the best DORMANT seed to germinate based on the worst health signal."""

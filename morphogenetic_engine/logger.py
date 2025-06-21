@@ -100,6 +100,12 @@ class ExperimentLogger:
             # Add context to serialization errors before propagating
             raise TypeError(f"Failed to serialize log event: {e}") from e
 
+    def log_event(self, epoch: int, event: LogEvent) -> None:
+        """Public interface for logging events. Delegates to _log_event."""
+        # epoch parameter kept for API compatibility but not used in this delegation
+        _ = epoch  # Suppress unused parameter warning
+        self._log_event(event.event_type, event.payload)
+
     def log_system_init(self, config: dict) -> None:
         """Log a system initialization event."""
         payload = SystemInitPayload(config=config, timestamp=time.time())

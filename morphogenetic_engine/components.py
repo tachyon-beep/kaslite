@@ -3,12 +3,16 @@
 import logging
 import weakref
 from enum import Enum
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
 
 from morphogenetic_engine.core import SeedManager
 from morphogenetic_engine.events import SeedState
+
+if TYPE_CHECKING:
+    from morphogenetic_engine.core import BlendingConfig
 
 
 class SentinelSeed(nn.Module):
@@ -25,25 +29,22 @@ class SentinelSeed(nn.Module):
         dim: int,
         seed_manager: SeedManager,
         parent_net: "BaseNet",  # Add parent_net reference
-        blend_steps: int = 30,
         probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.12,
         stability_threshold: float = 0.01,
         improvement_threshold: float = 0.95,
+        blend_cfg: "BlendingConfig | None" = None,  # Add blending config
     ):
         super().__init__()
 
         # Parameter validation
         if dim <= 0:
             raise ValueError(f"Invalid dimension: {dim}. Must be positive.")
-        if blend_steps <= 0:
-            raise ValueError(f"Invalid blend_steps: {blend_steps}. Must be positive.")
 
         self.seed_id = seed_id
         self.dim = dim
         self.parent_net_ref = weakref.ref(parent_net)  # Use a weak reference to avoid recursion
-        self.blend_steps = blend_steps
         self.probationary_steps = probationary_steps
         self.probationary_counter = 0
         self.shadow_lr = shadow_lr
@@ -52,6 +53,13 @@ class SentinelSeed(nn.Module):
         self.drift_warn = drift_warn
         self.stability_threshold = stability_threshold
         self.improvement_threshold = improvement_threshold
+        
+        # Store blending configuration
+        if blend_cfg is None:
+            # Import here to avoid circular imports
+            from morphogenetic_engine.core import BlendingConfig
+            blend_cfg = BlendingConfig()
+        self.blend_cfg = blend_cfg
         
         # Convergence-based training completion
         self.loss_history: list[float] = []
@@ -184,11 +192,24 @@ class SentinelSeed(nn.Module):
         if new_state == SeedState.CULLED:
             info["culling_epoch"] = current_epoch
         
+        # Track when blending starts for duration calculation
+        if new_state == SeedState.BLENDING:
+            info["blend_start_epoch"] = current_epoch
+            # Capture initial blending metrics for dynamic strategies
+            info["blend_initial_loss"] = self.validate_on_holdout() if hasattr(self, 'validate_on_holdout') else 0.0
+            # Capture current drift measurement if available
+            current_drift = info.get("telemetry", {}).get("drift", 0.0)
+            info["blend_initial_drift"] = current_drift
+        
         # Set up training infrastructure when transitioning TO TRAINING state
         if new_state == SeedState.TRAINING:
             # Create optimizer if not already created
             if self.child_optim is None:
-                self.child_optim = torch.optim.Adam(self.child.parameters(), lr=self.shadow_lr)
+                self.child_optim = torch.optim.Adam(
+                    self.child.parameters(), 
+                    lr=self.shadow_lr,
+                    weight_decay=1e-4  # L2 regularization
+                )
             
             # Create train/validation split from buffer data
             self.create_train_val_split()
@@ -360,9 +381,26 @@ class SentinelSeed(nn.Module):
         # Record that we've updated this epoch
         seed_info["last_blend_epoch"] = current_epoch
         
-        # Increment alpha by one step
-        self.alpha = min(1.0, self.alpha + 1 / self.blend_steps)
-        seed_info["alpha"] = self.alpha
+        # Use the new strategy system if available
+        strategy_name = seed_info.get("blend_strategy")
+        if strategy_name:
+            # Import here to avoid circular imports
+            from .blending import get_strategy
+            
+            # Create or reuse the strategy instance
+            strategy_obj = seed_info.get("blend_strategy_obj")
+            if strategy_obj is None:
+                strategy_obj = get_strategy(strategy_name, self, self.blend_cfg)
+                seed_info["blend_strategy_obj"] = strategy_obj
+            
+            # Use the strategy to calculate the new alpha
+            new_alpha = strategy_obj.update()
+            self.alpha = new_alpha
+            seed_info["alpha"] = self.alpha
+        else:
+            # Fallback to old logic for backward compatibility
+            self.alpha = min(1.0, self.alpha + 1 / self.blend_cfg.fixed_steps)
+            seed_info["alpha"] = self.alpha
 
     def update_shadowing(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
         """Stage 1 validation - monitor for internal stability during shadowing phase."""
@@ -406,36 +444,39 @@ class SentinelSeed(nn.Module):
             if inputs is not None:
                 self.evaluate_loss(inputs)
 
-    def _handle_training_transition(self, seed_info: dict, epoch: int | None):
-        """Handles the transition logic for a seed in the TRAINING state."""
-        
-        # FIRST: Do actual training work if we have training data
+    def _perform_training_steps(self, seed_info: dict, epoch: int | None):
+        """Perform actual training work for the current epoch."""
         train_indices = seed_info.get("train_indices")
-        if train_indices is not None and len(train_indices) > 0:
-            # Get training data from buffer
-            buffer = seed_info.get("buffer")
-            if buffer and len(buffer) > 0:
-                buffer_data = torch.cat(list(buffer), dim=0)
-                train_data = buffer_data[train_indices]
-                
-                # Perform multiple training steps this epoch
-                batch_size = min(32, len(train_data))
-                num_batches = max(1, len(train_data) // batch_size)
-                
-                for batch_idx in range(min(num_batches, 3)):  # Reduced to 3 batches per epoch
-                    start_idx = batch_idx * batch_size
-                    end_idx = min(start_idx + batch_size, len(train_data))
-                    batch_data = train_data[start_idx:end_idx]
-                    
-                    if len(batch_data) > 0:
-                        self.train_child_step(batch_data, epoch)
+        if train_indices is None or len(train_indices) == 0:
+            return
+            
+        # Get training data from buffer
+        buffer = seed_info.get("buffer")
+        if not buffer or len(buffer) == 0:
+            return
+            
+        buffer_data = torch.cat(list(buffer), dim=0)
+        train_data = buffer_data[train_indices]
         
-        # THEN: Check if training should continue or transition
+        # Perform multiple training steps this epoch
+        batch_size = min(32, len(train_data))
+        num_batches = max(1, len(train_data) // batch_size)
+        
+        for batch_idx in range(min(num_batches, 3)):  # Reduced to 3 batches per epoch
+            start_idx = batch_idx * batch_size
+            end_idx = min(start_idx + batch_size, len(train_data))
+            batch_data = train_data[start_idx:end_idx]
+            
+            if len(batch_data) > 0:
+                self.train_child_step(batch_data, epoch)
+
+    def _check_training_completion(self, seed_info: dict, epoch: int | None) -> bool:
+        """Check if training should be completed based on convergence or early stopping."""
         # Track training epochs (not just steps)
         training_epochs = seed_info.get("training_epochs", 0)
         seed_info["training_epochs"] = training_epochs + 1
         
-        # --- Early Stopping Check ---
+        # Early Stopping Check
         current_val_loss = self.validate_on_holdout()
         if current_val_loss < seed_info.get("best_val_loss", float('inf')):
             seed_info["best_val_loss"] = current_val_loss
@@ -443,16 +484,27 @@ class SentinelSeed(nn.Module):
         else:
             seed_info["val_patience_counter"] += 1
 
-        # Transition if validation loss stagnates (early stopping)
+        # Check for early stopping
         val_patience_limit = seed_info.get("val_patience_limit", 25)
         if seed_info.get("val_patience_counter", 0) >= val_patience_limit:
             logging.info(f"Early stopping for {self.seed_id} at epoch {epoch} after {training_epochs} epochs due to validation plateau.")
-            self.alpha = 0.0  # Reset alpha for blending
-            seed_info["last_blend_epoch"] = -1  # Reset epoch tracking
-            self._set_state(SeedState.BLENDING, epoch=epoch)
-        # Transition if training loss converges (natural completion)
-        elif self.check_convergence():
+            return True
+            
+        # Check for convergence
+        if self.check_convergence():
             logging.info(f"Convergence detected for {self.seed_id} at epoch {epoch} after {training_epochs} epochs.")
+            return True
+            
+        return False
+
+    def _handle_training_transition(self, seed_info: dict, epoch: int | None):
+        """Handles the transition logic for a seed in the TRAINING state."""
+        
+        # FIRST: Do actual training work if we have training data
+        self._perform_training_steps(seed_info, epoch)
+        
+        # THEN: Check if training should continue or transition
+        if self._check_training_completion(seed_info, epoch):
             self.alpha = 0.0  # Reset alpha for blending
             seed_info["last_blend_epoch"] = -1  # Reset epoch tracking
             self._set_state(SeedState.BLENDING, epoch=epoch)
@@ -465,6 +517,64 @@ class SentinelSeed(nn.Module):
         
         # THEN: Check if blending is complete based on alpha reaching 1.0
         if self.alpha >= 0.99:
+            # Capture final metrics and emit rich blend completed event
+            seed_info = self.seed_manager.seeds[self.seed_id]
+            strategy_name = seed_info.get("blend_strategy", "FIXED_RAMP")
+            
+            # Calculate comprehensive blending metrics
+            blend_start_epoch = seed_info.get("blend_start_epoch", 0)
+            current_epoch = epoch if epoch is not None else 0
+            duration_epochs = max(0, current_epoch - blend_start_epoch)
+            
+            initial_loss = seed_info.get("blend_initial_loss", 0.0)
+            final_loss = self.validate_on_holdout() if hasattr(self, 'validate_on_holdout') else 0.0
+            initial_drift = seed_info.get("blend_initial_drift", 0.0)
+            final_drift = seed_info.get("telemetry", {}).get("drift", 0.0)
+            
+            if self.seed_manager.logger:
+                from .events import EventType, BlendCompletedPayload, LogEvent
+                import time
+                
+                payload = BlendCompletedPayload(
+                    seed_id=self.seed_id,
+                    epoch=epoch or 0,
+                    strategy_name=strategy_name,
+                    duration_epochs=duration_epochs,
+                    initial_loss=initial_loss,
+                    final_loss=final_loss,
+                    initial_drift=initial_drift,
+                    final_drift=final_drift,
+                    timestamp=time.time()
+                )
+                event = LogEvent(EventType.BLEND_COMPLETED, payload)
+                self.seed_manager.logger.log_event(epoch or 0, event)
+                
+                # Record in analytics for Phase 2 dashboard
+                try:
+                    from .blending_analytics import get_blending_analytics
+                    analytics = get_blending_analytics()
+                    analytics.record_blend_completed(payload)
+                except ImportError:
+                    pass  # Analytics not available
+                
+                # Log detailed completion metrics
+                self.seed_manager.logger.log_seed_event_detailed(
+                    epoch=epoch or 0,
+                    event_type=EventType.BLEND_COMPLETED.value,  # Use EventType enum value
+                    message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} completed {strategy_name} blending",
+                    data={
+                        "seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}",
+                        "strategy_name": strategy_name,
+                        "duration_epochs": duration_epochs,
+                        "initial_loss": initial_loss,
+                        "final_loss": final_loss,
+                        "initial_drift": initial_drift,
+                        "final_drift": final_drift,
+                        "loss_improvement": initial_loss - final_loss,
+                        "drift_change": final_drift - initial_drift
+                    }
+                )
+            
             self._set_state(SeedState.SHADOWING, epoch=epoch)
 
     def _handle_shadowing_transition(self, seed_info: dict, epoch: int | None):
@@ -550,7 +660,7 @@ class SentinelSeed(nn.Module):
         
         # Ensure the average loss is reasonable (not stuck at high values)
         mean_loss = loss_tensor.mean()
-        if mean_loss > 10.0:  # Reasonable threshold for MSE loss
+        if mean_loss > 1.0:  # Lowered threshold for better convergence detection
             return False
         
         # Check that we're not oscillating wildly
@@ -639,10 +749,10 @@ class BaseNet(nn.Module):
         output_dim: int = 2,
         num_layers: int = 8,
         seeds_per_layer: int = 1,
-        blend_steps: int = 30,
         probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.1,
+        blend_cfg: "BlendingConfig | None" = None,  # Add blending config
     ):
         super().__init__()
 
@@ -664,9 +774,15 @@ class BaseNet(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
+        # Store blending configuration
+        if blend_cfg is None:
+            # Import here to avoid circular imports
+            from morphogenetic_engine.core import BlendingConfig
+            blend_cfg = BlendingConfig()
+        self.blend_cfg = blend_cfg
+
         # Store seed creation parameters for replacing culled seeds
         self.seed_manager_ref = seed_manager
-        self.seed_blend_steps = blend_steps
         self.seed_probationary_steps = probationary_steps
         self.seed_shadow_lr = shadow_lr
         self.seed_drift_warn = drift_warn
@@ -693,10 +809,10 @@ class BaseNet(nn.Module):
                     hidden_dim,
                     seed_manager,
                     parent_net=self,  # Pass a reference to the parent network
-                    blend_steps=blend_steps,
                     probationary_steps=probationary_steps,
                     shadow_lr=shadow_lr,
                     drift_warn=drift_warn,
+                    blend_cfg=self.blend_cfg,  # Pass the blending configuration
                 )
                 self.all_seeds.append(seed)
 
@@ -739,10 +855,10 @@ class BaseNet(nn.Module):
             dim=self.hidden_dim,
             seed_manager=self.seed_manager_ref,
             parent_net=self,
-            blend_steps=self.seed_blend_steps,
             probationary_steps=self.seed_probationary_steps,
             shadow_lr=self.seed_shadow_lr,
             drift_warn=self.seed_drift_warn,
+            blend_cfg=self.blend_cfg,  # Pass the blending configuration
         )
 
         # The old seed module is replaced in the network's ModuleList.
