@@ -39,10 +39,18 @@ class LayoutManager:
             TimeRemainingColumn(),
             expand=True,
         )
+        self.epoch_progress = Progress(
+            TextColumn("[bold yellow]Epoch Progress"),
+            BarColumn(bar_width=None),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            TimeRemainingColumn(),
+            expand=True,
+        )
 
         # Progress tasks
         self.total_task = None
         self.phase_task = None
+        self.epoch_task = None
 
     def setup_layout(self, total_epochs: int = 100) -> Layout:
         """Initialize the dashboard layout."""
@@ -54,6 +62,7 @@ class LayoutManager:
         # Initialize progress bars
         self.total_task = self.total_progress.add_task("Overall", total=total_epochs)
         self.phase_task = self.phase_progress.add_task("Phase", total=100)
+        self.epoch_task = self.epoch_progress.add_task("Epoch", total=100)
 
         # --- Title Header ---
         title_header = Layout(
@@ -70,8 +79,10 @@ class LayoutManager:
         progress_layout = Layout()
         # Spacer added
         progress_layout.split_row(
+            Layout(self.epoch_progress, name="epoch", ratio=1),
+            Layout(Align.center(Text("•", style="dim")), name="spacer1", size=3),
             Layout(self.phase_progress, name="phase", ratio=1),
-            Layout(Align.center(Text("•", style="dim")), name="spacer", size=3),
+            Layout(Align.center(Text("•", style="dim")), name="spacer2", size=3),
             Layout(self.total_progress, name="total", ratio=1),
         )
         footer.update(progress_layout)
@@ -181,12 +192,14 @@ class LayoutManager:
                 description=description,
             )
 
-    def update_progress(self, total_completed: int, phase_completed: int) -> None:
-        """Update both progress bars."""
+    def update_progress(self, total_completed: int, phase_completed: int, epoch_completed: int = None, epoch_total: int = None) -> None:
+        """Update all progress bars, including the new epoch progress bar."""
         if self.total_task is not None:
             self.total_progress.update(self.total_task, completed=total_completed)
         if self.phase_task is not None:
             self.phase_progress.update(self.phase_task, completed=phase_completed)
+        if self.epoch_task is not None and epoch_completed is not None and epoch_total is not None:
+            self.epoch_progress.update(self.epoch_task, completed=epoch_completed, total=epoch_total)
 
     def get_layout(self) -> Layout | None:
         """Get the current layout."""

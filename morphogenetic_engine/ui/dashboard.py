@@ -36,28 +36,6 @@ from .panels import PanelFactory
 class RichDashboard:
     """A Rich CLI dashboard for experiment monitoring with progress bars."""
 
-    GRID_SIZE = GRID_SIZE
-
-    # EMOJI MAPS
-    SEED_EMOJI_MAP = {
-        SeedState.TRAINING: "🟢",
-        SeedState.DORMANT: "⚪",
-        SeedState.BLENDING: "🟡",
-        SeedState.GERMINATED: "🌱",
-        SeedState.FOSSILIZED: "🦴",
-        SeedState.CULLED: "🥀",
-    }
-
-    STRAIN_EMOJI_MAP = {
-        NetworkStrain.NONE: "🔵",
-        NetworkStrain.LOW: "🟢",
-        NetworkStrain.MEDIUM: "🟡",
-        NetworkStrain.HIGH: "🔴",
-        NetworkStrain.FIRED: "💥",
-    }
-
-    # Common
-    EMPTY_CELL_EMOJI = "⚫"
     STYLE_BOLD_BLUE = "bold blue"
 
     def __init__(self, console: Console | None = None, experiment_params: dict[str, Any] | None = None):
@@ -149,7 +127,13 @@ class RichDashboard:
 
         # Update progress bars
         current_phase_epoch = epoch - self.phase_start_epoch
-        self.layout_manager.update_progress(epoch + 1, current_phase_epoch + 1)
+        # Calculate epoch progress if available
+        steps_completed = metrics.get("steps_completed")
+        steps_total = metrics.get("steps_total")
+        if steps_completed is not None and steps_total is not None:
+            self.layout_manager.update_progress(epoch + 1, current_phase_epoch + 1, steps_completed, steps_total)
+        else:
+            self.layout_manager.update_progress(epoch + 1, current_phase_epoch + 1)
 
         # Update metrics
         self.metrics_manager.update_metrics(metrics, epoch, timestamp)

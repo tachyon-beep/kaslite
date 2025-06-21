@@ -27,7 +27,7 @@ class BlendingConfig:
     performance_loss_factor: float = 0.8
     grad_norm_lower: float = 0.1
     grad_norm_upper: float = 1.0
-
+    """Configuration for blending strategies."""
 
 class SeedManager:
     """
@@ -211,7 +211,7 @@ class KasminaMicro:
         self.prev_loss = float("inf")
         self.logger = logger
         self.cull_embargo_epochs = 50  # Number of epochs to wait before replacing a culled seed
-        self.blend_cfg = blending_config or BlendingConfig()
+        self.graft_cfg = blending_config or BlendingConfig()
 
     def _handle_culled_seeds(self, epoch: int):
         """Check for culled seeds whose embargo period has expired and replace them."""
@@ -253,9 +253,9 @@ class KasminaMicro:
                 module = info["module"]
 
                 # --- STRATEGY SELECTION ---
-                if module.state == SeedState.BLENDING.value and "blend_strategy" not in info:
-                    strategy_name = self._choose_blend_strategy(seed_id)
-                    info["blend_strategy"] = strategy_name
+                if module.state == SeedState.GRAFTING.value and "graft_strategy" not in info:
+                    strategy_name = self._choose_graft_strategy(seed_id)
+                    info["graft_strategy"] = strategy_name
                     
                     # Capture comprehensive telemetry for logging
                     health_signal = module.get_health_signal()
@@ -289,8 +289,8 @@ class KasminaMicro:
                         
                         # Record in analytics for Phase 2 dashboard
                         try:
-                            from .blending_analytics import get_blending_analytics
-                            analytics = get_blending_analytics()
+                            from .grafting_analytics import get_grafting_analytics
+                            analytics = get_grafting_analytics()
                             analytics.record_strategy_chosen(payload)
                         except ImportError:
                             pass  # Analytics not available
@@ -298,7 +298,7 @@ class KasminaMicro:
                         # Also log detailed telemetry
                         self.logger.log_seed_event_detailed(
                             epoch=epoch,
-                            event_type="BLEND_STRATEGY_CHOSEN",
+                            event_type="GRAFT_STRATEGY_CHOSEN",
                             message=f"Seed L{seed_id[0]}_S{seed_id[1]} selected {strategy_name} strategy",
                             data={
                                 "seed_id": f"L{seed_id[0]}_S{seed_id[1]}",
@@ -401,8 +401,8 @@ class KasminaMicro:
                 return True  # Signal germination occurred
         return False
 
-    def _choose_blend_strategy(self, seed_id: tuple[int, int]) -> str:
-        """Dynamically selects a blending strategy based on real-time telemetry."""
+    def _choose_graft_strategy(self, seed_id: tuple[int, int]) -> str:
+        """Dynamically selects a grafting strategy based on real-time telemetry."""
         info = self.seed_manager.seeds[seed_id]
         module = info["module"]
         
@@ -413,18 +413,18 @@ class KasminaMicro:
         baseline_loss = info.get("baseline_loss", float('inf'))
         grad_norm = info.get("avg_grad_norm", 0.0)
         
-        cfg = self.blend_cfg
+        cfg = self.graft_cfg
         
         # Dynamic strategy selection based on current conditions
         if drift > cfg.high_drift_threshold:
-            # High drift - need controlled, adaptive blending
+            # High drift - need controlled, adaptive grafting
             return "DRIFT_CONTROLLED"
         elif health_signal < cfg.low_health_threshold:
-            # Severe bottleneck - performance-driven blending
+            # Severe bottleneck - performance-driven grafting
             return "PERFORMANCE_LINKED"
         elif (current_loss < baseline_loss * cfg.performance_loss_factor and 
               cfg.grad_norm_lower < grad_norm < cfg.grad_norm_upper):
-            # Good performance and stable gradients - use gradient-aware blending
+            # Good performance and stable gradients - use gradient-aware grafting
             return "GRAD_NORM_GATED"
         else:
             # Default fallback
@@ -464,18 +464,18 @@ class KasminaMicro:
         The training slot is considered occupied if any seed is in a state that
         requires exclusive access to training resources:
         - TRAINING: Actively training
-        - BLENDING: Integrating into the network
-        - SHADOWING: Stage 1 validation
-        - PROBATIONARY: Stage 2 validation
+        - GRAFTING: Integrating into the network
+        - STABILIZATION: Stage 1 validation
+        - FINE_TUNING: Stage 2 validation
         
         Returns:
             bool: True if training slot is occupied, False if available
         """
         occupied_states = {
             SeedState.TRAINING.value,
-            SeedState.BLENDING.value, 
-            SeedState.SHADOWING.value,
-            SeedState.PROBATIONARY.value
+            SeedState.GRAFTING.value, 
+            SeedState.STABILIZATION.value,
+            SeedState.FINE_TUNING.value
         }
         
         with self.seed_manager.lock:

@@ -41,11 +41,16 @@ class SeedState(Enum):
     DORMANT = "dormant"        # Seed is inactive, monitoring activations in buffer
     GERMINATED = "germinated"  # Seed activated, waiting in training queue  
     TRAINING = "training"      # Seed is actively training its child network
-    BLENDING = "blending"      # Seed smoothly integrating into parent with alpha mixing
-    SHADOWING = "shadowing"    # Stage 1 validation - inert monitoring for stability
-    PROBATIONARY = "probationary"  # Stage 2 validation - live monitoring for systemic impact
+    GRAFTING = "grafting"      # Seed smoothly integrating into parent with alpha mixing
+    STABILIZATION = "stabilization"  # Stage 1 validation - hold alpha=1.0, freeze parameters
+    FINE_TUNING = "fine_tuning"     # Stage 2 validation - train child on task loss
     FOSSILIZED = "fossilized"  # Successfully integrated into parent network permanently
     CULLED = "culled"          # Failed validation, under embargo until reset to DORMANT
+    
+    # DEPRECATED: Old state names for backward compatibility (will be removed in future version)
+    BLENDING = "grafting"      # Deprecated: Use GRAFTING instead
+    SHADOWING = "stabilization"    # Deprecated: Use STABILIZATION instead  
+    PROBATIONARY = "fine_tuning"   # Deprecated: Use FINE_TUNING instead
 
 
 class NetworkStrain(Enum):

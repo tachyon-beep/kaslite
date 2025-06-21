@@ -48,7 +48,7 @@ def _get_seed_training_batch(info: SeedInfo, device: torch.device) -> torch.Tens
 def _perform_per_step_seed_updates(
     seed_manager: "SeedManager", device: torch.device, epoch: int | None
 ):
-    """Handle continuous, per-step seed activities like training and blending."""
+    """Handle continuous, per-step seed activities like training and grafting."""
     for info in seed_manager.seeds.values():
         seed = info["module"]
         if epoch is not None:
@@ -61,9 +61,9 @@ def _perform_per_step_seed_updates(
             if hasattr(seed, "train_child_step"):
                 seed.train_child_step(batch, epoch=epoch)
 
-        # Blending alpha is a continuous value that can be updated per-step.
-        if hasattr(seed, "update_blending"):
-            seed.update_blending(epoch)
+        # Grafting alpha is a continuous value that can be updated per-step.
+        if hasattr(seed, "update_grafting"):
+            seed.update_grafting(epoch)
 
 
 def train_epoch(
@@ -75,10 +75,14 @@ def train_epoch(
     device: torch.device,
     scheduler: LRScheduler | None = None,
     epoch: int | None = None,
+    logger: ExperimentLogger | None = None,  # logger for per-batch progress
 ) -> float:
     """Train the model for one epoch and return average loss."""
     model.train()
     total_loss = 0.0
+    steps_total = len(loader)
+    # roughly 1% of steps, but at least every batch if <100
+    update_interval = max(1, steps_total // 100)
     for i, (X, y) in enumerate(loader):
         X, y = X.to(device), y.to(device)
         optimiser.zero_grad(set_to_none=True)
@@ -92,6 +96,12 @@ def train_epoch(
 
         # Handle continuous, per-step seed activities
         _perform_per_step_seed_updates(seed_manager, device, epoch)
+
+        # Emit progress every ~1% of steps, or every batch if <100, and always on last batch
+        if logger is not None and epoch is not None and (
+            (i + 1) % update_interval == 0 or (i + 1) == steps_total
+        ):
+            logger.log_step_update(epoch, i + 1, steps_total)
 
     # After all batches for an epoch are done, major state transitions
     # are handled by KasminaMicro.assess_and_update_seeds.
@@ -142,10 +152,9 @@ def execute_phase_1(
     )
 
     for epoch in range(1, config["warm_up_epochs"] + 1):
-        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, scheduler, epoch)
+        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, scheduler, epoch, logger)
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)
-
         metrics = {
             "train_loss": train_loss,
             "val_loss": val_loss,
@@ -250,10 +259,8 @@ def execute_phase_2(
 
     for epoch_offset in range(1, adaptation_epochs + 1):
         epoch = config["warm_up_epochs"] + epoch_offset
-
         # Train for one epoch first.
-        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, epoch=epoch)
-
+        train_loss = train_epoch(model, train_loader, optimiser, criterion, seed_manager, device, epoch=epoch, logger=logger)
         # Now, evaluate performance *after* training.
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         best_acc = max(best_acc, val_acc)

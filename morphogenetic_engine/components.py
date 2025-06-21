@@ -132,31 +132,30 @@ class SentinelSeed(nn.Module):
         # In several states, the seed should act as a pass-through identity function
         # and not interfere with the parent network's forward pass.
         # TRAINING: The child network trains on its buffer in the background, not in the forward pass.
-        # SHADOWING: The child is validated in the background; the forward pass remains inert.
+        # STABILIZATION: The child is validated in the background; the forward pass remains inert.
         if self.state in [
             SeedState.CULLED.value,
             SeedState.GERMINATED.value,
             SeedState.TRAINING.value,
-            SeedState.SHADOWING.value,
         ]:
             return x
 
         # For the active states, we compute the child's output.
         child_out = self.child(x)
 
-        # In BLENDING state, we smoothly interpolate between the original path and the child path.
-        if self.state == SeedState.BLENDING.value:
+        # In GRAFTING state, we smoothly interpolate between the original path and the child path.
+        if self.state == SeedState.GRAFTING.value:
             output = (1 - self.alpha) * x + self.alpha * child_out
         
-        # In PROBATIONARY and FOSSILIZED states, the child is fully active as a residual connection.
-        elif self.state in [SeedState.PROBATIONARY.value, SeedState.FOSSILIZED.value]:
+        # In STABILIZATION, FINE_TUNING and FOSSILIZED states, the child is fully active as a residual connection.
+        elif self.state in [SeedState.STABILIZATION.value, SeedState.FINE_TUNING.value, SeedState.FOSSILIZED.value]:
             output = x + child_out
         else:
             # Default fallback case, should not be reached in normal operation.
             return x
 
         # Monitor interface drift for any state where the output is being modified.
-        if self.state in [SeedState.BLENDING.value, SeedState.PROBATIONARY.value]:
+        if self.state in [SeedState.GRAFTING.value, SeedState.STABILIZATION.value, SeedState.FINE_TUNING.value]:
             with torch.no_grad():
                 cos_sim = torch.cosine_similarity(x, output, dim=-1).mean()
                 drift = 1.0 - cos_sim.item()
@@ -192,14 +191,14 @@ class SentinelSeed(nn.Module):
         if new_state == SeedState.CULLED:
             info["culling_epoch"] = current_epoch
         
-        # Track when blending starts for duration calculation
-        if new_state == SeedState.BLENDING:
-            info["blend_start_epoch"] = current_epoch
-            # Capture initial blending metrics for dynamic strategies
-            info["blend_initial_loss"] = self.validate_on_holdout() if hasattr(self, 'validate_on_holdout') else 0.0
+        # Track when grafting starts for duration calculation
+        if new_state == SeedState.GRAFTING:
+            info["graft_start_epoch"] = current_epoch
+            # Capture initial grafting metrics for dynamic strategies
+            info["graft_initial_loss"] = self.validate_on_holdout() if hasattr(self, 'validate_on_holdout') else 0.0
             # Capture current drift measurement if available
             current_drift = info.get("telemetry", {}).get("drift", 0.0)
-            info["blend_initial_drift"] = current_drift
+            info["graft_initial_drift"] = current_drift
         
         # Set up training infrastructure when transitioning TO TRAINING state
         if new_state == SeedState.TRAINING:

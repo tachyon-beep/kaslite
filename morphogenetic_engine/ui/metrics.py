@@ -197,33 +197,34 @@ class MetricsManager:
             return self._format_zero_change(fmt, metric_key)
 
         # Format meaningful changes
-        return self._format_meaningful_change(change, fmt, metric_key)
+        return self._format_meaningful_change(change, fmt)
 
     def _format_zero_change(self, fmt: str, metric_key: str) -> str:
-        """Format zero change with appropriate precision."""
-        if ".3f" in fmt:
-            return "0.000"
-        elif ".2f" in fmt:
-            return "0.00"
-        elif ".1f" in fmt:
-            return "0.0"
-        elif ".0f" in fmt:
-            return "0"
+        """Format zero change with appropriate precision (robust to any decimal format)."""
+        import re
+
+        match = re.search(r"\.(\d+)f", fmt)
+        if match:
+            decimals = int(match.group(1))
+            if decimals > 2:
+                return "0.00e+00"
+            return "0." + "0" * decimals
         elif ".2e" in fmt or metric_key == "learning_rate":
             return "0.00e+00"
         else:
             return "0.000"
 
-    def _format_meaningful_change(self, change: float, fmt: str, metric_key: str) -> str:
-        """Format meaningful change values."""
-        # Special handling for learning rate - show in exponential format
-        if metric_key == "learning_rate":
+    def _format_meaningful_change(self, change: float, fmt: str) -> str:
+        """Format meaningful change values: exponential if >2 decimal places, else decimal."""
+        import re
+
+        match = re.search(r"\.(\d+)f", fmt)
+        if match and int(match.group(1)) > 2:
             return f"{change:+.2e}"
-        # Use the same format as the metric, but with + sign for positive changes
-        elif fmt.startswith("+"):
+        # Otherwise, use decimal format with sign
+        if fmt.startswith("+"):
             return f"{change:{fmt}}"
-        else:
-            return f"{change:+{fmt}}"
+        return f"{change:+{fmt}}"
 
     def create_sparkline_panel(self) -> Panel:
         """Generate the panel for metric trends and sparklines."""

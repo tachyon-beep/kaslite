@@ -19,7 +19,7 @@ SEED_EMOJI_MAP = {
     SeedState.TRAINING: "🟢",    # 🟢 Green circle (training)
     SeedState.BLENDING: "🟡",      # 🟡 Yellow circle (blending)
     SeedState.SHADOWING: "👻",  # 👻 Ghost (shadowing)
-    SeedState.PROBATIONARY: "🧑‍⚖️",  # 🧑‍⚖️ Judge (probationary)
+    SeedState.PROBATIONARY: "👮",  # 👮 Police (probationary)
     SeedState.FOSSILIZED: "🦴",   # 🦴 Bone (fossilized)
     SeedState.CULLED: "🥀",         # 🥀 Wilted flower (culled)
 }

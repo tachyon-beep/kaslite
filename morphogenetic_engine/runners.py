@@ -94,10 +94,14 @@ def get_dataloaders(args):
             input_dim=args.input_dim,
         )
     elif args.problem_type == "spheres":
+        # Ensure sphere_radii is a string (for compatibility with datasets.create_spheres)
+        sphere_radii = args.sphere_radii
+        if isinstance(sphere_radii, list):
+            sphere_radii = ",".join(str(r) for r in sphere_radii)
         X, y = datasets.create_spheres(
             sphere_count=args.sphere_count,
             sphere_size=args.n_samples // args.sphere_count,
-            sphere_radii=args.sphere_radii,
+            sphere_radii=sphere_radii,
             sphere_noise=args.sphere_noise,
             input_dim=args.input_dim,
         )

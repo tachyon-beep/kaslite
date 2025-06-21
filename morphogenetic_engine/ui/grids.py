@@ -75,14 +75,12 @@ class GridManager:
             ("🌱", "Germinated"),
             ("🟢", "Training"),
             ("🟡", "Blending"),
-            ("👻", "Shadowing"),
         ]
         row2 = [
-            ("🧑‍⚖️", "Probationary"),
+            ("👻", "Shadowing"),
+            ("👮", "Probationary"),
             ("🦴", "Fossilized"),
             ("🥀", "Culled"),
-            (EMPTY_CELL_EMOJI, "Empty slot"),
-            ("", ""),  # blank filler
         ]
 
         # 2) Compute a uniform cell width for the widest entry

@@ -1,0 +1,569 @@
+tests/
+├─ test_cli/
+│  ├─ test_main_entrypoints.py
+│  ├─ test_arguments_parser.py
+│  ├─ test_model_registry_cli.py
+│  ├─ test_sweep_cli.py
+│  └─ test_reports_cli.py
+├─ test_cli_dashboard.py
+├─ test_components/
+│  ├─ test_sentinel_seed.py
+│  ├─ test_base_net.py
+│  └─ test_component_interactions.py
+├─ test_core/
+│  ├─ test_seed_manager.py
+│  ├─ test_kasmina_micro.py
+│  └─ test_seed_state_transitions.py
+├─ test_datasets/
+│  ├─ test_validate_common_params.py
+│  ├─ test_spirals_generator.py
+│  ├─ test_complex_moons_generator.py
+│  ├─ test_moons_generator.py
+│  ├─ test_clusters_generator.py
+│  └─ test_spheres_generator.py
+├─ test_experiment_builders.py
+├─ test_inference_server.py
+├─ test_logger.py
+├─ test_model_registry.py
+├─ test_monitoring.py
+├─ test_runners/
+│  ├─ test_setup_experiment.py
+│  ├─ test_get_dataloaders.py
+│  └─ test_run_single_experiment.py
+├─ test_sweeps/
+│  ├─ test_config_parsing.py
+│  ├─ test_grid_search_runner.py
+│  ├─ test_bayesian_runner.py
+│  ├─ test_results_analysis.py
+│  └─ test_sweep_runner.py
+├─ test_training/
+│  ├─ test_handle_seed_training.py
+│  ├─ test_train_epoch.py
+│  ├─ test_evaluate.py
+│  ├─ test_execute_phase1.py
+│  ├─ test_execute_phase2.py
+│  └─ test_should_log_seed_update.py
+├─ test_utils.py
+├─ test_package_init.py
+├─ benchmark_suite.py
+└─ coverage_config.py
+
+tests/test_cli/test_main_entrypoints.py
+
+    Covers: morphogenetic_engine.cli.__main__.main
+
+    Scenarios: invoking with sweep, reports, invalid command; ensure exit codes and printed help.
+
+    Assertions: exit codes (0/1), captured stdout.
+
+    Python 3.12 features: pattern matching on result object to verify code and stdout, f-string =.
+
+    Tools: pytest, pytest-snapshot for CLI output.
+
+tests/test_cli/test_arguments_parser.py
+
+    Covers: morphogenetic_engine.cli.arguments.parse_float_list, create_experiment_parser, parse_experiment_arguments, get_valid_argument_names
+
+    Scenarios: valid lists ("1,2,3"), invalid floats; using sample argument arrays.
+
+    Assertions: resulting Namespace fields, raising ValueError when numbers fail; property-based tests for numeric conversions (Hypothesis).
+
+    Python 3.12 features: use match soft keyword inside an unrelated context, e.g., match_var = parser.parse_args([...]).
+
+    Tools: Hypothesis, pytest-cov.
+
+tests/test_cli/test_model_registry_cli.py
+
+    Covers: CLI commands in model_registry_cli (register_model, promote_model, list_models, get_best_model, get_production_model)
+
+    Scenarios: mocking MlflowClient and ModelRegistry behaviours; invalid args; network errors (exception group).
+
+    Assertions: printed messages, log calls, correct method invocation.
+
+    Python 3.12 features: raise an ExceptionGroup to test except*; f-string = when verifying CLI arguments.
+
+    Tools: pytest-mock, pytest-snapshot.
+
+tests/test_cli/test_sweep_cli.py
+
+    Covers: SweepCLI (grid, bayesian, quick, resume paths)
+
+    Scenarios: valid YAML config, missing file, invalid YAML; verifying the CLI exits with code 1 on errors.
+
+    Assertions: exit code and snapshot of console output.
+
+    Python 3.12 features: structural pattern matching on args.command results in tests; match-case for result analysis.
+
+    Tools: Hypothesis for varying CLI argument sequences, pytest-snapshot.
+
+tests/test_cli/test_reports_cli.py
+
+    Covers: ReportsCLI functions show_summary, show_analysis, compare_sweeps, export_results
+
+    Scenarios: missing directories, valid summary file, corrupted JSON.
+
+    Assertions: console output messages, return codes.
+
+    Python 3.12 features: using Self type hints in helper mocks; f-string =.
+
+    Tools: pytest, mock.
+
+tests/test_cli_dashboard.py
+
+    Covers: RichDashboard and SeedState
+
+    Scenarios: starting/stopping dashboard, updating progress, updating seeds, phase transitions.
+
+    Assertions: internal state changes, layout updates (using snapshot of Console render).
+
+    Python 3.12 features: match-case on SeedState.state to style output; except* when multiple seeds raise update errors.
+
+    Tools: pytest, hypothesis for random metrics, snapshot plugin.
+
+tests/test_components/test_sentinel_seed.py
+
+    Covers: SentinelSeed methods: _set_state, initialize_child, train_child_step, update_blending, get_health_signal, forward
+
+    Scenarios: invalid parameters, verifying transitions (dormant→training→blending→active), buffer logging and drift warnings.
+
+    Assertions: state property, alpha progression, buffer length; use of pytest.raises.
+
+    Python 3.12 features: use match seed.state: to check transitions; except* when simulating multiple invalid states.
+
+    Tools: Hypothesis for tensor inputs, mock SeedManager.
+
+tests/test_components/test_base_net.py
+
+    Covers: BaseNet initialization, freeze_backbone, get_total_seeds, get_seeds_for_layer, forward
+
+    Scenarios: invalid constructor values, verifying network output shape and seeds.
+
+    Assertions: number of parameters frozen, raising IndexError for out-of-range layer.
+
+    Python 3.12 features: f-string = to debug shapes; pattern matching to assert len(match(layer)).
+
+    Tools: pytest, hypothesis (tensor generation), coverage.
+
+tests/test_components/test_component_interactions.py
+
+    Covers: interplay between BaseNet and SentinelSeed
+
+    Scenarios: using a real SeedManager with multiple seeds, verifying that buffer updates occur.
+
+    Assertions: after forward passes, buffer lengths, states transition as expected.
+
+    Python 3.12 features: Self typing in custom mock seeds; match-case for verifying state counts.
+
+tests/test_core/test_seed_manager.py
+
+    Covers: SeedManager singleton behaviour, register_seed, request_germination, record_transition, record_drift, reset_singleton
+
+    Scenarios: concurrent registration, failed germination raising exceptions, verifying log entries.
+
+    Assertions: germination_log contents, locking semantics via threading mocks, correct resetting of singleton.
+
+    Python 3.12 features: use of exceptiongroup to simulate multiple failing seeds; f-string =.
+
+    Tools: pytest, mock, Hypothesis for random seed ids.
+
+tests/test_core/test_kasmina_micro.py
+
+    Covers: KasminaMicro.step and internal _select_seed
+
+    Scenarios: plateau counter increments, accuracy thresholds, selecting worst signal seed.
+
+    Assertions: plateau resets, SeedManager.request_germination called.
+
+    Python 3.12 features: match soft keyword used as variable; pattern matching on internal monitor metrics.
+
+    Tools: pytest, pytest-mock.
+
+tests/test_core/test_seed_state_transitions.py
+
+    Covers: verifying SeedManager.record_transition plus state data structure.
+
+    Scenarios: transitions recorded with time stamps; verifying germination_log.
+
+    Assertions: log ordering, correct old/new states.
+
+    Python 3.12 features: match-case to destructure log dicts; = f-strings for debugging.
+
+    Tools: pytest
+
+tests/test_datasets/test_validate_common_params.py
+
+    Covers: _validate_common_params
+
+    Scenarios: negative n_samples, zero input_dim, invalid noise; valid combos.
+
+    Assertions: raising ValueError, no error for valid input.
+
+    Python 3.12 features: except* for grouping all invalid cases in one test; match-case to check error messages.
+
+    Tools: Hypothesis for parameter generation.
+
+tests/test_datasets/test_spirals_generator.py
+
+    Covers: create_spirals
+
+    Scenarios: default params, extra dimensions, invalid rotations.
+
+    Assertions: shape (n_samples, input_dim), label distribution, dtype.
+
+    Python 3.12 features: pattern matching on shapes; f-string =.
+
+    Tools: numpy testing utilities, Hypothesis (for n_samples, noise).
+
+tests/test_datasets/test_complex_moons_generator.py
+
+    Covers: create_complex_moons
+
+    Scenarios: input dimension padding, shuffle randomness.
+
+    Assertions: output shapes, unique labels {0,1}.
+
+    Python 3.12 features: use match as variable; Self in typed helper functions.
+
+    Tools: hypothesis.
+
+tests/test_datasets/test_moons_generator.py
+
+    Covers: create_moons
+
+    Scenarios: varying moon_sep, noise; invalid moon_sep negative.
+
+    Assertions: shape/dtype, ValueError.
+
+    Python 3.12 features: use match-case on moon_sep classification.
+
+    Tools: hypothesis.
+
+tests/test_datasets/test_clusters_generator.py
+
+    Covers: create_clusters
+
+    Scenarios: single cluster vs multiple clusters, invalid parameters.
+
+    Assertions: label parity, shape.
+
+    Python 3.12 features: ExceptionGroup when multiple invalid args are tested simultaneously.
+
+    Tools: hypothesis.
+
+tests/test_datasets/test_spheres_generator.py
+
+    Covers: create_spheres
+
+    Scenarios: mismatched radii count, invalid radii strings, high dimensions.
+
+    Assertions: error messages, output distribution.
+
+    Python 3.12 features: pattern matching for parsed radii; f-string =.
+
+tests/test_experiment_builders.py
+
+    Covers: morphogenetic_engine.experiment.build_model_and_agents
+
+    Scenarios: building with GPU/CPU device, verifying objects returned.
+
+    Assertions: types of model, loss function, KasminaMicro; SeedManager singleton used.
+
+    Python 3.12 features: Self typing for returned model.
+
+    Tools: pytest, torch mocks.
+
+tests/test_inference_server.py
+
+    Covers: FastAPI endpoints in inference_server
+
+    Scenarios: health_check, metrics, predict with/without model loaded, reload_production_model
+
+    Assertions: HTTP status codes, JSON schemas, Prometheus counters.
+
+    Python 3.12 features: async tests using pytest.anyio; pattern matching response dictionaries; f-string =.
+
+    Tools: anyio plugin, pytest-snapshot for JSON responses, mock ModelRegistry.
+
+tests/test_logger.py
+
+    Covers: ExperimentLogger methods
+
+    Scenarios: logging different event types, file output, summary generation.
+
+    Assertions: events list length, summary dictionary keys.
+
+    Python 3.12 features: use of Self typed dataclass LogEvent; match-case to categorize events; f"{event=}" debugging.
+
+    Tools: pytest, snapshot of log file.
+
+tests/test_model_registry.py
+
+    Covers: ModelRegistry public API (register_best_model, get_best_model_version, promote_model, list_model_versions, get_production_model_uri)
+
+    Scenarios: mocked Mlflow client success/failure, alias handling.
+
+    Assertions: return values, logger messages.
+
+    Python 3.12 features: exceptiongroup to simulate multiple Mlflow errors; Self in stub objects.
+
+    Tools: pytest-mock.
+
+tests/test_monitoring.py
+
+    Covers: PrometheusMonitor, get_monitor, initialize_monitoring, cleanup_monitoring
+
+    Scenarios: starting metrics server (mocked), updating metrics, state mapping.
+
+    Assertions: gauge/counter values via prometheus_client registry.
+
+    Python 3.12 features: match-case on seed states; f-string =.
+
+    Tools: pytest, snapshot of metrics text, anyio.
+
+tests/test_runners/test_setup_experiment.py
+
+    Covers: setup_experiment
+
+    Scenarios: CPU vs CUDA device, verifying log file paths and MLflow initialization (mocked).
+
+    Assertions: returned objects types, created directories.
+
+    Python 3.12 features: pattern matching on the returned tuple; match variable as soft keyword.
+
+    Tools: pytest, mock, temp directories.
+
+tests/test_runners/test_get_dataloaders.py
+
+    Covers: get_dataloaders
+
+    Scenarios: each problem type; invalid type raising ValueError.
+
+    Assertions: DataLoader lengths, tensor shapes.
+
+    Python 3.12 features: match-case dispatch to verify dataset selection.
+
+    Tools: hypothesis for dataset params.
+
+tests/test_runners/test_run_single_experiment.py
+
+    Covers: run_single_experiment
+
+    Scenarios: successful run with tiny dataset (mock training loops), failure path raising exceptions.
+
+    Assertions: final stats keys, MLflow interactions.
+
+    Python 3.12 features: ExceptionGroup for multiple potential failures; f-string debugging.
+
+    Tools: pytest, mock, anyio.
+
+tests/test_sweeps/test_config_parsing.py
+
+    Covers: SweepConfig, load_sweep_config, load_sweep_configs, parse_value_list
+
+    Scenarios: grid vs bayesian, invalid sweep types, directory loading.
+
+    Assertions: structure of returned combinations, raising ValueError.
+
+    Python 3.12 features: match-case on config type; f-string =.
+
+    Tools: hypothesis to generate small YAML snippets.
+
+tests/test_sweeps/test_grid_search_runner.py
+
+    Covers: GridSearchRunner methods _run_sequential, _run_parallel, _run_single_experiment, _extract_metrics, _print_summary
+
+    Scenarios: mocking subprocess results, timeouts, parallel execution.
+
+    Assertions: results stored in SweepResults, console summary output.
+
+    Python 3.12 features: structural pattern matching on subprocess return codes; Self typed mocks.
+
+    Tools: pytest, pytest-benchmark for measuring runner overhead.
+
+tests/test_sweeps/test_bayesian_runner.py
+
+    Covers: BayesianSearchRunner methods _create_sampler, _create_pruner, _suggest_parameters, _objective, _print_summary
+
+    Scenarios: various sampler names, parameter search spaces, failed trial.
+
+    Assertions: Optuna study results, captured console output.
+
+    Python 3.12 features: match-case mapping sampler/pruner names; f-string =.
+
+    Tools: pytest, hypothesis for parameter dictionaries, snapshot plugin.
+
+tests/test_sweeps/test_results_analysis.py
+
+    Covers: SweepResults and ResultsAnalyzer
+
+    Scenarios: adding results incrementally, finalizing to CSV/JSON, computing correlations.
+
+    Assertions: presence of output files, correlation values.
+
+    Python 3.12 features: match-case on correlation strength; Self typed stubs.
+
+    Tools: numpy testing utilities.
+
+tests/test_sweeps/test_sweep_runner.py
+
+    Covers: functions in sweeps.runner (expand_grid, merge_args_with_combo, generate_run_slug, create_sweep_results_summary, process_single_sweep_config, run_parameter_sweep)
+
+    Scenarios: invalid YAML, merge of CLI args, generating run directories.
+
+    Assertions: output CSV contents, returned lists length.
+
+    Python 3.12 features: exception groups when multiple configs fail; pattern matching on argument namespaces.
+
+    Tools: pytest, mock, snapshot.
+
+tests/test_training/test_handle_seed_training.py
+
+    Covers: handle_seed_training
+
+    Scenarios: different buffer sizes, verifying train_child_step called.
+
+    Assertions: call counts, state updates.
+
+    Python 3.12 features: match-case on tensor shapes; f-string =.
+
+    Tools: pytest, torch mocks.
+
+tests/test_training/test_train_epoch.py
+
+    Covers: train_epoch
+
+    Scenarios: with/without optimizer, scheduler stepping, seeds training.
+
+    Assertions: average loss, scheduler state.
+
+    Python 3.12 features: Self typed fake optimizer; pattern matching on scheduler step counts.
+
+    Tools: hypothesis for dataset generation.
+
+tests/test_training/test_evaluate.py
+
+    Covers: evaluate
+
+    Scenarios: evaluation with variable batch sizes; verifying accuracy computation.
+
+    Assertions: return tuple (loss, acc); dtype of outputs.
+
+    Python 3.12 features: match-case for result tuple.
+
+    Tools: hypothesis.
+
+tests/test_training/test_execute_phase1.py
+
+    Covers: execute_phase_1
+
+    Scenarios: small dataset training, verifying logging of epochs.
+
+    Assertions: best accuracy value, logger event counts.
+
+    Python 3.12 features: match-case across returned metrics.
+
+    Tools: pytest, snapshot for logger output.
+
+tests/test_training/test_execute_phase2.py
+
+    Covers: execute_phase_2, handle_germination_tracking, _handle_germination_step, _log_phase_2_metrics
+
+    Scenarios: seed germination triggered vs not triggered, recovery time.
+
+    Assertions: dictionary keys, seeds_activated boolean.
+
+    Python 3.12 features: ExceptionGroup to test multiple seed activations; f-string =.
+
+    Tools: pytest, mock.
+
+tests/test_training/test_should_log_seed_update.py
+
+    Covers: should_log_seed_update, format_alpha_value, _update_dashboard_seed_state, _log_seed_state_change, log_seed_updates, clear_seed_report_cache
+
+    Scenarios: transitions from blending to active, invalid alpha.
+
+    Assertions: log file entries, return booleans.
+
+    Python 3.12 features: match-case on previous state string; Self typed dashboard mocks.
+
+    Tools: pytest, snapshot.
+
+tests/test_utils.py
+
+    Covers: all helper functions in utils.py (is_testing_mode, generate_experiment_slug, create_experiment_config, write_experiment_log_header, write_experiment_log_footer, export_metrics_for_dvc)
+
+    Scenarios: verifying slug format, config dictionary, log file writing with various args.
+
+    Assertions: existence of output JSON, lines in log file using snapshot.
+
+    Python 3.12 features: f-string = specifier to debug slug; pattern matching in config dictionary.
+
+    Tools: pytest, snapshot.
+
+tests/test_package_init.py
+
+    Covers: package __init__ and exports
+
+    Scenarios: importing all modules, ensuring __all__ exports expected names.
+
+    Assertions: dir(morphogenetic_engine) contains listed modules.
+
+    Python 3.12 features: match-case on set comparisons.
+
+    Tools: pytest
+
+tests/benchmark_suite.py
+
+    Covers: micro benchmarks for dataset generators, inference server, and training loops.
+
+    Scenarios: measure time for generating datasets, single inference call, training loop with dummy data.
+
+    Assertions: none (benchmark plugin collects).
+
+    Python 3.12 features: f-string = inside benchmark output for debugging.
+
+    Tools: pytest-benchmark.
+
+tests/coverage_config.py
+
+    Configuration file used by pytest-cov to enforce ≥90 % coverage across morphogenetic_engine package.
+
+Continuous Integration Summary
+
+    Linting Stage
+
+        Run pylint with plugins:
+
+        pylint --load-plugins=pylint_asyncio,pylint_hypothesis,
+               pylint_hydra,pylint_snapshot,pylint_mock,
+               pylint_anyio,pylint_benchmark,pylint_cov morphogenetic_engine tests
+
+        Ensures all code (including tests) conforms to lint rules and plugin checks.
+
+    Testing Stage
+
+        Execute pytest with plugins:
+
+            pytest-hypothesis for property-based tests.
+
+            pytest-anyio for async tests.
+
+            pytest-snapshot to manage output snapshots.
+
+            pytest-benchmark for benchmarks (skipped unless explicitly enabled).
+
+            pytest-cov with coverage_config.py to enforce coverage thresholds.
+
+        Exception group behaviour verified using except* tests.
+
+    Benchmark Job
+
+        Separate CI job running pytest benchmark_suite.py --benchmark-only.
+
+        Compares runtime metrics against stored baselines.
+
+    Coverage Enforcement
+
+        Collect coverage data with pytest-cov and fail the build if overall coverage for morphogenetic_engine falls below the configured threshold from coverage_config.py.
+
+This blueprint ensures every module under morphogenetic_engine is thoroughly exercised with modern Python 3.12 features, validated by pylint plugins, and integrated into a comprehensive CI pipeline.

@@ -68,6 +68,9 @@ class ExperimentLogger:
             ),
         }
 
+        self._last_epoch: int | None = None
+        self._last_phase_epoch: int | None = None
+
     def _log_event(self, event_type: EventType, payload: EventPayload) -> None:
         """Create, store, write, and dispatch a LogEvent."""
         import logging
@@ -113,6 +116,14 @@ class ExperimentLogger:
 
     def log_metrics_update(self, epoch: int, metrics: dict) -> None:
         """Log a metrics update event."""
+        # Track the last epoch and phase epoch for use in step updates
+        self._last_epoch = epoch
+        # Try to infer phase epoch if present in metrics
+        if "phase_epoch" in metrics:
+            self._last_phase_epoch = metrics["phase_epoch"]
+        else:
+            # Fallback: assume phase epoch is same as epoch
+            self._last_phase_epoch = epoch
         payload = MetricsUpdatePayload(epoch=epoch, metrics=metrics, timestamp=time.time())
         self._log_event(event_type=EventType.METRICS_UPDATE, payload=payload)
 
@@ -221,3 +232,10 @@ class ExperimentLogger:
             return {}
         # Use collections.Counter for a more direct and readable implementation
         return collections.Counter(event.event_type.value for event in self.events)
+
+    def log_step_update(self, epoch: int, steps_completed: int, steps_total: int) -> None:
+        """Send a lightweight step update to the dashboard for progress bar only (no metrics redraw)."""
+        # Use the last known phase epoch if available
+        phase_epoch = self._last_phase_epoch if self._last_phase_epoch is not None else epoch
+        if self.dashboard and hasattr(self.dashboard.layout_manager, "update_progress"):
+            self.dashboard.layout_manager.update_progress(epoch, phase_epoch, steps_completed, steps_total)

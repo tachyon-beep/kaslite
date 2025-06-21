@@ -129,11 +129,12 @@ class GradNormGatedBlending(BlendingStrategy):
         if self.config.grad_norm_lower <= grad_norm <= self.config.grad_norm_upper:
             # Gradients stable - normal progress
             step_size = 1.0 / self.config.fixed_steps
-            new_alpha = self.seed.alpha + step_size
-            return min(1.0, new_alpha)
         else:
             # Gradients unstable - hold position
-            return self.seed.alpha
+            step_size = 0.0
+            
+        new_alpha = self.seed.alpha + step_size
+        return min(1.0, new_alpha)
 
 
 # =============================================================================
