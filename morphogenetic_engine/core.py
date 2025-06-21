@@ -27,6 +27,7 @@ class SeedManager:
     # Declare instance attributes for type checking
     seeds: Dict[tuple[int, int], Dict]
     germination_log: List[Dict[str, Any]]
+    germinated_queue: deque[tuple[int, int]]
     lock: threading.RLock
     logger: Optional[ExperimentLogger]
     _initialized: bool
@@ -39,6 +40,7 @@ class SeedManager:
                 # Initialize its state directly
                 instance.seeds = {}
                 instance.germination_log = []
+                instance.germinated_queue = deque()
                 instance.lock = threading.RLock()
                 instance.logger = kwargs.get("logger")
                 instance._initialized = True  # Optional: for clarity
@@ -57,7 +59,6 @@ class SeedManager:
         with self.lock:
             self.seeds[seed_id] = {
                 "module": seed_module,
-                "status": "dormant",
                 "state": SeedState.DORMANT.value,
                 "alpha": 0.0,
                 "gradient_norm": 0.0,
@@ -75,24 +76,25 @@ class SeedManager:
         """Request germination for a specific seed. Returns True if successful."""
         with self.lock:
             seed_info = self.seeds.get(seed_id)
-            if not seed_info or seed_info["status"] != "dormant":
+            if not seed_info or seed_info.get("state") != SeedState.DORMANT.value:
                 return False
 
             try:
                 # Germinate seed but don't start training yet - it goes to the "parking lot"
                 seed_info["module"].initialize_child(epoch=epoch)
-                seed_info["status"] = "germinated"  # Parking lot state
                 seed_info["germination_epoch"] = epoch  # Store germination epoch for training start
                 self._log_event(seed_id, True)
                 # State transition from DORMANT → GERMINATED is already logged by initialize_child()
                 # No need for separate GERMINATION event
                 
-                # Immediately try to start training the next seed with current epoch
-                self.start_training_next_seed()  # Note: SeedManager method, no epoch param
+                # Add to the germinated queue for efficient FIFO processing
+                self.germinated_queue.append(seed_id)
+                
                 return True
             except (RuntimeError, ValueError) as e:
                 logging.exception("Germination failed for '%s': %s", seed_id, e)
-                seed_info["status"] = "failed"
+                # Update state to indicate failure
+                seed_info["state"] = "failed"
                 self._log_event(seed_id, False)
                 return False
 
@@ -132,6 +134,7 @@ class SeedManager:
         with self.lock:
             self.seeds.clear()
             self.germination_log.clear()
+            self.germinated_queue.clear()
 
     @classmethod
     def reset_singleton(cls) -> None:
@@ -142,60 +145,12 @@ class SeedManager:
                 cls._instance = None
 
     def get_currently_training_seed(self) -> tuple[int, int] | None:
-        """Get the seed that is currently training (active state), if any."""
+        """Get the seed that is currently training (TRAINING state), if any."""
         with self.lock:
             for seed_id, seed_info in self.seeds.items():
-                if seed_info["status"] == "active":
+                if seed_info.get("state") == SeedState.TRAINING.value:
                     return seed_id
             return None
-
-    def get_next_germinated_seed(self) -> tuple[int, int] | None:
-        """Get the next seed in the germinated queue waiting to start training."""
-        with self.lock:
-            # Find the oldest germinated seed (first one added)
-            oldest_time = float('inf')
-            oldest_seed = None
-            for seed_id, seed_info in self.seeds.items():
-                if seed_info["status"] == "germinated":
-                    # Use germination log to find oldest
-                    for log_entry in self.germination_log:
-                        if (log_entry.get("seed_id") == f"L{seed_id[0]}_S{seed_id[1]}" and 
-                            log_entry.get("success", False) and
-                            log_entry.get("timestamp", float('inf')) < oldest_time):
-                            oldest_time = log_entry["timestamp"]
-                            oldest_seed = seed_id
-            return oldest_seed
-
-    def start_training_next_seed(self) -> tuple[int, int] | None:
-        """Start training the next seed in the germinated queue, if no seed is currently training."""
-        with self.lock:
-            # Check if any seed is currently training
-            if self.get_currently_training_seed() is not None:
-                return None  # Another seed is already training
-            
-            # Get the next germinated seed
-            next_seed = self.get_next_germinated_seed()
-            if next_seed is None:
-                return None  # No seeds waiting
-            
-            # Start training this seed
-            seed_info = self.seeds[next_seed]
-            seed_info["status"] = "active"
-            
-            # Try to get the current epoch for training start (use germination epoch)
-            epoch = self.seeds[next_seed].get('germination_epoch', 0)
-            seed_info["module"]._set_state(SeedState.TRAINING, epoch=epoch)
-            
-            # Log the training start
-            if self.logger is not None:
-                self.logger.log_seed_event_detailed(
-                    epoch=epoch,  # Use the determined epoch
-                    event_type="TRAINING_START",
-                    message=f"Seed L{next_seed[0]}_S{next_seed[1]} started training",
-                    data={"seed_id": f"L{next_seed[0]}_S{next_seed[1]}"}
-                )
-            
-            return next_seed
 
 
 class KasminaMicro:
@@ -247,10 +202,15 @@ class KasminaMicro:
 
     def assess_and_update_seeds(self, epoch: int) -> None:
         """Assess all seeds, apply state transitions, and handle culled seed replacement."""
+        
+        # --- FIX: ADVANCE THE QUEUE FIRST ---
+        # Promote a seed that has been waiting since the last epoch.
+        self._advance_training_queue(epoch)
+
         with self.seed_manager.lock:
             for seed_info in self.seed_manager.seeds.values():
                 module = seed_info["module"]
-                # This single call now handles all state transitions for the epoch
+                # This single call now handles all other state transitions for the epoch
                 if hasattr(module, "assess_and_transition_state"):
                     module.assess_and_transition_state(epoch)
 
@@ -264,16 +224,21 @@ class KasminaMicro:
     def log_all_seed_states(self, epoch: int):
         """Logs the current state of all seeds."""
         if not self.logger:
+            logging.warning(f"No logger available to log seed states at epoch {epoch}")
             return
 
-        from .events import SeedInfo, SeedState
+        logging.info(f"Logging seed states for epoch {epoch}")
+        from .events import SeedInfo
         seed_infos = []
         with self.seed_manager.lock:
+            logging.info(f"Found {len(self.seed_manager.seeds)} seeds to log")
             for seed_id, seed_info in self.seed_manager.seeds.items():
                 module = seed_info["module"]
                 try:
                     state_enum = SeedState(module.state)
-                except (ValueError, KeyError):
+                    logging.info(f"Seed {seed_id}: state={state_enum.value}")
+                except (ValueError, KeyError) as e:
+                    logging.error(f"Failed to read state for seed {seed_id}: {e}, module.state={getattr(module, 'state', 'MISSING')}")
                     state_enum = SeedState.DORMANT # Default fallback
 
                 layer_idx, seed_idx = seed_id
@@ -289,6 +254,8 @@ class KasminaMicro:
                         "current_loss": seed_info.get("current_loss", 0.0),
                     },
                 ))
+        
+        logging.info(f"Calling logger.log_seed_state_update with {len(seed_infos)} seeds")
         self.logger.log_seed_state_update(epoch, seed_infos)
 
     def step(self, epoch: int, val_loss: float, val_acc: float) -> bool:
@@ -323,6 +290,11 @@ class KasminaMicro:
             seed_id = self._select_seed()
             if seed_id and self.seed_manager.request_germination(seed_id, epoch=epoch):  # Pass epoch
                 self.plateau = 0 # Reset plateau counter only on successful germination
+                
+                # IMMEDIATELY update UI to show GERMINATED state before it gets promoted
+                if self.logger:
+                    self.log_all_seed_states(epoch)
+                
                 # Record germination in monitoring
                 if monitor:
                     monitor.record_germination()
@@ -356,8 +328,35 @@ class KasminaMicro:
 
         return candidate_id
 
+    def _is_training_slot_occupied(self) -> bool:
+        """
+        Check if the training slot is currently occupied by any seed.
+        
+        The training slot is considered occupied if any seed is in a state that
+        requires exclusive access to training resources:
+        - TRAINING: Actively training
+        - BLENDING: Integrating into the network
+        - SHADOWING: Stage 1 validation
+        - PROBATIONARY: Stage 2 validation
+        
+        Returns:
+            bool: True if training slot is occupied, False if available
+        """
+        occupied_states = {
+            SeedState.TRAINING.value,
+            SeedState.BLENDING.value, 
+            SeedState.SHADOWING.value,
+            SeedState.PROBATIONARY.value
+        }
+        
+        with self.seed_manager.lock:
+            for seed_info in self.seed_manager.seeds.values():
+                if seed_info.get("state") in occupied_states:
+                    return True
+        return False
+
     def is_any_seed_training(self) -> bool:
-        """Check if any seed is currently in ACTIVE state (training)."""
+        """Check if any seed is currently in TRAINING state."""
         with self.seed_manager.lock:
             for seed_info in self.seed_manager.seeds.values():
                 if seed_info.get("state") == SeedState.TRAINING.value:
@@ -365,29 +364,54 @@ class KasminaMicro:
         return False
 
     def start_training_next_seed(self, epoch: int | None = None) -> bool:
-        """Start training the next germinated seed if no seed is currently training."""
-        if self.is_any_seed_training():
-            return False  # Another seed is already training
-        
-        # Find the first seed in GERMINATED state (waiting in parking lot)
-        with self.seed_manager.lock:
-            for seed_id, seed_info in self.seed_manager.seeds.items():
-                if seed_info.get("state") == SeedState.GERMINATED.value:
-                    # Start training this seed
-                    if "module" in seed_info:
-                        # Use germination epoch for training start consistency
-                        if epoch is None:
-                            epoch = seed_info.get('germination_epoch', 0)
+        """Public method to advance the training queue. Called from the training loop."""
+        return self._advance_training_queue(epoch)
 
-                        seed_info["module"]._set_state(SeedState.TRAINING, epoch=epoch)
-                        
-                        # Log the training start
-                        if self.logger:
-                            self.logger.log_seed_event_detailed(
-                                epoch=epoch,  # We don't have epoch context here
-                                event_type="TRAINING_START", 
-                                message=f"Seed L{seed_id[0]}_S{seed_id[1]} started training!",
-                                data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}"},
-                            )
-                        return True
-        return False  # No seeds waiting to train
+    def _advance_training_queue(self, epoch: int | None = None) -> bool:
+        """Start training the next germinated seed if no seed is currently training.
+        
+        Seeds can only start training if they were germinated in a PREVIOUS epoch
+        to ensure the UI shows the GERMINATED state for at least one full epoch.
+        """
+        if self._is_training_slot_occupied():
+            return False  # Training slot is occupied by a seed in an active state
+        
+        # Check if there are any seeds ready to be promoted
+        with self.seed_manager.lock:
+            if not self.seed_manager.germinated_queue:
+                return False  # No seeds waiting to train
+            
+            # Peek at the oldest seed in the queue (don't remove yet)
+            seed_id = self.seed_manager.germinated_queue[0]
+            seed_info = self.seed_manager.seeds.get(seed_id)
+            
+            if not seed_info or seed_info.get("state") != SeedState.GERMINATED.value:
+                # Seed was removed or changed state, remove from queue and try next one
+                self.seed_manager.germinated_queue.popleft()
+                return self._advance_training_queue(epoch)
+            
+            # CHECK: Only allow training if seed was germinated in a PREVIOUS epoch
+            germination_epoch = seed_info.get('germination_epoch', 0)
+            current_epoch = epoch if epoch is not None else 0
+            
+            if germination_epoch >= current_epoch:
+                # Seed was germinated this epoch or later - must wait until next epoch
+                return False
+            
+            # Safe to start training - remove from queue and promote
+            seed_id = self.seed_manager.germinated_queue.popleft()
+            
+            # Start training this seed
+            if "module" in seed_info:
+                seed_info["module"]._set_state(SeedState.TRAINING, epoch=current_epoch)
+                
+                # Log the training start
+                if self.logger:
+                    self.logger.log_seed_event_detailed(
+                        epoch=current_epoch,
+                        event_type="TRAINING_START", 
+                        message=f"Seed L{seed_id[0]}_S{seed_id[1]} started training!",
+                        data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}"},
+                    )
+                return True
+        return False

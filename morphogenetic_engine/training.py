@@ -260,12 +260,14 @@ def execute_phase_2(
         # Let Tamiyo decide if it's time to activate seeds based on the *current* performance.
         if not seeds_activated and tamiyo.step(epoch, val_loss, val_acc):
             seeds_activated, germ_epoch, acc_pre = True, epoch, val_acc
-            # Rebuild optimizer to include any newly activated seed parameters for the *next* epoch.
-            optimiser = _rebuild_optimizer(model, config)
 
         # Assess seeds and handle all other epoch-level state transitions.
         if hasattr(tamiyo, "assess_and_update_seeds"):
             tamiyo.assess_and_update_seeds(epoch)
+
+        # NEW: After assessing states, try to start the next training job.
+        if hasattr(tamiyo, "start_training_next_seed"):
+            tamiyo.start_training_next_seed(epoch)
 
         if germ_epoch:
             acc_post, t_recover = _update_post_germination_stats(

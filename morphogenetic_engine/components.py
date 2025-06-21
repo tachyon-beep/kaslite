@@ -29,6 +29,8 @@ class SentinelSeed(nn.Module):
         probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.12,
+        stability_threshold: float = 0.01,
+        improvement_threshold: float = 0.95,
     ):
         super().__init__()
 
@@ -48,11 +50,13 @@ class SentinelSeed(nn.Module):
         self.alpha = 0.0
         self.state = SeedState.DORMANT.value
         self.drift_warn = drift_warn
+        self.stability_threshold = stability_threshold
+        self.improvement_threshold = improvement_threshold
         
         # Convergence-based training completion
         self.loss_history: list[float] = []
-        self.convergence_threshold = 1e-3  # More realistic threshold for neural network training
-        self.convergence_window = 15  # Slightly larger window for better stability
+        self.convergence_threshold = 1e-5  # Much more strict threshold for neural network training
+        self.convergence_window = 50  # Larger window for better stability assessment
 
         # Create child network with residual connection
         self.child = nn.Sequential(
@@ -69,6 +73,43 @@ class SentinelSeed(nn.Module):
         # Register with seed manager
         self.seed_manager = seed_manager
         self.seed_manager.register_seed(self, seed_id)
+
+    def get_health_signal(self) -> float:
+        """
+        Calculate a health signal for this seed to determine germination priority.
+        
+        A lower signal indicates a worse bottleneck (less variance in activations)
+        and thus a higher priority for germination.
+        
+        Returns:
+            float: Health signal, where signal ≈ variance. Lower is higher priority.
+        """
+        with self.seed_manager.lock:
+            seed_info = self.seed_manager.seeds.get(self.seed_id, {})
+            buffer = seed_info.get("buffer")
+            
+            # Require a minimum number of data points to make a meaningful decision.
+            if not buffer or len(buffer) < 20:
+                return float('inf') # Return a high value to deprioritize this seed until it has enough data.
+            
+            # --- FIX 1: DEFINE buffer_tensor ---
+            # Concatenate the list of tensors in the buffer into a single tensor.
+            try:
+                buffer_tensor = torch.cat(list(buffer), dim=0)
+            except (RuntimeError, ValueError) as e:
+                 # This can happen if buffers contain tensors of different shapes, indicating an upstream issue.
+                 logging.error(f"Error concatenating buffer for seed {self.seed_id}: {e}")
+                 return float('inf') # Deprioritize if buffer is corrupt.
+
+            # --- FIX 2: CORRECT THE LOGIC ---
+            # The health signal IS the variance. _select_seed will find the minimum.
+            # Low variance is a sign of a bottleneck and is what we want to select.
+            variance = buffer_tensor.var().item()
+            
+            # Ensure the signal is a small positive number to avoid issues with zero.
+            health_signal = max(variance, 1e-9)
+            
+            return health_signal
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -135,16 +176,6 @@ class SentinelSeed(nn.Module):
         self.state = new_state.value
         info = self.seed_manager.seeds[self.seed_id]
         info["state"] = new_state.value
-        
-        # Update status mapping for backward compatibility  
-        if new_state in [SeedState.TRAINING, SeedState.GERMINATED, SeedState.BLENDING, SeedState.SHADOWING, SeedState.PROBATIONARY]:
-            info["status"] = "active"
-        elif new_state == SeedState.DORMANT:
-            info["status"] = "dormant"
-        elif new_state == SeedState.FOSSILIZED:
-            info["status"] = "fossilized"
-        elif new_state == SeedState.CULLED:
-            info["status"] = "culled"
 
         # Use provided epoch or get the last known one for the record.
         current_epoch = epoch if epoch is not None else info.get('last_epoch', 0)
@@ -152,6 +183,22 @@ class SentinelSeed(nn.Module):
         # Specifically record the culling epoch when a seed is culled.
         if new_state == SeedState.CULLED:
             info["culling_epoch"] = current_epoch
+        
+        # Set up training infrastructure when transitioning TO TRAINING state
+        if new_state == SeedState.TRAINING:
+            # Create optimizer if not already created
+            if self.child_optim is None:
+                self.child_optim = torch.optim.Adam(self.child.parameters(), lr=self.shadow_lr)
+            
+            # Create train/validation split from buffer data
+            self.create_train_val_split()
+            
+            # Initialize training metrics
+            info["training_steps"] = 0
+            info["baseline_loss"] = None
+            info["current_loss"] = 0.0
+            
+            logging.info(f"Seed {self.seed_id} training setup complete at epoch {current_epoch}")
             
         self.seed_manager.record_transition(self.seed_id, old_state, new_state.value, epoch=current_epoch)
 
@@ -230,7 +277,7 @@ class SentinelSeed(nn.Module):
             seed_info["val_indices"] = None
             seed_info["best_val_loss"] = float('inf')
             seed_info["val_patience_counter"] = 0
-            seed_info["val_patience_limit"] = 10 # Default patience
+            seed_info["val_patience_limit"] = 25 # Increased patience
             return
 
         buffer_data = torch.cat(list(buffer), dim=0)
@@ -242,7 +289,7 @@ class SentinelSeed(nn.Module):
         seed_info["val_indices"] = indices[train_size:]
         seed_info["best_val_loss"] = float('inf')
         seed_info["val_patience_counter"] = 0
-        seed_info["val_patience_limit"] = 10 # Default patience
+        seed_info["val_patience_limit"] = 25  # Increased patience for more stable training
 
     def validate_on_holdout(self) -> float:
         """Evaluate the child network on its local validation data to check for overfitting."""
@@ -337,7 +384,39 @@ class SentinelSeed(nn.Module):
 
     def _handle_training_transition(self, seed_info: dict, epoch: int | None):
         """Handles the transition logic for a seed in the TRAINING state."""
-        # --- Early Stopping Check ---
+        
+        # FIRST: Do actual training work if we have training data
+        train_indices = seed_info.get("train_indices")
+        if train_indices is not None and len(train_indices) > 0:
+            # Get training data from buffer
+            buffer = seed_info.get("buffer")
+            if buffer and len(buffer) > 0:
+                buffer_data = torch.cat(list(buffer), dim=0)
+                train_data = buffer_data[train_indices]
+                
+                # Perform multiple training steps this epoch
+                batch_size = min(32, len(train_data))
+                num_batches = max(1, len(train_data) // batch_size)
+                
+                for batch_idx in range(min(num_batches, 3)):  # Reduced to 3 batches per epoch
+                    start_idx = batch_idx * batch_size
+                    end_idx = min(start_idx + batch_size, len(train_data))
+                    batch_data = train_data[start_idx:end_idx]
+                    
+                    if len(batch_data) > 0:
+                        self.train_child_step(batch_data, epoch)
+        
+        # THEN: Check if training should continue or transition
+        # Track training epochs (not just steps)
+        training_epochs = seed_info.get("training_epochs", 0)
+        seed_info["training_epochs"] = training_epochs + 1
+        
+        # Require minimum training time - both epochs AND steps
+        training_steps = seed_info.get("training_steps", 0)
+        if training_epochs < 20 or training_steps < 100:  # Minimum 20 epochs AND 100 steps
+            return
+            
+        # --- Early Stopping Check (more conservative) ---
         current_val_loss = self.validate_on_holdout()
         if current_val_loss < seed_info.get("best_val_loss", float('inf')):
             seed_info["best_val_loss"] = current_val_loss
@@ -345,39 +424,82 @@ class SentinelSeed(nn.Module):
         else:
             seed_info["val_patience_counter"] += 1
 
-        # Transition if validation loss stagnates (early stopping)
-        if seed_info.get("val_patience_counter", 0) >= seed_info.get("val_patience_limit", 10):
-            logging.warning(f"Early stopping for {self.seed_id} at epoch {epoch} due to validation loss.")
+        # Transition if validation loss stagnates (early stopping) - increased patience
+        if seed_info.get("val_patience_counter", 0) >= 40:  # Much more patient
+            logging.warning(f"Early stopping for {self.seed_id} at epoch {epoch} after {training_epochs} epochs, {training_steps} steps due to validation loss.")
+            seed_info["blending_epochs"] = 0  # Initialize blending counter
             self._set_state(SeedState.BLENDING, epoch=epoch)
-        # Transition if training loss converges
-        elif self.check_convergence():
-            logging.info(f"Convergence detected for {self.seed_id} at epoch {epoch}.")
+        # Transition if training loss converges (more strict check)
+        elif training_epochs >= 30 and self.check_convergence():
+            logging.info(f"Convergence detected for {self.seed_id} at epoch {epoch} after {training_epochs} epochs, {training_steps} steps.")
+            seed_info["blending_epochs"] = 0  # Initialize blending counter
             self._set_state(SeedState.BLENDING, epoch=epoch)
 
     def _handle_blending_transition(self, epoch: int | None):
         """Handles the transition logic for a seed in the BLENDING state."""
-        if self.alpha >= 0.99:
+        
+        # FIRST: Do actual blending work (update alpha)
+        self.update_blending(epoch)
+        
+        # THEN: Check if blending is complete
+        # Require minimum blending epochs before allowing transition
+        seed_info = self.seed_manager.seeds[self.seed_id]
+        blending_epochs = seed_info.get("blending_epochs", 0)
+        seed_info["blending_epochs"] = blending_epochs + 1
+        
+        # Must complete at least 80% of blend_steps AND alpha must be near 1.0
+        min_blending_epochs = int(self.blend_steps * 0.8)
+        if blending_epochs >= min_blending_epochs and self.alpha >= 0.99:
             self._set_state(SeedState.SHADOWING, epoch=epoch)
+            seed_info["blending_epochs"] = 0  # Reset for potential future use
 
     def _handle_shadowing_transition(self, seed_info: dict, epoch: int | None):
         """Handles the transition logic for a seed in the SHADOWING state."""
-        min_shadowing_steps = self.probationary_steps // 2
+        
+        # FIRST: Do actual shadowing monitoring work
+        # Get some recent buffer data for monitoring
+        buffer = seed_info.get("buffer")
+        if buffer and len(buffer) > 0:
+            recent_data = list(buffer)[-5:]  # Get last 5 activations
+            if recent_data:
+                monitoring_data = torch.cat(recent_data, dim=0)
+                self.update_shadowing(epoch, monitoring_data)
+        else:
+            # Update without input data (will use stored loss)
+            self.update_shadowing(epoch, None)
+        
+        # THEN: Check if shadowing period is complete
+        min_shadowing_steps = max(self.probationary_steps // 2, 15)  # At least 15 steps
         if seed_info.get("shadowing_steps", 0) < min_shadowing_steps:
             return
 
         stability_history = seed_info.get("stability_history", [])
-        if len(stability_history) < 10:
+        if len(stability_history) < 15:  # Require more history
             return
 
-        recent_losses = stability_history[-10:]
+        recent_losses = stability_history[-15:]
         loss_variance = torch.tensor(recent_losses).var().item()
-        # Only advance if loss is stable (low variance)
-        if loss_variance < 0.01:  # Configurable stability threshold
+        # Only advance if loss is stable (low variance) and we've had enough time
+        if loss_variance < self.stability_threshold and seed_info.get("shadowing_steps", 0) >= min_shadowing_steps:
             self._set_state(SeedState.PROBATIONARY, epoch=epoch)
             seed_info["probationary_steps"] = 0 # Reset for next phase
 
     def _handle_probationary_transition(self, seed_info: dict, epoch: int | None):
         """Handles the transition logic for a seed in the PROBATIONARY state."""
+        
+        # FIRST: Do actual probationary monitoring work
+        # Get some recent buffer data for monitoring
+        buffer = seed_info.get("buffer")
+        if buffer and len(buffer) > 0:
+            recent_data = list(buffer)[-5:]  # Get last 5 activations
+            if recent_data:
+                monitoring_data = torch.cat(recent_data, dim=0)
+                self.update_probationary(epoch, monitoring_data)
+        else:
+            # Update without input data
+            self.update_probationary(epoch, None)
+        
+        # THEN: Check if probationary period is complete
         if seed_info.get("probationary_steps", 0) >= self.probationary_steps:
             self._evaluate_and_complete(epoch)
 
@@ -404,7 +526,7 @@ class SentinelSeed(nn.Module):
                 pass
 
     def check_convergence(self) -> bool:
-        """Checks if the training loss has converged."""
+        """Checks if the training loss has converged with more strict criteria."""
         if len(self.loss_history) < self.convergence_window:
             return False
         
@@ -412,15 +534,23 @@ class SentinelSeed(nn.Module):
         loss_tensor = torch.tensor(recent_losses)
         
         # Check for reduction in loss (ensures it's not stuck at a high value)
-        if (loss_tensor.mean() > self.convergence_threshold * 10): # Avoid premature convergence at high loss
-             return False
+        mean_loss = loss_tensor.mean()
+        if mean_loss > self.convergence_threshold * 100:  # Much stricter: avoid premature convergence at high loss
+            return False
 
-        # Check for low variance (stability)
+        # Check for very low variance (stability) with stricter threshold
         variance = loss_tensor.var()
-        return variance < self.convergence_threshold
+        is_converged = variance < self.convergence_threshold
+        
+        # Additional check: ensure the loss is actually decreasing over time
+        first_half = loss_tensor[:len(recent_losses)//2].mean()
+        second_half = loss_tensor[len(recent_losses)//2:].mean()
+        is_decreasing = second_half <= first_half
+        
+        return is_converged and is_decreasing
 
     def _cull_seed(self, epoch: int | None = None):
-        """Marks the seed as CULLED, records the epoch, freezes the child, and advances the training queue."""
+        """Marks the seed as CULLED, records the epoch, and freezes the child."""
         self._set_state(SeedState.CULLED, epoch=epoch)
         
         # Freeze parameters to save computation
@@ -431,9 +561,6 @@ class SentinelSeed(nn.Module):
         self.seed_manager.seeds[self.seed_id]["culling_epoch"] = epoch
         
         logging.info(f"Seed {self.seed_id} culled at epoch {epoch}. Embargo started.")
-        
-        # IMPORTANT: Allow the next seed in the queue to start training immediately
-        self.seed_manager.start_training_next_seed()
 
     def _evaluate_and_complete(self, epoch: int | None = None):
         """Final evaluation to decide between Fossilization and Culling."""
@@ -445,13 +572,13 @@ class SentinelSeed(nn.Module):
 
         # Ensure baseline_loss is valid before comparison
         if baseline_loss is None or not isinstance(baseline_loss, (int, float)):
-             logging.warning(f"Seed {self.seed_id}: No valid baseline loss recorded. Defaulting to CULL.")
-             self._cull_seed(epoch=epoch)
-             return
+            logging.warning(f"Seed {self.seed_id}: No valid baseline loss recorded. Defaulting to CULL.")
+            self._cull_seed(epoch=epoch)
+            return
 
         # Fossilize if the new component provides a significant improvement
         # Use a relative improvement threshold
-        if final_val_loss < baseline_loss * 0.95: # e.g., 5% improvement
+        if final_val_loss < baseline_loss * self.improvement_threshold:
             self._set_state(SeedState.FOSSILIZED, epoch=epoch)
         else:
             self._cull_seed(epoch=epoch)

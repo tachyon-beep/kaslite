@@ -217,6 +217,10 @@ class RichDashboard:
 
     def update_seed_states_grid(self, payload: SeedStateUpdatePayload) -> None:
         """Receives a seed state update and refreshes the view."""
+        import logging
+        logging.info("UI: update_seed_states_grid called with epoch=%s", payload.get("epoch", "unknown"))
+        logging.info("UI: grid data: %s", payload.get("grid", {}))
+        
         # Update the internal seed_states dictionary for the Kasima table
         self._update_seed_states_from_grid(payload["grid"])
         
@@ -361,9 +365,10 @@ class RichDashboard:
                         self._update_seed_metrics_from_manager(seed_id, seed_info)
                                 
         except Exception as e:
-            # Log the specific error instead of swallowing it silently
+            # Log the specific error and re-raise to surface the issue
             import logging
-            logging.warning(f"Failed to collect seed metrics from manager: {e}")
+            logging.error(f"Failed to collect seed metrics from manager: {e}", exc_info=True)
+            raise  # Re-raise to surface the underlying issue
 
     def _update_seed_metrics_from_manager(self, seed_id: tuple[int, int], seed_info: dict) -> None:
         """Update metrics for a single seed from the seed manager."""
@@ -408,12 +413,11 @@ class RichDashboard:
             self.seed_states[seed_id_str]["patience"] = patience
 
     def _update_state_from_status(self, seed_id_str: str, seed_info: dict) -> None:
-        """Update seed state from status in seed info."""
-        if "status" in seed_info:
-            status = seed_info["status"]
-            if status == "active":
-                self.seed_states[seed_id_str]["state"] = SeedState.TRAINING
-            elif status == "dormant":
+        """Update seed state from state field in seed info."""
+        if "state" in seed_info:
+            state_value = seed_info["state"]
+            try:
+                self.seed_states[seed_id_str]["state"] = SeedState(state_value)
+            except (ValueError, TypeError):
+                # Fallback to dormant for invalid states
                 self.seed_states[seed_id_str]["state"] = SeedState.DORMANT
-            elif status == "failed":
-                self.seed_states[seed_id_str]["state"] = SeedState.CULLED

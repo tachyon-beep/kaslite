@@ -70,13 +70,25 @@ class ExperimentLogger:
 
     def _log_event(self, event_type: EventType, payload: EventPayload) -> None:
         """Create, store, write, and dispatch a LogEvent."""
+        import logging
         event = LogEvent(event_type=event_type, payload=payload)
         self.events.append(event)
 
         # Dispatch to dashboard if present and a handler exists
         if self.dashboard and event.event_type in self.dashboard_dispatch_map:
+            logging.info("Dispatching event %s to dashboard", event_type.value)
             handler = self.dashboard_dispatch_map[event.event_type]
-            handler(event.payload)
+            try:
+                handler(event.payload)
+                logging.info("Successfully dispatched event %s to dashboard", event_type.value)
+            except Exception as e:
+                logging.error("Failed to dispatch event %s to dashboard: %s", event_type.value, e, exc_info=True)
+                raise
+        else:
+            if not self.dashboard:
+                logging.warning("No dashboard available to dispatch event %s", event_type.value)
+            elif event.event_type not in self.dashboard_dispatch_map:
+                logging.warning("No handler for event type %s", event_type.value)
 
         try:
             with self.log_file_path.open("a", encoding="utf-8") as f:
@@ -117,14 +129,22 @@ class ExperimentLogger:
 
     def log_seed_state_update(self, epoch: int, seeds: list[SeedInfo]) -> None:
         """Log a seed state update event."""
+        import logging
+        logging.info("log_seed_state_update called: epoch=%s, seeds_count=%s", epoch, len(seeds))
+        
         # Convert seed data to grid format for payload
         grid: dict[int, list[SeedState | None]] = {}
 
         if not seeds:
+            logging.info("Empty seeds list, sending empty payload")
             # Empty payload for empty seeds list
             payload = SeedStateUpdatePayload(epoch=epoch, grid=grid, timestamp=time.time())
             self._log_event(event_type=EventType.SEED_STATE_UPDATE, payload=payload)
             return
+
+        logging.info("Processing %s seeds for UI update", len(seeds))
+        for seed in seeds:
+            logging.info("  Seed %s: state=%s", seed['id'], seed['state'].value)
 
         # Determine grid dimensions
         max_layer = max(seed["layer"] for seed in seeds)
