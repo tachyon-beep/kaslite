@@ -39,6 +39,17 @@ def build_model_and_agents(
     _ = kwargs  # Suppress unused parameter warning
     seed_manager = SeedManager(logger=logger)
 
+    # Issue deprecation warning for blend_steps parameter
+    if blend_steps is not None:
+        import warnings
+        warnings.warn(
+            "The 'blend_steps' parameter is deprecated. "
+            "Use BlendingConfig.fixed_steps instead. "
+            "This parameter will be removed in a future version.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
     # Create blending configuration with centralized parameters
     blend_config = BlendingConfig(
         fixed_steps=blend_steps if blend_steps is not None else 30,  # Default if not provided

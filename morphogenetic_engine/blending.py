@@ -55,7 +55,7 @@ class FixedRampBlending(BlendingStrategy):
 class PerformanceLinkedBlending(BlendingStrategy):
     """
     Dynamically adjusts alpha based on ACTUAL performance improvement.
-    Alpha scales proportionally to loss reduction achieved.
+    Uses gradual progression with performance-based acceleration for stability.
     """
 
     def update(self) -> float:

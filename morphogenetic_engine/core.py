@@ -86,7 +86,7 @@ class SeedManager:
                 "state": SeedState.DORMANT.value,
                 "alpha": 0.0,
                 "gradient_norm": 0.0,
-                "buffer": deque(maxlen=500),
+                "buffer": deque(maxlen=2000),  # Increased from 500 to handle more training data
                 "telemetry": {"drift": 0.0, "variance": 0.0},
             }
 

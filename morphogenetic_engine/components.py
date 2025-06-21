@@ -287,6 +287,21 @@ class SentinelSeed(nn.Module):
         outputs = self.child(inputs)
         loss = self.child_loss(outputs, inputs)
         loss.backward()
+        
+        # Calculate gradient norm for GradNormGatedBlending strategy
+        total_grad_norm = 0.0
+        param_count = 0
+        for param in self.child.parameters():
+            if param.grad is not None:
+                param_grad_norm = param.grad.data.norm(2)
+                total_grad_norm += param_grad_norm.item() ** 2
+                param_count += 1
+        
+        if param_count > 0:
+            avg_grad_norm = (total_grad_norm / param_count) ** 0.5
+        else:
+            avg_grad_norm = 0.0
+        
         self.child_optim.step()
         current_loss = loss.item()
         seed_info = self.seed_manager.seeds[self.seed_id]
@@ -294,6 +309,7 @@ class SentinelSeed(nn.Module):
             seed_info["baseline_loss"] = current_loss
         seed_info["current_loss"] = current_loss
         seed_info["training_steps"] += 1
+        seed_info["avg_grad_norm"] = avg_grad_norm  # Store for GradNormGatedBlending
         self.loss_history.append(current_loss)
         # All state transition logic has been REMOVED from this method.
 
@@ -404,29 +420,27 @@ class SentinelSeed(nn.Module):
 
     def update_shadowing(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
         """Stage 1 validation - monitor for internal stability during shadowing phase."""
-        if self.state == SeedState.SHADOWING.value:
-            # During shadowing, monitor internal stability metrics
-            seed_info = self.seed_manager.seeds[self.seed_id]
-            
-            # Initialize stability tracking if not present
-            if "stability_history" not in seed_info:
-                seed_info["stability_history"] = []
-                seed_info["shadowing_steps"] = 0
-            
-            seed_info["shadowing_steps"] += 1
-            
-            # Get fresh loss measurement for stability analysis
-            if inputs is not None:
-                current_loss = self.evaluate_loss(inputs)
-            else:
-                # Fall back to stored loss if no inputs available
-                current_loss = seed_info.get("current_loss", 0.0)
-                
-            seed_info["stability_history"].append(current_loss)
-            
-            # Keep only recent history
-            if len(seed_info["stability_history"]) > 20:
-                seed_info["stability_history"].pop(0)
+        if self.state != SeedState.SHADOWING.value:
+            return
+
+        seed_info = self.seed_manager.seeds[self.seed_id]
+
+        # Initialize shadowing counters if they don't exist
+        seed_info.setdefault("stability_history", [])
+        seed_info.setdefault("shadowing_steps", 0)
+        # Now safely bump the step count
+        seed_info["shadowing_steps"] += 1
+        
+        # Record one more loss into the history
+        if inputs is not None:
+            current_loss = self.evaluate_loss(inputs)
+        else:
+            current_loss = seed_info.get("current_loss", 0.0)
+        seed_info["stability_history"].append(current_loss)
+
+        # Keep history bounded
+        if len(seed_info["stability_history"]) > 20:
+            seed_info["stability_history"].pop(0)
             
     def update_probationary(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
         """Stage 2 validation - monitor for systemic impact during probationary period."""
@@ -581,7 +595,6 @@ class SentinelSeed(nn.Module):
         """Handles the transition logic for a seed in the SHADOWING state."""
         
         # FIRST: Do actual shadowing monitoring work
-        # Get some recent buffer data for monitoring
         buffer = seed_info.get("buffer")
         if buffer and len(buffer) > 0:
             recent_data = list(buffer)[-5:]  # Get last 5 activations

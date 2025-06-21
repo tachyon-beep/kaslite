@@ -95,13 +95,19 @@ class TestPerformanceLinkedBlending:
         strategy = PerformanceLinkedBlending(mock_seed, blend_config)
         
         # Set up loss improvement scenario
+        mock_seed.alpha = 0.1  # Starting alpha
         mock_seed.seed_manager.seeds[mock_seed.seed_id]["blend_initial_loss"] = 1.0
         mock_seed.validate_on_holdout.return_value = 0.5  # 50% improvement
         
         new_alpha = strategy.update()
         
-        # Alpha should be based on relative improvement
-        expected_alpha = 0.5 / 1.0  # (1.0 - 0.5) / 1.0
+        # Alpha should progress gradually based on performance
+        # improvement_ratio = 0.5 / 1.0 = 0.5
+        # performance_multiplier = max(0.5, min(3.0, 0.5 * 2.0)) = 1.0
+        # base_step = 1.0 / 30 = 0.0333...
+        # expected = 0.1 + (0.0333... * 1.0) = 0.1333...
+        base_step = 1.0 / blend_config.fixed_steps
+        expected_alpha = 0.1 + base_step  # 1.0x multiplier for 50% improvement
         assert abs(new_alpha - expected_alpha) < 1e-6
 
     def test_performance_linked_no_improvement(self, mock_seed, blend_config):
@@ -109,13 +115,16 @@ class TestPerformanceLinkedBlending:
         strategy = PerformanceLinkedBlending(mock_seed, blend_config)
         
         # Set up no improvement scenario
+        mock_seed.alpha = 0.1  # Starting alpha
         mock_seed.seed_manager.seeds[mock_seed.seed_id]["blend_initial_loss"] = 1.0
         mock_seed.validate_on_holdout.return_value = 1.2  # Worse performance
         
         new_alpha = strategy.update()
         
-        # Alpha should be 0 when performance gets worse
-        assert new_alpha == 0.0
+        # With no improvement, should use minimum 0.5x multiplier
+        base_step = 1.0 / blend_config.fixed_steps
+        expected_alpha = 0.1 + (base_step * 0.5)  # 0.5x multiplier (minimum)
+        assert abs(new_alpha - expected_alpha) < 1e-6
 
 
 class TestDriftControlledBlending:
@@ -144,7 +153,7 @@ class TestDriftControlledBlending:
         new_alpha = strategy.update()
         
         # Should hold (no progress) for high drift
-        assert new_alpha == 0.0
+        assert abs(new_alpha - 0.0) < 1e-6
 
 
 class TestGradNormGatedBlending:
@@ -173,7 +182,7 @@ class TestGradNormGatedBlending:
         new_alpha = strategy.update()
         
         # Should hold (no progress) for unstable gradients
-        assert new_alpha == 0.0
+        assert abs(new_alpha - 0.0) < 1e-6
 
 
 class TestStrategyFactory:
