@@ -30,7 +30,7 @@ def create_test_experiment_config(**overrides: Any) -> dict[str, Any]:
         "hidden_dim": 64,
         "num_layers": 3,
         "seeds_per_layer": 4,
-        "blend_steps": 30,
+        "graft_steps": 30,
         "shadow_lr": 0.001,
         "progress_thresh": 0.6,
         "drift_warn": 0.12,

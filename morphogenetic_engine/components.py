@@ -29,7 +29,6 @@ class SentinelSeed(nn.Module):
         dim: int,
         seed_manager: SeedManager,
         parent_net: "BaseNet",  # Add parent_net reference
-        probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.12,
         stability_threshold: float = 0.01,
@@ -45,8 +44,6 @@ class SentinelSeed(nn.Module):
         self.seed_id = seed_id
         self.dim = dim
         self.parent_net_ref = weakref.ref(parent_net)  # Use a weak reference to avoid recursion
-        self.probationary_steps = probationary_steps
-        self.probationary_counter = 0
         self.shadow_lr = shadow_lr
         self.alpha = 0.0
         self.state = SeedState.DORMANT.value
@@ -302,7 +299,7 @@ class SentinelSeed(nn.Module):
         loss = self.child_loss(outputs, inputs)
         loss.backward()
         
-        # Calculate gradient norm for GradNormGatedBlending strategy
+        # Calculate gradient norm for GradNormGatedGrafting strategy
         total_grad_norm = 0.0
         param_count = 0
         for param in self.child.parameters():
@@ -323,7 +320,7 @@ class SentinelSeed(nn.Module):
             seed_info["baseline_loss"] = current_loss
         seed_info["current_loss"] = current_loss
         seed_info["training_steps"] += 1
-        seed_info["avg_grad_norm"] = avg_grad_norm  # Store for GradNormGatedBlending
+        seed_info["avg_grad_norm"] = avg_grad_norm  # Store for GradNormGatedGrafting
         self.loss_history.append(current_loss)
         # All state transition logic has been REMOVED from this method.
 
@@ -561,46 +558,6 @@ class SentinelSeed(nn.Module):
             self.alpha = min(1.0, self.alpha + 1 / self.graft_cfg.fixed_steps)
             seed_info["alpha"] = self.alpha
 
-    def update_shadowing(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
-        """Stage 1 validation - monitor for internal stability during shadowing phase."""
-        if self.state != SeedState.SHADOWING.value:
-            return
-
-        seed_info = self.seed_manager.seeds[self.seed_id]
-
-        # Initialize shadowing counters if they don't exist
-        seed_info.setdefault("stability_history", [])
-        seed_info.setdefault("shadowing_steps", 0)
-        # Now safely bump the step count
-        seed_info["shadowing_steps"] += 1
-        
-        # Record one more loss into the history
-        if inputs is not None:
-            current_loss = self.evaluate_loss(inputs)
-        else:
-            current_loss = seed_info.get("current_loss", 0.0)
-        seed_info["stability_history"].append(current_loss)
-
-        # Keep history bounded
-        if len(seed_info["stability_history"]) > 20:
-            seed_info["stability_history"].pop(0)
-            
-    def update_probationary(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
-        """Stage 2 validation - monitor for systemic impact during probationary period."""
-        if self.state == SeedState.PROBATIONARY.value:
-            seed_info = self.seed_manager.seeds[self.seed_id]
-            
-            # Initialize probationary tracking if not present
-            if "probationary_steps" not in seed_info:
-                seed_info["probationary_steps"] = 0
-                seed_info["baseline_performance"] = None
-                
-            seed_info["probationary_steps"] += 1
-            
-            # Update loss metrics for final evaluation
-            if inputs is not None:
-                self.evaluate_loss(inputs)
-
     def _perform_training_steps(self, seed_info: dict, epoch: int | None):
         """Perform actual training work for the current epoch."""
         train_indices = seed_info.get("train_indices")
@@ -734,51 +691,6 @@ class SentinelSeed(nn.Module):
             
             self._set_state(SeedState.STABILIZATION, epoch=epoch)
 
-    def _handle_shadowing_transition(self, seed_info: dict, epoch: int | None):
-        """Handles the transition logic for a seed in the SHADOWING state."""
-        
-        # FIRST: Do actual shadowing monitoring work
-        buffer = seed_info.get("buffer")
-        if buffer and len(buffer) > 0:
-            recent_data = list(buffer)[-5:]  # Get last 5 activations
-            if recent_data:
-                monitoring_data = torch.cat(recent_data, dim=0)
-                self.update_shadowing(epoch, monitoring_data)
-        else:
-            # Update without input data (will use stored loss)
-            self.update_shadowing(epoch, None)
-        
-        # THEN: Check if shadowing period is complete based on stability
-        stability_history = seed_info.get("stability_history", [])
-        if len(stability_history) < 10:  # Need some history to assess
-            return
-
-        recent_losses = stability_history[-10:]
-        loss_variance = torch.tensor(recent_losses).var().item()
-        
-        # Only advance if loss is stable (low variance)
-        if loss_variance < self.stability_threshold:
-            self._set_state(SeedState.PROBATIONARY, epoch=epoch)
-
-    def _handle_probationary_transition(self, seed_info: dict, epoch: int | None):
-        """Handles the transition logic for a seed in the PROBATIONARY state."""
-        
-        # FIRST: Do actual probationary monitoring work
-        # Get some recent buffer data for monitoring
-        buffer = seed_info.get("buffer")
-        if buffer and len(buffer) > 0:
-            recent_data = list(buffer)[-5:]  # Get last 5 activations
-            if recent_data:
-                monitoring_data = torch.cat(recent_data, dim=0)
-                self.update_probationary(epoch, monitoring_data)
-        else:
-            # Update without input data
-            self.update_probationary(epoch, None)
-        
-        # THEN: Check if probationary period is complete
-        if seed_info.get("probationary_steps", 0) >= self.probationary_steps:
-            self._evaluate_and_complete(epoch)
-
     def _handle_stabilization_transition(self, seed_info: dict, epoch: int | None):
         """Handles the transition logic for a seed in the STABILIZATION state."""
         
@@ -878,10 +790,6 @@ class SentinelSeed(nn.Module):
                 self._handle_training_transition(seed_info, epoch)
             case SeedState.GRAFTING.value:
                 self._handle_grafting_transition(epoch)
-            case SeedState.SHADOWING.value:
-                self._handle_shadowing_transition(seed_info, epoch)
-            case SeedState.PROBATIONARY.value:
-                self._handle_probationary_transition(seed_info, epoch)
             case SeedState.STABILIZATION.value:
                 self._handle_stabilization_transition(seed_info, epoch)
             case SeedState.FINE_TUNING.value:
@@ -994,14 +902,42 @@ class BaseNet(nn.Module):
         output_dim: int = 2,
         num_layers: int = 8,
         seeds_per_layer: int = 1,
-        probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.1,
         graft_cfg: "GraftingConfig | None" = None,  # Add grafting config
     ):
         super().__init__()
+
+        # Parameter validation - fail fast with clear error messages
+        if num_layers <= 0:
+            raise ValueError("num_layers must be positive")
+        if input_dim <= 0:
+            raise ValueError("input_dim must be positive")
+        if hidden_dim <= 0:
+            raise ValueError("hidden_dim must be positive")
+        if output_dim <= 0:
+            raise ValueError("output_dim must be positive")
+        if seeds_per_layer <= 0:
+            raise ValueError("seeds_per_layer must be positive")
+
+        self.num_layers = num_layers
+        self.seeds_per_layer = seeds_per_layer
         self.hidden_dim = hidden_dim
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+        # Store grafting configuration
+        if graft_cfg is None:
+            # Import here to avoid circular imports
+            from morphogenetic_engine.core import GraftingConfig
+            graft_cfg = GraftingConfig()
+        self.graft_cfg = graft_cfg
+
+        # Store seed creation parameters for replacing culled seeds
         self.seed_manager_ref = seed_manager
+        self.seed_shadow_lr = shadow_lr
+        self.seed_drift_warn = drift_warn
+
 
         # Create input layer
         self.input_layer = nn.Linear(input_dim, hidden_dim)
@@ -1025,7 +961,6 @@ class BaseNet(nn.Module):
                     hidden_dim,
                     seed_manager,
                     parent_net=self,  # Pass a reference to the parent network
-                    probationary_steps=probationary_steps,
                     shadow_lr=shadow_lr,
                     drift_warn=drift_warn,
                     graft_cfg=self.graft_cfg,  # Pass the grafting configuration
@@ -1071,15 +1006,14 @@ class BaseNet(nn.Module):
             dim=self.hidden_dim,
             seed_manager=self.seed_manager_ref,
             parent_net=self,
-            probationary_steps=self.seed_probationary_steps,
             shadow_lr=self.seed_shadow_lr,
             drift_warn=self.seed_drift_warn,
             graft_cfg=self.graft_cfg,  # Pass the grafting configuration
         )
 
-        # The old seed module is replaced in the network's ModuleList.
-        # The new seed's __init__ will handle re-registering with the SeedManager,
-        # overwriting the old entry for that seed_id.
+        # The old seed is still in the seed_manager, but the new one will be registered
+        # when the old seed is garbage collected.
+        # This ensures we don't disrupt the network graph or lose references unexpectedly.
         self.all_seeds[flat_idx] = new_seed
         logging.info(f"Culled seed {seed_id} has been replaced with a new dormant seed.")
 

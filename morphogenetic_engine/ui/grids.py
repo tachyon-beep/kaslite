@@ -74,7 +74,7 @@ class GridManager:
             ("⚪", "Dormant"),
             ("🌱", "Germinated"),
             ("🟢", "Training"),
-            ("🟡", "Blending"),
+            ("🟡", "Grafting"),
         ]
         row2 = [
             ("👻", "Shadowing"),

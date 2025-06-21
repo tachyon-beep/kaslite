@@ -213,7 +213,7 @@
                                 "2": {
                                     "color": "orange",
                                     "index": 2,
-                                    "text": "Blending"
+                                    "text": "Grafting"
                                 },
                                 "3": {
                                     "color": "green",
@@ -436,7 +436,7 @@
                     "refId": "A"
                 }
             ],
-            "title": "Seed Alpha Blending Values",
+            "title": "Seed Alpha Grafting Values",
             "type": "timeseries"
         },
         {
@@ -815,7 +815,7 @@
                                 "2": {
                                     "color": "orange",
                                     "index": 2,
-                                    "text": "Blending"
+                                    "text": "Grafting"
                                 },
                                 "3": {
                                     "color": "green",

@@ -9,7 +9,7 @@ experiment:
   num_layers: 8
   seeds_per_layer: 2
   hidden_dim: 128
-  blend_steps: 30
+  graft_steps: 30
 
 # Parameter grid focused on learning rates and schedules
 parameters:

@@ -35,7 +35,7 @@ TRAINING_LOSS = Gauge("kaslite_training_loss", "Current training loss", ["phase"
 BEST_ACCURACY = Gauge("kaslite_best_accuracy", "Best validation accuracy achieved", ["experiment_id"])
 
 # Seed-specific Metrics
-SEED_ALPHA = Gauge("kaslite_seed_alpha", "Current alpha blending value for each seed", ["seed_id", "experiment_id"])
+SEED_ALPHA = Gauge("kaslite_seed_alpha", "Current alpha grafting value for each seed", ["seed_id", "experiment_id"])
 
 SEED_DRIFT = Gauge("kaslite_seed_drift", "Interface drift per seed", ["seed_id", "experiment_id"])
 

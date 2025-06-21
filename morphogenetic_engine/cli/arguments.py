@@ -37,6 +37,18 @@ def create_experiment_parser() -> argparse.ArgumentParser:
         default=30,
         help="Number of graft steps for morphogenetic adaptation",
     )
+    parser.add_argument(
+        "--training_epochs",
+        type=int,
+        default=100,
+        help="Number of epochs to train a germinated seed's child network.",
+    )
+    parser.add_argument(
+        "--stabilization_epochs",
+        type=int,
+        default=20,
+        help="Number of epochs to wait for a grafted seed to stabilize.",
+    )
     parser.add_argument("--shadow_lr", type=float, default=1e-3, help="Learning rate for shadow networks")
     parser.add_argument("--progress_thresh", type=float, default=0.6, help="Progress threshold for seed activation")
     parser.add_argument(
@@ -159,6 +171,8 @@ def get_valid_argument_names() -> set:
     return {
         "sweep_config",
         "graft_steps",
+        "training_epochs",
+        "stabilization_epochs",
         "shadow_lr",
         "progress_thresh",
         "drift_warn",

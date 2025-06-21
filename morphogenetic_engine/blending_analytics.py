@@ -1,8 +1,8 @@
 """
-Blending analytics aggregator for Phase 2 dashboard integration.
+Grafting analytics aggregator for Phase 2 dashboard integration.
 
 This module provides the foundation for collecting and aggregating
-blending strategy performance metrics that can be consumed by
+grafting strategy performance metrics that can be consumed by
 dashboard components in Phase 2.
 """
 
@@ -12,12 +12,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
-from .events import BlendCompletedPayload, BlendStrategyChosenPayload
+from .events import GraftCompletedPayload, GraftStrategyChosenPayload
 
 
 @dataclass
-class BlendingStrategyStats:
-    """Statistics for a single blending strategy."""
+class GraftingStrategyStats:
+    """Statistics for a single grafting strategy."""
     
     strategy_name: str
     usage_count: int = 0
@@ -38,22 +38,22 @@ class BlendingStrategyStats:
         return (self.successful_completions / max(1, self.usage_count)) * 100
 
 
-class BlendingAnalytics:
+class GraftingAnalytics:
     """
-    Aggregates blending strategy performance data for analytics and dashboard display.
+    Aggregates grafting strategy performance data for analytics and dashboard display.
     
     This class provides the foundation for Phase 2 dashboard components to
     query strategy performance metrics and trends.
     """
     
     def __init__(self):
-        self.strategy_stats: Dict[str, BlendingStrategyStats] = defaultdict(
-            lambda: BlendingStrategyStats("UNKNOWN")
+        self.strategy_stats: Dict[str, GraftingStrategyStats] = defaultdict(
+            lambda: GraftingStrategyStats("UNKNOWN")
         )
         self.recent_events: List[Dict[str, Any]] = []
         self.max_recent_events = 100
     
-    def record_strategy_chosen(self, payload: BlendStrategyChosenPayload):
+    def record_strategy_chosen(self, payload: GraftStrategyChosenPayload):
         """Record when a strategy is chosen for a seed."""
         strategy_name = payload["strategy_name"]
         stats = self.strategy_stats[strategy_name]
@@ -71,8 +71,8 @@ class BlendingAnalytics:
         })
         self._trim_recent_events()
     
-    def record_blend_completed(self, payload: BlendCompletedPayload):
-        """Record when a blending phase completes."""
+    def record_graft_completed(self, payload: GraftCompletedPayload):
+        """Record when a grafting phase completes."""
         strategy_name = payload["strategy_name"]
         stats = self.strategy_stats[strategy_name]
         
@@ -102,7 +102,7 @@ class BlendingAnalytics:
         
         # Store event for recent activity
         self.recent_events.append({
-            "type": "blend_completed",
+            "type": "graft_completed",
             "seed_id": payload["seed_id"],
             "strategy": strategy_name,
             "epoch": payload["epoch"],
@@ -112,11 +112,11 @@ class BlendingAnalytics:
         })
         self._trim_recent_events()
     
-    def get_strategy_summary(self) -> Dict[str, BlendingStrategyStats]:
+    def get_strategy_summary(self) -> Dict[str, GraftingStrategyStats]:
         """Get summary statistics for all strategies."""
         return dict(self.strategy_stats)
     
-    def get_top_performing_strategies(self, limit: int = 3) -> List[BlendingStrategyStats]:
+    def get_top_performing_strategies(self, limit: int = 3) -> List[GraftingStrategyStats]:
         """Get the top performing strategies by average loss improvement."""
         strategies = list(self.strategy_stats.values())
         return sorted(
@@ -126,7 +126,7 @@ class BlendingAnalytics:
         )[:limit]
     
     def get_recent_activity(self, limit: int = 20) -> List[Dict[str, Any]]:
-        """Get recent blending activity for timeline display."""
+        """Get recent grafting activity for timeline display."""
         return self.recent_events[-limit:]
     
     def _trim_recent_events(self):
@@ -136,18 +136,18 @@ class BlendingAnalytics:
 
 
 # Global analytics instance for Phase 2 integration
-_analytics_instance: BlendingAnalytics | None = None
+_analytics_instance: GraftingAnalytics | None = None
 
 
-def get_blending_analytics() -> BlendingAnalytics:
-    """Get the global blending analytics instance."""
+def get_grafting_analytics() -> GraftingAnalytics:
+    """Get the global grafting analytics instance."""
     global _analytics_instance
     if _analytics_instance is None:
-        _analytics_instance = BlendingAnalytics()
+        _analytics_instance = GraftingAnalytics()
     return _analytics_instance
 
 
-def reset_blending_analytics():
+def reset_grafting_analytics():
     """Reset analytics for testing purposes."""
     global _analytics_instance
     _analytics_instance = None

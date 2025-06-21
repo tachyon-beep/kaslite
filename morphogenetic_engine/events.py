@@ -46,11 +46,8 @@ class SeedState(Enum):
     FINE_TUNING = "fine_tuning"     # Stage 2 validation - train child on task loss
     FOSSILIZED = "fossilized"  # Successfully integrated into parent network permanently
     CULLED = "culled"          # Failed validation, under embargo until reset to DORMANT
-    
-    # DEPRECATED: Old state names for backward compatibility (will be removed in future version)
-    BLENDING = "grafting"      # Deprecated: Use GRAFTING instead
-    SHADOWING = "stabilization"    # Deprecated: Use STABILIZATION instead  
-    PROBATIONARY = "fine_tuning"   # Deprecated: Use FINE_TUNING instead
+   
+
 
 
 class NetworkStrain(Enum):

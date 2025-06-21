@@ -237,12 +237,18 @@ class KasminaMicro:
                         parent_net.reset_culled_seed(seed_id)
 
     def assess_and_update_seeds(self, epoch: int) -> None:
-        """Assess all seeds, apply state transitions, and handle culled seed replacement."""
+        """
+        Assess all seeds, apply state transitions, and manage the training pipeline.
         
-        # --- FIX: ADVANCE THE QUEUE FIRST ---
-        # Promote a seed that has been waiting since the last epoch.
-        self._advance_training_queue(epoch)
-
+        This function is the core of the seed lifecycle management. It performs two main actions:
+        1. It iterates through every seed and calls `assess_and_transition_state`, allowing
+           each seed to advance its own lifecycle (e.g., from TRAINING to GRAFTING).
+        2. After all seeds have been updated, it checks if the main training pipeline slot
+           has become free. If so, it promotes the next seed from the `germinated_queue`
+           to the TRAINING state. This decouples individual seed state changes from the
+           global training queue, improving pipeline throughput.
+        """
+        
         with self.seed_manager.lock:
             seed_ids = list(self.seed_manager.seeds.keys())
             for seed_id in seed_ids:
@@ -314,6 +320,10 @@ class KasminaMicro:
                         )
 
                 module.assess_and_transition_state(epoch)
+
+        # After individual seeds have updated, check if the training slot has opened up.
+        # This allows a new seed to start in the same epoch that another one finishes.
+        self._advance_training_queue(epoch)
 
         # After handling state transitions, check for any culled seeds that need replacing.
         self._handle_culled_seeds(epoch)

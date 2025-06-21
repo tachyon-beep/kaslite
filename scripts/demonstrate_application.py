@@ -10,14 +10,40 @@ import sys
 from pathlib import Path
 
 def main():
-    """Difficult Demonstration: CIFAR-10 or Complex Spheres"""
+    """Demonstration presets for various morphogenetic scenarios."""
     project_root = Path(__file__).parent.parent.resolve()
     script_path = project_root / "scripts" / "run_morphogenetic_experiment.py"
     if not script_path.exists():
         print(f"Could not find main experiment script at {script_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Uncomment one of the following blocks to run the desired demo
+    # --- Multi-Seed Stress Test (Designed to trigger the seed queue) ---
+    # This experiment creates a very difficult problem and an underpowered model
+    # to guarantee that multiple layers become unstable, forcing the system
+    # to queue up several seeds in the GERMINATED "parking lot" state.
+    cmd = [
+        sys.executable, str(script_path),
+        "--problem_type", "spheres",
+        "--sphere_count", "20",          # High number of classes
+        "--sphere_size", "500",
+        "--sphere_radii", "1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10,10.5",
+        "--sphere_noise", "0.25",         # High noise for more difficult separation
+        "--input_dim", "8",
+        "--num_classes", "20",
+        "--hidden_dim", "16",             # Intentionally small hidden layer to create a bottleneck
+        "--num_layers", "7",              # Deep network to increase chances of multiple unstable layers
+        "--seeds_per_layer", "10",        # Large pool of potential seeds
+        "--warm_up_epochs", "25",         # Short warm-up to get to adaptation quickly
+        "--adaptation_epochs", "1500",    # Long adaptation phase to observe the full lifecycle of multiple seeds
+        "--batch_size", "128",            # Smaller batch size for noisier gradients
+        "--lr", "0.001",                  # Slightly higher learning rate to encourage instability
+        "--device", "cpu",
+        "--seed", "2024",
+        # --- Lifecycle speed-up parameters ---
+        #"--training_epochs", "50",        # Shorter training time for each seed
+        #"--stabilization_epochs", "10",   # Shorter stabilization period
+        "--graft_steps", "10",            # Faster grafting
+    ]
 
     # --- CIFAR-10 (very hard) ---
     # cmd = [
@@ -37,29 +63,29 @@ def main():
     #     "--seed", "12345",
     # ]
 
-    # --- Complex Spheres (synthetic, very hard) ---
-    cmd = [
-        sys.executable, str(script_path),
-        "--problem_type", "spheres",
-        "--sphere_count", "15",
-        "--sphere_size", "1000",
-        "--sphere_radii", "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15",
-        "--sphere_noise", "0.2",
-        "--input_dim", "6",
-        "--num_classes", "5",
-        "--hidden_dim", "8",
-        "--num_layers", "5",
-        "--seeds_per_layer", "5",
-        "--warm_up_epochs", "300",
-        "--adaptation_epochs", "1000",
-        "--batch_size", "256",
-        "--graft_steps", "5",
-        "--progress_thresh", "0.01",
-        "--acc_threshold", "0.92",
-        "--lr", "0.0005",
-        "--device", "cpu",
-        "--seed", "54321",
-    ]
+    # --- Original Complex Spheres (synthetic, very hard) ---
+    # cmd = [
+    #     sys.executable, str(script_path),
+    #     "--problem_type", "spheres",
+    #     "--sphere_count", "15",
+    #     "--sphere_size", "1000",
+    #     "--sphere_radii", "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15",
+    #     "--sphere_noise", "0.2",
+    #     "--input_dim", "6",
+    #     "--num_classes", "5",
+    #     "--hidden_dim", "8",
+    #     "--num_layers", "5",
+    #     "--seeds_per_layer", "5",
+    #     "--warm_up_epochs", "300",
+    #     "--adaptation_epochs", "1000",
+    #     "--batch_size", "256",
+    #     "--graft_steps", "5",
+    #     "--progress_thresh", "0.01",
+    #     "--acc_threshold", "0.92",
+    #     "--lr", "0.0005",
+    #     "--device", "cpu",
+    #     "--seed", "54321",
+    # ]
     subprocess.run(cmd, check=True)
 
 if __name__ == "__main__":

@@ -201,7 +201,7 @@ class PanelFactory:
         # Define state priority order (lower number = higher priority)
         state_priority = {
             SeedState.TRAINING: 0,     # Currently training - highest priority
-            SeedState.BLENDING: 1,      # Finishing training
+            SeedState.GRAFTING: 1,      # Finishing training
             SeedState.GERMINATED: 2,    # Waiting in parking lot
             SeedState.FOSSILIZED: 3,    # Permanently integrated
             SeedState.CULLED: 4,        # Removed due to poor performance

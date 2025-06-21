@@ -41,7 +41,7 @@ class GraftingStrategy(ABC):
 
 class FixedRampGrafting(GraftingStrategy):
     """
-    A simple, time-based grafting strategy that increases the blend factor (`alpha`)
+    A simple, time-based grafting strategy that increases the graft factor (`alpha`)
     linearly over a fixed number of steps.
     """
 

@@ -48,7 +48,7 @@ def mock_args():
         input_dim = 2
         num_layers = 3
         seeds_per_layer = 2
-        blend_steps = 30
+        graft_steps = 30
         shadow_lr = 1e-3
         progress_thresh = 0.6
         drift_warn = 0.12

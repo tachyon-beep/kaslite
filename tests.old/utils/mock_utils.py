@@ -35,7 +35,7 @@ class MockExperimentArgs:
         hidden_dim: Hidden layer dimension
         num_layers: Number of layers in the network
         seeds_per_layer: Number of adaptive seeds per layer
-        blend_steps: Steps for blending adaptive behavior
+        graft_steps: Steps for grafting adaptive behavior
         shadow_lr: Learning rate for shadow network
         progress_thresh: Threshold for progress detection
         drift_warn: Warning threshold for drift detection
@@ -71,7 +71,7 @@ class MockExperimentArgs:
     hidden_dim: int = 64
     num_layers: int = 3
     seeds_per_layer: int = 4
-    blend_steps: int = 30
+    graft_steps: int = 30
     shadow_lr: float = 0.001
     progress_thresh: float = 0.6
     drift_warn: float = 0.12
