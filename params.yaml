@@ -9,7 +9,7 @@ warm_up_epochs: 40
 adaptation_epochs: 60
 device: "cpu"
 seed: 42
-blend_steps: 30
+graft_steps: 30
 shadow_lr: 0.001
 progress_thresh: 0.6
 drift_warn: 0.12

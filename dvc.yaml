@@ -21,7 +21,7 @@ stages:
       --adaptation_epochs ${adaptation_epochs}
       --device ${device}
       --seed ${seed}
-      --blend_steps ${blend_steps}
+      --graft_steps ${graft_steps}
       --shadow_lr ${shadow_lr}
       --progress_thresh ${progress_thresh}
       --drift_warn ${drift_warn}
@@ -44,7 +44,7 @@ stages:
       - adaptation_epochs
       - device
       - seed
-      - blend_steps
+      - graft_steps
       - shadow_lr
       - progress_thresh
       - drift_warn

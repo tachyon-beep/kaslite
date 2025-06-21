@@ -10,7 +10,7 @@ from __future__ import annotations
 from torch import nn
 
 from morphogenetic_engine.components import BaseNet
-from morphogenetic_engine.core import BlendingConfig, KasminaMicro, SeedManager
+from morphogenetic_engine.core import GraftingConfig, KasminaMicro, SeedManager
 from morphogenetic_engine.logger import ExperimentLogger
 
 
@@ -30,8 +30,8 @@ def build_model_and_agents(
     logger: ExperimentLogger,
     # Dataset-specific
     problem_type: str,
-    # Optional blending configuration
-    blend_steps: int | None = None,  # Still accept for config creation
+    # Optional grafting configuration
+    graft_steps: int | None = None,  # Still accept for config creation
     **kwargs,  # Capture any other unused args like sweep_config, tb_writer
 ):
     """Initialize the SeedManager, BaseNet model, loss function, and KasminaMicro."""
@@ -39,20 +39,21 @@ def build_model_and_agents(
     _ = kwargs  # Suppress unused parameter warning
     seed_manager = SeedManager(logger=logger)
 
-    # Issue deprecation warning for blend_steps parameter
-    if blend_steps is not None:
+    # Issue deprecation warning for graft_steps parameter
+    if graft_steps is not None:
         import warnings
+
         warnings.warn(
-            "The 'blend_steps' parameter is deprecated. "
-            "Use BlendingConfig.fixed_steps instead. "
+            "The 'graft_steps' parameter is deprecated. "
+            "Use GraftingConfig.fixed_steps instead. "
             "This parameter will be removed in a future version.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
 
-    # Create blending configuration with centralized parameters
-    blend_config = BlendingConfig(
-        fixed_steps=blend_steps if blend_steps is not None else 30,  # Default if not provided
+    # Create grafting configuration with centralized parameters
+    graft_config = GraftingConfig(
+        fixed_steps=graft_steps if graft_steps is not None else 30,  # Default if not provided
         # Other parameters use defaults for now
     )
 
@@ -72,7 +73,7 @@ def build_model_and_agents(
         seeds_per_layer=seeds_per_layer,
         shadow_lr=shadow_lr,
         drift_warn=drift_warn,
-        blend_cfg=blend_config,  # Pass the centralized config
+        graft_cfg=graft_config,  # Pass the centralized config
     ).to(device)
 
     # The `tamiyo` agent from the high-level plan
@@ -82,7 +83,7 @@ def build_model_and_agents(
         delta=5e-4,  # This could be parameterized
         acc_threshold=acc_threshold,
         logger=logger,
-        blending_config=blend_config,  # Pass the same config instance
+        grafting_config=graft_config,  # Pass the same config instance
     )
 
     # The `karn` agent is implicitly the training loop logic itself

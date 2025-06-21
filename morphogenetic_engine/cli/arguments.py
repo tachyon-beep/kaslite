@@ -32,10 +32,10 @@ def create_experiment_parser() -> argparse.ArgumentParser:
 
     # Existing morphogenetic parameters
     parser.add_argument(
-        "--blend_steps",
+        "--graft_steps",
         type=int,
         default=30,
-        help="Number of blend steps for morphogenetic adaptation",
+        help="Number of graft steps for morphogenetic adaptation",
     )
     parser.add_argument("--shadow_lr", type=float, default=1e-3, help="Learning rate for shadow networks")
     parser.add_argument("--progress_thresh", type=float, default=0.6, help="Progress threshold for seed activation")
@@ -158,7 +158,7 @@ def get_valid_argument_names() -> set:
     """Get the set of valid argument names for sweep validation."""
     return {
         "sweep_config",
-        "blend_steps",
+        "graft_steps",
         "shadow_lr",
         "progress_thresh",
         "drift_warn",
