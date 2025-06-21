@@ -45,14 +45,25 @@ class SeedManager:
                 instance.logger = kwargs.get("logger")
                 instance._initialized = True  # Optional: for clarity
                 cls._instance = instance
+            else:
+                # If instance exists and a new logger is provided, update it
+                new_logger = kwargs.get("logger")
+                if new_logger is not None:
+                    cls._instance.logger = new_logger
         return cls._instance
 
     def __init__(self, logger: Optional[ExperimentLogger] = None) -> None:
-        """Initialize SeedManager with optional logger and empty state."""
-        # The __init__ can now be used for lighter-weight tasks,
-        # like injecting dependencies on an existing instance.
+        """Only do one-time initialization (including wiring the logger)."""
+        # If we've already done __init__, bail out immediately.
+        if getattr(self, "_init_done", False):
+            return
+
+        # First-ever init: wire up the logger if provided
         if logger is not None:
             self.logger = logger
+
+        # Mark that we've initialized already
+        self._init_done = True
 
     def register_seed(self, seed_module, seed_id: tuple[int, int]) -> None:
         """Register a new seed module with the manager."""
@@ -83,7 +94,7 @@ class SeedManager:
                 # Germinate seed but don't start training yet - it goes to the "parking lot"
                 seed_info["module"].initialize_child(epoch=epoch)
                 seed_info["germination_epoch"] = epoch  # Store germination epoch for training start
-                self._log_event(seed_id, True)
+                self._log_event(seed_id, True, epoch)
                 # State transition from DORMANT → GERMINATED is already logged by initialize_child()
                 # No need for separate GERMINATION event
                 
@@ -95,10 +106,10 @@ class SeedManager:
                 logging.exception("Germination failed for '%s': %s", seed_id, e)
                 # Update state to indicate failure
                 seed_info["state"] = "failed"
-                self._log_event(seed_id, False)
+                self._log_event(seed_id, False, epoch)
                 return False
 
-    def _log_event(self, seed_id: tuple[int, int], success: bool) -> None:
+    def _log_event(self, seed_id: tuple[int, int], success: bool, epoch: int = 0) -> None:
         """Log a germination event with timestamp."""
         self.germination_log.append(
             {
@@ -108,6 +119,15 @@ class SeedManager:
                 "timestamp": time.time(),
             }
         )
+        
+        # Dispatch to external logger if available
+        if self.logger:
+            self.logger.log_seed_event_detailed(
+                epoch=epoch,
+                event_type="GERMINATION_ATTEMPT",
+                message=f"Seed L{seed_id[0]}_S{seed_id[1]} germination {'succeeded' if success else 'failed'}",
+                data={"seed_id": f"L{seed_id[0]}_S{seed_id[1]}", "success": success},
+            )
 
     def record_transition(self, seed_id: tuple[int, int], old_state: str, new_state: str, epoch: int = 0) -> None:
         """Record a state change for analytics and log the event."""
