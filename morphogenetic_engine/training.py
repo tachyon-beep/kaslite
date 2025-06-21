@@ -151,6 +151,7 @@ def execute_phase_1(
             "val_loss": val_loss,
             "val_acc": val_acc,
             "best_acc": best_acc,
+            "steps_per_epoch": len(train_loader),
         }
         logger.log_metrics_update(epoch, metrics)
 
@@ -274,7 +275,7 @@ def execute_phase_2(
                 epoch, germ_epoch, acc_pre, val_acc, acc_post, t_recover
             )
 
-        metrics = {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc, "best_acc": best_acc}
+        metrics = {"train_loss": train_loss, "val_loss": val_loss, "val_acc": val_acc, "best_acc": best_acc, "steps_per_epoch": len(train_loader)}
         _log_phase2_metrics(epoch, metrics, logger, tb_writer)
 
     # Combine and return final results

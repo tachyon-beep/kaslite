@@ -51,9 +51,27 @@ class EventManager:
 
     def create_seed_timeline_panel(self) -> Panel:
         """Generate the panel for the seed event log."""
-        event_text = "\n".join(self.seed_log_events)
-        content = Text.from_markup(event_text)
-        return Panel(content, title="Seed Timeline", border_style="red")
+        if not self.seed_log_events:
+            content = Text("No seed events yet...", style="dim")
+        else:
+            # Show only the most recent events (approximately last 15-20 to fit in panel)
+            visible_events = list(self.seed_log_events)[-20:]  # Show last 20 events
+            
+            # Add header showing total events if we're truncating
+            header_lines = []
+            if len(self.seed_log_events) > 20:
+                hidden_count = len(self.seed_log_events) - 20
+                header_lines.append(f"[dim]... {hidden_count} earlier events[/]")
+                header_lines.append("")  # Empty line separator
+            
+            # Combine header and visible events
+            all_lines = header_lines + visible_events
+            event_text = "\n".join(all_lines)
+            content = Text.from_markup(event_text)
+        
+        # Show event count in title
+        title = f"Seed Timeline ({len(self.seed_log_events)} events)"
+        return Panel(content, title=title, border_style="red")
 
     def log_metrics_update(self, epoch: int, metrics: dict[str, Any]) -> None:
         """Log a simplified metrics update to the event log."""

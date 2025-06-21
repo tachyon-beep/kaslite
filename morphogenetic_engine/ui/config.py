@@ -58,7 +58,7 @@ METRIC_TYPES = {
 
 # Event Log Configuration
 MAX_EVENTS = 20
-MAX_SEED_EVENTS = 45
+MAX_SEED_EVENTS = 200  # Increased to capture more seed events
 
 # Layout Sizing Configuration
 LAYOUT_SIZES = {

@@ -56,6 +56,11 @@ class PanelFactory:
         ]
         self._add_info_section(info_table, train_params)
 
+        # Add steps per epoch if available
+        steps_per_epoch = self.latest_metrics.get("steps_per_epoch")
+        if steps_per_epoch is not None:
+            info_table.add_row("Steps/Epoch:", str(steps_per_epoch))
+
         # Data section
         data_params = [
             ("problem_type", "Problem"),
