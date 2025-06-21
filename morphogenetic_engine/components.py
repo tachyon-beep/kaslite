@@ -34,7 +34,7 @@ class SentinelSeed(nn.Module):
         drift_warn: float = 0.12,
         stability_threshold: float = 0.01,
         improvement_threshold: float = 0.95,
-        blend_cfg: "BlendingConfig | None" = None,  # Add blending config
+        graft_cfg: "BlendingConfig | None" = None,  # Add grafting config
     ):
         super().__init__()
 
@@ -54,12 +54,12 @@ class SentinelSeed(nn.Module):
         self.stability_threshold = stability_threshold
         self.improvement_threshold = improvement_threshold
         
-        # Store blending configuration
-        if blend_cfg is None:
+        # Store grafting configuration
+        if graft_cfg is None:
             # Import here to avoid circular imports
             from morphogenetic_engine.core import BlendingConfig
-            blend_cfg = BlendingConfig()
-        self.blend_cfg = blend_cfg
+            graft_cfg = BlendingConfig()
+        self.graft_cfg = graft_cfg
         
         # Convergence-based training completion
         self.loss_history: list[float] = []
@@ -200,6 +200,12 @@ class SentinelSeed(nn.Module):
             current_drift = info.get("telemetry", {}).get("drift", 0.0)
             info["graft_initial_drift"] = current_drift
         
+        # Track when stabilization starts and initialize stabilization parameters
+        if new_state == SeedState.STABILIZATION:
+            info["stabilization_start_epoch"] = current_epoch
+            # Initialize stabilization counter - will be managed by transition handler
+            info["stabilization_epochs_remaining"] = self.graft_cfg.stabilization_epochs
+
         # Set up training infrastructure when transitioning TO TRAINING state
         if new_state == SeedState.TRAINING:
             # Create optimizer if not already created
@@ -379,34 +385,34 @@ class SentinelSeed(nn.Module):
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
-    def update_blending(self, epoch: int | None = None):
-        """Update the blending alpha value during blending phase - only once per epoch."""
-        if self.state != SeedState.BLENDING.value:
+    def update_grafting(self, epoch: int | None = None):
+        """Update the grafting alpha value during grafting phase - only once per epoch."""
+        if self.state != SeedState.GRAFTING.value:
             return
             
         seed_info = self.seed_manager.seeds[self.seed_id]
         
         # Only increment alpha once per epoch
-        last_blend_epoch = seed_info.get("last_blend_epoch", -1)
+        last_graft_epoch = seed_info.get("last_graft_epoch", -1)
         current_epoch = epoch if epoch is not None else 0
         
-        if current_epoch == last_blend_epoch:
+        if current_epoch == last_graft_epoch:
             return  # Already updated this epoch
             
         # Record that we've updated this epoch
-        seed_info["last_blend_epoch"] = current_epoch
+        seed_info["last_graft_epoch"] = current_epoch
         
         # Use the new strategy system if available
-        strategy_name = seed_info.get("blend_strategy")
+        strategy_name = seed_info.get("graft_strategy")
         if strategy_name:
             # Import here to avoid circular imports
             from .blending import get_strategy
             
             # Create or reuse the strategy instance
-            strategy_obj = seed_info.get("blend_strategy_obj")
+            strategy_obj = seed_info.get("graft_strategy_obj")
             if strategy_obj is None:
-                strategy_obj = get_strategy(strategy_name, self, self.blend_cfg)
-                seed_info["blend_strategy_obj"] = strategy_obj
+                strategy_obj = get_strategy(strategy_name, self, self.graft_cfg)
+                seed_info["graft_strategy_obj"] = strategy_obj
             
             # Use the strategy to calculate the new alpha
             new_alpha = strategy_obj.update()
@@ -414,7 +420,7 @@ class SentinelSeed(nn.Module):
             seed_info["alpha"] = self.alpha
         else:
             # Fallback to old logic for backward compatibility
-            self.alpha = min(1.0, self.alpha + 1 / self.blend_cfg.fixed_steps)
+            self.alpha = min(1.0, self.alpha + 1 / self.graft_cfg.fixed_steps)
             seed_info["alpha"] = self.alpha
 
     def update_shadowing(self, epoch: int | None = None, inputs: torch.Tensor | None = None):
@@ -518,30 +524,30 @@ class SentinelSeed(nn.Module):
         
         # THEN: Check if training should continue or transition
         if self._check_training_completion(seed_info, epoch):
-            self.alpha = 0.0  # Reset alpha for blending
-            seed_info["last_blend_epoch"] = -1  # Reset epoch tracking
-            self._set_state(SeedState.BLENDING, epoch=epoch)
+            self.alpha = 0.0  # Reset alpha for grafting
+            seed_info["last_graft_epoch"] = -1  # Reset epoch tracking
+            self._set_state(SeedState.GRAFTING, epoch=epoch)
 
-    def _handle_blending_transition(self, epoch: int | None):
-        """Handles the transition logic for a seed in the BLENDING state."""
+    def _handle_grafting_transition(self, epoch: int | None):
+        """Handles the transition logic for a seed in the GRAFTING state."""
         
-        # FIRST: Do actual blending work (update alpha)
-        self.update_blending(epoch)
+        # FIRST: Do actual grafting work (update alpha)
+        self.update_grafting(epoch)
         
-        # THEN: Check if blending is complete based on alpha reaching 1.0
+        # THEN: Check if grafting is complete based on alpha reaching 1.0
         if self.alpha >= 0.99:
-            # Capture final metrics and emit rich blend completed event
+            # Capture final metrics and emit rich graft completed event
             seed_info = self.seed_manager.seeds[self.seed_id]
-            strategy_name = seed_info.get("blend_strategy", "FIXED_RAMP")
+            strategy_name = seed_info.get("graft_strategy", "FIXED_RAMP")
             
-            # Calculate comprehensive blending metrics
-            blend_start_epoch = seed_info.get("blend_start_epoch", 0)
+            # Calculate comprehensive grafting metrics
+            graft_start_epoch = seed_info.get("graft_start_epoch", 0)
             current_epoch = epoch if epoch is not None else 0
-            duration_epochs = max(0, current_epoch - blend_start_epoch)
+            duration_epochs = max(0, current_epoch - graft_start_epoch)
             
-            initial_loss = seed_info.get("blend_initial_loss", 0.0)
+            initial_loss = seed_info.get("graft_initial_loss", 0.0)
             final_loss = self.validate_on_holdout() if hasattr(self, 'validate_on_holdout') else 0.0
-            initial_drift = seed_info.get("blend_initial_drift", 0.0)
+            initial_drift = seed_info.get("graft_initial_drift", 0.0)
             final_drift = seed_info.get("telemetry", {}).get("drift", 0.0)
             
             if self.seed_manager.logger:
@@ -574,7 +580,7 @@ class SentinelSeed(nn.Module):
                 self.seed_manager.logger.log_seed_event_detailed(
                     epoch=epoch or 0,
                     event_type=EventType.BLEND_COMPLETED.value,  # Use EventType enum value
-                    message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} completed {strategy_name} blending",
+                    message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} completed {strategy_name} grafting",
                     data={
                         "seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}",
                         "strategy_name": strategy_name,
@@ -588,7 +594,7 @@ class SentinelSeed(nn.Module):
                     }
                 )
             
-            self._set_state(SeedState.SHADOWING, epoch=epoch)
+            self._set_state(SeedState.STABILIZATION, epoch=epoch)
 
     def _handle_shadowing_transition(self, seed_info: dict, epoch: int | None):
         """Handles the transition logic for a seed in the SHADOWING state."""
@@ -635,6 +641,31 @@ class SentinelSeed(nn.Module):
         if seed_info.get("probationary_steps", 0) >= self.probationary_steps:
             self._evaluate_and_complete(epoch)
 
+    def _handle_stabilization_transition(self, seed_info: dict, epoch: int | None):
+        """Handles the transition logic for a seed in the STABILIZATION state."""
+        
+        # Initialize stabilization tracking if not present
+        if "stabilization_epochs_remaining" not in seed_info:
+            seed_info["stabilization_epochs_remaining"] = self.graft_cfg.stabilization_epochs
+            # Lock alpha at 1.0 and freeze child parameters during stabilization
+            self.alpha = 1.0
+            seed_info["alpha"] = self.alpha
+            for param in self.child.parameters():
+                param.requires_grad = False
+                
+        # Decrement remaining stabilization epochs
+        remaining = seed_info.get("stabilization_epochs_remaining", 0) - 1
+        seed_info["stabilization_epochs_remaining"] = remaining
+        
+        # Check if stabilization period is complete
+        if remaining <= 0:
+            # Re-enable child parameter training for fine-tuning
+            for param in self.child.parameters():
+                param.requires_grad = True
+            
+            # Transition to FINE_TUNING state
+            self._set_state(SeedState.FINE_TUNING, epoch=epoch)
+
     def assess_and_transition_state(self, epoch: int | None = None):
         """
         Checks if the seed should transition to a new state.
@@ -647,12 +678,14 @@ class SentinelSeed(nn.Module):
         match self.state:
             case SeedState.TRAINING.value:
                 self._handle_training_transition(seed_info, epoch)
-            case SeedState.BLENDING.value:
-                self._handle_blending_transition(epoch)
+            case SeedState.GRAFTING.value:
+                self._handle_grafting_transition(epoch)
             case SeedState.SHADOWING.value:
                 self._handle_shadowing_transition(seed_info, epoch)
             case SeedState.PROBATIONARY.value:
                 self._handle_probationary_transition(seed_info, epoch)
+            case SeedState.STABILIZATION.value:
+                self._handle_stabilization_transition(seed_info, epoch)
             case _:
                 # No transitions for other states (DORMANT, FOSSILIZED, CULLED)
                 pass
@@ -764,7 +797,7 @@ class BaseNet(nn.Module):
         probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.1,
-        blend_cfg: "BlendingConfig | None" = None,  # Add blending config
+        graft_cfg: "BlendingConfig | None" = None,  # Add grafting config
     ):
         super().__init__()
 
@@ -786,12 +819,12 @@ class BaseNet(nn.Module):
         self.input_dim = input_dim
         self.output_dim = output_dim
 
-        # Store blending configuration
-        if blend_cfg is None:
+        # Store grafting configuration
+        if graft_cfg is None:
             # Import here to avoid circular imports
             from morphogenetic_engine.core import BlendingConfig
-            blend_cfg = BlendingConfig()
-        self.blend_cfg = blend_cfg
+            graft_cfg = BlendingConfig()
+        self.graft_cfg = graft_cfg
 
         # Store seed creation parameters for replacing culled seeds
         self.seed_manager_ref = seed_manager
@@ -824,7 +857,7 @@ class BaseNet(nn.Module):
                     probationary_steps=probationary_steps,
                     shadow_lr=shadow_lr,
                     drift_warn=drift_warn,
-                    blend_cfg=self.blend_cfg,  # Pass the blending configuration
+                    graft_cfg=self.graft_cfg,  # Pass the grafting configuration
                 )
                 self.all_seeds.append(seed)
 
@@ -870,7 +903,7 @@ class BaseNet(nn.Module):
             probationary_steps=self.seed_probationary_steps,
             shadow_lr=self.seed_shadow_lr,
             drift_warn=self.seed_drift_warn,
-            blend_cfg=self.blend_cfg,  # Pass the blending configuration
+            graft_cfg=self.graft_cfg,  # Pass the grafting configuration
         )
 
         # The old seed module is replaced in the network's ModuleList.

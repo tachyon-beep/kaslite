@@ -22,6 +22,7 @@ class BlendingConfig:
     """Configuration for blending strategies."""
 
     fixed_steps: int = 30
+    stabilization_epochs: int = 5  # Number of epochs to hold alpha=1.0 during stabilization
     high_drift_threshold: float = 0.12
     low_health_threshold: float = 1e-3
     performance_loss_factor: float = 0.8
