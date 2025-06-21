@@ -72,7 +72,7 @@ DORMANT
 
 * **Behavior**
 
-  * Blend factor `α` ramps from 0 → 1 over *N* steps.
+  * Graft factor `α` ramps from 0 → 1 over *N* steps.
   * Forward pass:
 
     ```python
@@ -91,7 +91,7 @@ DORMANT
 * **Behavior**
 
   * Hold `α = 1.0` for a handful of epochs with **no** parameter updates.
-  * Allows any residual blending artifacts to settle before fine-tuning.
+  * Allows any residual grafting artifacts to settle before fine-tuning.
 
 * **Next** → **FINE-TUNING**
 

@@ -12,7 +12,7 @@ from morphogenetic_engine.core import SeedManager
 from morphogenetic_engine.events import SeedState
 
 if TYPE_CHECKING:
-    from morphogenetic_engine.core import BlendingConfig
+    from morphogenetic_engine.core import GraftingConfig
 
 
 class SentinelSeed(nn.Module):
@@ -34,7 +34,7 @@ class SentinelSeed(nn.Module):
         drift_warn: float = 0.12,
         stability_threshold: float = 0.01,
         improvement_threshold: float = 0.95,
-        graft_cfg: "BlendingConfig | None" = None,  # Add grafting config
+        graft_cfg: "GraftingConfig | None" = None,  # Add grafting config
     ):
         super().__init__()
 
@@ -57,8 +57,8 @@ class SentinelSeed(nn.Module):
         # Store grafting configuration
         if graft_cfg is None:
             # Import here to avoid circular imports
-            from morphogenetic_engine.core import BlendingConfig
-            graft_cfg = BlendingConfig()
+            from morphogenetic_engine.core import GraftingConfig
+            graft_cfg = GraftingConfig()
         self.graft_cfg = graft_cfg
         
         # Convergence-based training completion
@@ -544,7 +544,7 @@ class SentinelSeed(nn.Module):
         strategy_name = seed_info.get("graft_strategy")
         if strategy_name:
             # Import here to avoid circular imports
-            from .blending import get_strategy
+            from .grafting import get_strategy
             
             # Create or reuse the strategy instance
             strategy_obj = seed_info.get("graft_strategy_obj")
@@ -689,10 +689,10 @@ class SentinelSeed(nn.Module):
             final_drift = seed_info.get("telemetry", {}).get("drift", 0.0)
             
             if self.seed_manager.logger:
-                from .events import EventType, BlendCompletedPayload, LogEvent
+                from .events import EventType, GraftCompletedPayload, LogEvent
                 import time
                 
-                payload = BlendCompletedPayload(
+                payload = GraftCompletedPayload(
                     seed_id=self.seed_id,
                     epoch=epoch or 0,
                     strategy_name=strategy_name,
@@ -703,21 +703,21 @@ class SentinelSeed(nn.Module):
                     final_drift=final_drift,
                     timestamp=time.time()
                 )
-                event = LogEvent(EventType.BLEND_COMPLETED, payload)
+                event = LogEvent(EventType.GRAFT_COMPLETED, payload)
                 self.seed_manager.logger.log_event(epoch or 0, event)
                 
                 # Record in analytics for Phase 2 dashboard
                 try:
-                    from .blending_analytics import get_blending_analytics
-                    analytics = get_blending_analytics()
-                    analytics.record_blend_completed(payload)
+                    from .grafting_analytics import get_grafting_analytics
+                    analytics = get_grafting_analytics()
+                    analytics.record_graft_completed(payload)
                 except ImportError:
                     pass  # Analytics not available
                 
                 # Log detailed completion metrics
                 self.seed_manager.logger.log_seed_event_detailed(
                     epoch=epoch or 0,
-                    event_type=EventType.BLEND_COMPLETED.value,  # Use EventType enum value
+                    event_type=EventType.GRAFT_COMPLETED.value,  # Use EventType enum value
                     message=f"Seed L{self.seed_id[0]}_S{self.seed_id[1]} completed {strategy_name} grafting",
                     data={
                         "seed_id": f"L{self.seed_id[0]}_S{self.seed_id[1]}",
@@ -997,44 +997,11 @@ class BaseNet(nn.Module):
         probationary_steps: int = 50,
         shadow_lr: float = 1e-3,
         drift_warn: float = 0.1,
-        graft_cfg: "BlendingConfig | None" = None,  # Add grafting config
+        graft_cfg: "GraftingConfig | None" = None,  # Add grafting config
     ):
         super().__init__()
-
-        # Parameter validation - fail fast with clear error messages
-        if num_layers <= 0:
-            raise ValueError("num_layers must be positive")
-        if input_dim <= 0:
-            raise ValueError("input_dim must be positive")
-        if hidden_dim <= 0:
-            raise ValueError("hidden_dim must be positive")
-        if output_dim <= 0:
-            raise ValueError("output_dim must be positive")
-        if seeds_per_layer <= 0:
-            raise ValueError("seeds_per_layer must be positive")
-
-        self.num_layers = num_layers
-        self.seeds_per_layer = seeds_per_layer
         self.hidden_dim = hidden_dim
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-
-        # Store grafting configuration
-        if graft_cfg is None:
-            # Import here to avoid circular imports
-            from morphogenetic_engine.core import BlendingConfig
-            graft_cfg = BlendingConfig()
-        self.graft_cfg = graft_cfg
-
-        # Add placeholders for data loaders and loss function for fine-tuning evaluation
-        self.val_loader: "DataLoader | None" = None
-        self.loss_function: nn.Module | None = None
-
-        # Store seed creation parameters for replacing culled seeds
         self.seed_manager_ref = seed_manager
-        self.seed_probationary_steps = probationary_steps
-        self.seed_shadow_lr = shadow_lr
-        self.seed_drift_warn = drift_warn
 
         # Create input layer
         self.input_layer = nn.Linear(input_dim, hidden_dim)

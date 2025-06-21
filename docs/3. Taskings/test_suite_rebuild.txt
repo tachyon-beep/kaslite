@@ -122,9 +122,9 @@ tests/test_cli_dashboard.py
 
 tests/test_components/test_sentinel_seed.py
 
-    Covers: SentinelSeed methods: _set_state, initialize_child, train_child_step, update_blending, get_health_signal, forward
+    Covers: SentinelSeed methods: _set_state, initialize_child, train_child_step, update_grafting, get_health_signal, forward
 
-    Scenarios: invalid parameters, verifying transitions (dormant→training→blending→active), buffer logging and drift warnings.
+    Scenarios: invalid parameters, verifying transitions (dormant→training→grafting→stabilization→fine_tuning→fossilized), buffer logging and drift warnings.
 
     Assertions: state property, alpha progression, buffer length; use of pytest.raises.
 
@@ -480,7 +480,7 @@ tests/test_training/test_should_log_seed_update.py
 
     Covers: should_log_seed_update, format_alpha_value, _update_dashboard_seed_state, _log_seed_state_change, log_seed_updates, clear_seed_report_cache
 
-    Scenarios: transitions from blending to active, invalid alpha.
+    Scenarios: transitions from grafting to stabilization, invalid alpha.
 
     Assertions: log file entries, return booleans.
 

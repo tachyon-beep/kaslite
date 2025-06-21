@@ -113,14 +113,14 @@ With the above changes, you can run the morphogenetic training on CIFAR-10. A sa
        --problem_type cifar10 \
        --input_dim 3072 \
        --hidden_dim 512 \
-       --blend_steps 200 \
+       --graft_steps 200 \
        --shadow_lr 0.001 \
        --batch_size 128 \
        --train_frac 0.8 \
        --device cuda
    ```
 
-   This command specifies the CIFAR-10 problem, sets the flattened input dimension, a larger hidden layer, and uses GPU. Adjust `--blend_steps`, `--shadow_lr` etc. as needed. The script will download CIFAR-10 automatically (if not present) and begin training. It will log progress to the console and to a JSON file in `results/`.
+   This command specifies the CIFAR-10 problem, sets the flattened input dimension, a larger hidden layer, and uses GPU. Adjust `--graft_steps`, `--shadow_lr` etc. as needed. The script will download CIFAR-10 automatically (if not present) and begin training. It will log progress to the console and to a JSON file in `results/`.
 
 3. **Monitor output:** The `ExperimentLogger` prints epoch metrics and seed events in real time. Results (epoch losses, accuracy, seed state changes) are also saved in `results/<timestamp>.json` and in a CSV log file for seed states. At the end, a summary of training and adaptation phases will be printed.
 

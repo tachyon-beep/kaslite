@@ -1,12 +1,13 @@
 # kaslite
 
-This repo demonstrates a morphogenetic architecture with "soft-landing" seeds. Each sentinel seed now awakens gradually: it shadow-trains as an auto-encoder, blends its output into the trunk using a ramped alpha parameter, then becomes fully active.
+This repo demonstrates a morphogenetic architecture with "soft-landing" seeds. Each sentinel seed now awakens gradually: it shadow-trains as an auto-encoder, grafts its output into the trunk using a ramped alpha parameter, then becomes fully active.
 
 ## � Project Status: Production Ready ✅
 
 The Kaslite morphogenetic engine has undergone comprehensive cleanup and modernization:
 
 ### **Recent Updates (June 2025)**
+
 - ✅ **Dependencies Cleaned**: Removed legacy dependencies (ClearML), updated all requirements
 - ✅ **Configuration Modernized**: Updated `pyproject.toml`, requirements files, and development tools
 - ✅ **Code Quality**: Added pre-commit hooks, updated `.gitignore`, improved packaging
@@ -15,6 +16,7 @@ The Kaslite morphogenetic engine has undergone comprehensive cleanup and moderni
 - ✅ **Testing Validated**: Full test suite passing with comprehensive coverage
 
 ### **Architecture Excellence**
+
 - ✅ **Feature Complete**: All core features implemented and production-ready
 - ✅ **Type Safety**: Comprehensive type hints throughout codebase
 - ✅ **Documentation**: Clear docstrings and comprehensive guides
@@ -22,6 +24,7 @@ The Kaslite morphogenetic engine has undergone comprehensive cleanup and moderni
 - ✅ **Modularity**: Clean separation of concerns across components
 
 ### **MLOps Integration**
+
 - ✅ **Experiment Tracking**: MLflow with automatic run logging
 - ✅ **Model Registry**: Automatic versioning and lifecycle management
 - ✅ **Monitoring**: Prometheus metrics with Grafana dashboards
@@ -33,16 +36,19 @@ The Kaslite morphogenetic engine has undergone comprehensive cleanup and moderni
 The morphogenetic engine now includes a **complete MLOps pipeline** from research to production:
 
 ### Core Architecture & Experimentation ✅
+
 - **Morphogenetic Neural Networks** - Adaptive architecture with seed-based expansion
 - **Hyperparameter Sweeps** - Grid and Bayesian optimization with parallel execution
 - **Experiment Tracking** - MLflow integration with comprehensive metrics logging
 
 ### Monitoring & Observability ✅  
+
 - **Real-time Monitoring** - Prometheus metrics with Grafana dashboards
 - **Automated Alerting** - Critical issue detection and notifications
 - **Live CLI Dashboard** - Beautiful Rich-powered training visualization
 
 ### Model Registry & Production Deployment ✅
+
 - **🏛️ MLflow Model Registry** - Automatic model versioning and lifecycle management
 - **🚀 FastAPI Inference Server** - Production-ready REST API with monitoring
 - **🔧 Model Management CLI** - Command-line tools for model operations
@@ -68,7 +74,7 @@ curl -X POST "http://localhost:8080/predict" \
 
 # 5. Manage model lifecycle
 python -m morphogenetic_engine.cli.model_registry_cli list
-python -m morphogenetic_engine.cli.model_registry_cli promote Production --version 3
+python -m morphogenetic_engine.cli.model_registry_cli.promote Production --version 3
 ```
 
 ## 📊 Model Registry & Deployment
@@ -131,18 +137,21 @@ python -m morphogenetic_engine.cli.model_registry_cli production
 ### Monitoring & Alerting
 
 **Inference Server Metrics:**
+
 - Request rates, latency percentiles, error rates
 - Model prediction times and loading performance  
 - Active model version and health status
 
 **Automated Alerts:**
+
 - **Critical**: Server down, high error rate (>10%), no model loaded
 - **Warning**: High latency (>2s), slow predictions (>1s)
 
 **Dashboard Access:**
-- **Grafana**: http://localhost:3000 (admin/kaslite) - Inference + training dashboards
-- **Prometheus**: http://localhost:9090 - Metrics and targets
-- **Alertmanager**: http://localhost:9093 - Alert management
+
+- **Grafana**: <http://localhost:3000> (admin/kaslite) - Inference + training dashboards
+- **Prometheus**: <http://localhost:9090> - Metrics and targets
+- **Alertmanager**: <http://localhost:9093> - Alert management
 
 ## 🧪 Development & Experimentation
 
@@ -156,7 +165,7 @@ All experiments are automatically tracked with MLflow:
 - **Metrics**: Training/validation loss, accuracy, seed alpha values, and more
 - **Artifacts**: Model weights, TensorBoard logs, experiment logs
 - **Experiment Stages**: Tagged for easy filtering and comparison
-- **Seed Tracking**: Individual seed states and alpha blending values
+- **Seed Tracking**: Individual seed states and alpha grafting values
 
 ### DVC Pipeline
 
@@ -232,13 +241,15 @@ The project includes a complete monitoring infrastructure with automated scripts
 ### Services Included
 
 **Core Monitoring Services:**
-- **Prometheus** (http://localhost:9090) - Metrics collection and storage
-- **Grafana** (http://localhost:3000) - Dashboards and visualization (admin/kaslite)
-- **Alertmanager** (http://localhost:9093) - Alert management and notifications
-- **TensorBoard** (http://localhost:6006) - ML training visualization
-- **Kaslite App** (http://localhost:8000) - Application with metrics endpoint
+
+- **Prometheus** (<http://localhost:9090>) - Metrics collection and storage
+- **Grafana** (<http://localhost:3000>) - Dashboards and visualization (admin/kaslite)
+- **Alertmanager** (<http://localhost:9093>) - Alert management and notifications
+- **TensorBoard** (<http://localhost:6006>) - ML training visualization
+- **Kaslite App** (<http://localhost:8000>) - Application with metrics endpoint
 
 **What Gets Monitored:**
+
 - Training metrics (loss, accuracy, convergence)
 - System resources (CPU, memory, GPU usage)
 - Model performance and inference times
@@ -334,6 +345,7 @@ python -m morphogenetic_engine.cli.sweep examples/quick_sweep.yaml
 All experiments now use YAML configuration files for better reproducibility and version control:
 
 **Single Experiment Config:**
+
 ```yaml
 sweep_type: grid
 experiment:
@@ -351,6 +363,7 @@ optimization:
 ```
 
 **Sweep Configuration:**
+
 ```yaml
 sweep_type: grid
 experiment:
@@ -371,6 +384,7 @@ optimization:
 #### Example Configurations
 
 The `examples/` directory contains validated configuration files:
+
 - `quick_test.yaml` - Fast single experiment for testing
 - `basic_sweep.yaml` - Simple grid search example  
 - `quick_sweep.yaml` - Fast grid search for development
@@ -388,7 +402,7 @@ The experiment runner includes a beautiful live CLI dashboard powered by Rich th
 
 - **Progress bars**: Live progress for training stages
 - **Metrics table**: Real-time training/validation loss, accuracy, and best accuracy
-- **Seed states panel**: Color-coded status of each seed (dormant/blending/active) with α values
+- **Seed states panel**: Color-coded status of each seed (dormant/grafting/active) with α values
 - **Stage transitions**: Highlighted banners when transitioning between experiment stages
 - **Germination events**: Special notifications when seeds become active
 
@@ -425,7 +439,7 @@ All experiments automatically log comprehensive metrics to TensorBoard:
 - `validation/loss`: Validation loss per epoch  
 - `validation/accuracy`: Validation accuracy per epoch
 - `validation/best_acc`: Best validation accuracy achieved
-- `seed/{id}/alpha`: Alpha blending values for each seed
+- `seed/{id}/alpha`: Alpha grafting values for each seed
 
 **Text Summaries:**
 
@@ -458,18 +472,21 @@ The morphogenetic engine includes comprehensive **Prometheus metrics** and **Gra
 All experiments automatically expose detailed metrics at `http://localhost:8000/metrics`:
 
 **Training Metrics:**
+
 - `kaslite_epochs_total`: Number of epochs completed by training stage
 - `kaslite_validation_loss` / `kaslite_validation_accuracy`: Real-time performance
 - `kaslite_best_accuracy`: Best accuracy achieved
 - `kaslite_germinations_total`: Total seed germinations
 
 **Seed-Level Metrics:**
-- `kaslite_seed_alpha`: Blending alpha values for each seed
+
+- `kaslite_seed_alpha`: Grafting alpha values for each seed
 - `kaslite_seed_drift`: Interface drift measurements
 - `kaslite_seed_health_signal`: Activation variance health indicators
-- `kaslite_seed_state`: Current state (dormant/training/blending/active)
+- `kaslite_seed_state`: Current state (dormant/training/grafting/active)
 
 **Controller Metrics:**
+
 - `kaslite_kasmina_plateau_counter`: Current plateau detection counter
 - `kaslite_epoch_duration_seconds`: Training time per epoch
 
@@ -486,10 +503,11 @@ docker compose up -d prometheus grafana alertmanager
 ```
 
 **Access URLs:**
-- **Application Metrics**: http://localhost:8000/metrics
-- **Prometheus UI**: http://localhost:9090
-- **Grafana Dashboards**: http://localhost:3000 (admin/kaslite)
-- **Alertmanager**: http://localhost:9093
+
+- **Application Metrics**: <http://localhost:8000/metrics>
+- **Prometheus UI**: <http://localhost:9090>
+- **Grafana Dashboards**: <http://localhost:3000> (admin/kaslite)
+- **Alertmanager**: <http://localhost:9093>
 
 #### Grafana Dashboard
 
@@ -498,7 +516,7 @@ The included dashboard provides:
 - **Validation Accuracy Trends**: Real-time accuracy curves by training stage
 - **Training/Validation Loss**: Loss convergence visualization
 - **Seed Status Table**: Live view of all seed states, alpha values, and drift
-- **Seed Alpha Blending**: Time-series view of alpha ramping
+- **Seed Alpha Grafting**: Time-series view of alpha ramping
 - **Interface Drift Monitoring**: Drift levels with warning thresholds
 - **Germination Events**: Controller activity and seed activation rates
 - **Performance Stats**: Best accuracy, experiment duration, active seed counts
@@ -508,12 +526,14 @@ The included dashboard provides:
 Alertmanager monitors key thresholds and sends notifications for:
 
 **Critical Alerts:**
+
 - Validation accuracy drops below 70%
 - Training loss explosion (>10)
 - Critical seed drift (>25%)
 - Experiment stalled (no progress)
 
 **Warning Alerts:**
+
 - Validation accuracy drops below 85% during adaptation stage
 - High seed drift (>15%)
 - No germinations during adaptation stage with low accuracy
@@ -585,29 +605,34 @@ git push                     # Share with team
 ## Features
 
 ### Experiment Tracking
+
 - **MLflow**: Complete experiment lifecycle tracking
 - **TensorBoard**: Real-time training visualization
 - **JSON Metrics**: Structured metrics for DVC pipeline integration
 
 ### Data Management  
+
 - **DVC**: Data and model versioning
 - **Synthetic Data**: Reproducible dataset generation
 - **Pipeline**: Automated data → train → evaluate workflow
 
 ### Morphogenetic Architecture
+
 - **Sentinel Seeds**: Adaptive architecture expansion
-- **Soft Landing**: Gradual seed activation with alpha blending
+- **Soft Landing**: Gradual seed activation with alpha grafting
 - **Adaptive Training**: Warm-up → adaptation stages
 
 ## 📚 Documentation
 
 ### Complete Guides
+
 - **[Model Registry & Deployment Guide](docs/MODEL_REGISTRY_DEPLOYMENT.md)** - Complete deployment documentation
 - **[Step 6 Implementation Summary](docs/STEP6_COMPLETION_SUMMARY.md)** - Technical implementation details
 - **[Step 5 Monitoring Summary](docs/STEP5_COMPLETION_SUMMARY.md)** - Monitoring system documentation
 - **[System Validation](docs/phase3_final_validation.md)** - Sweep system validation results
 
 ### Testing & Validation
+
 - **[E2E Integration Testing](docs/E2E_INTEGRATION_TESTING.md)** - Complete pipeline validation (8-10 seconds)
 - **Unit Tests** - Located in `tests/` directory with comprehensive coverage
 - **Integration Tests** - End-to-end workflow validation
@@ -634,6 +659,7 @@ pytest tests/test_cli.py                # CLI functionality tests
 ```
 
 **Test Categories:**
+
 - **Core Engine**: Neural network architecture, seed mechanisms, training loops
 - **Model Registry**: MLflow integration, versioning, promotion workflows
 - **Inference Server**: FastAPI endpoints, model loading, prediction accuracy
@@ -645,6 +671,7 @@ pytest tests/test_cli.py                # CLI functionality tests
 #### Continuous Integration
 
 The test suite includes:
+
 - **Mock-based Testing**: Isolated unit tests with comprehensive mocking
 - **Integration Testing**: End-to-end workflow validation
 - **Performance Testing**: Model prediction latency and throughput
@@ -659,12 +686,14 @@ The test suite includes:
 - **Documentation**: Comprehensive docstrings and API documentation
 
 ### Architecture Documents
+
 - **[Monitoring Implementation](docs/MONITORING_IMPLEMENTATION.md)** - Prometheus/Grafana setup
 - **[Instrumentation Guide](docs/instrumentation.md)** - Metrics and logging details
 
 ## Changelog
 
 ### v6.1.0 - Project Modernization & Cleanup ✅
+
 - **Dependencies**: Removed legacy ClearML integration, cleaned up requirements
 - **Configuration**: Modernized `pyproject.toml` with best practices, optional dependencies
 - **Development**: Added pre-commit hooks, updated `.gitignore`, improved packaging
@@ -674,6 +703,7 @@ The test suite includes:
 - **Documentation**: Updated README and project status documentation
 
 ### v6.0.0 - Model Registry & Production Deployment
+
 - Added MLflow Model Registry with automatic versioning
 - Implemented FastAPI inference server with monitoring
 - Created model management CLI tools
@@ -682,6 +712,7 @@ The test suite includes:
 - Complete production-ready MLOps pipeline
 
 ### v5.0.0 - Live Monitoring & Dashboards
+
 - Implemented Prometheus metrics collection
 - Added Grafana dashboards with real-time visualization
 - Created automated alerting with Alertmanager
@@ -689,6 +720,7 @@ The test suite includes:
 - Added comprehensive observability features
 
 ### v4.0.0 - Hyperparameter Sweeps & Optimization
+
 - Added grid search and Bayesian optimization
 - Implemented parallel sweep execution
 - Created YAML-based sweep configurations
@@ -696,6 +728,7 @@ The test suite includes:
 - Added sweep results analysis and visualization
 
 ### v3.0.0 - Experiment Tracking & Artifacts
+
 - Integrated MLflow for experiment tracking
 - Added TensorBoard visualization
 - Implemented DVC for data versioning
@@ -703,6 +736,7 @@ The test suite includes:
 - Enhanced metadata and artifact management
 
 ### v2.0.0 - Enhanced Architecture & CLI
+
 - Added support for multiple problem types and datasets
 - Implemented device selection (CPU/CUDA)
 - Enhanced soft-landing controller with drift detection
@@ -710,8 +744,9 @@ The test suite includes:
 - Improved parameter configuration system
 
 ### v1.0.0 - Core Morphogenetic Architecture
+
 - Initial morphogenetic neural network implementation
 - Sentinel seed soft-landing mechanism
-- Alpha blending and gradual activation
+- Alpha grafting and gradual activation
 - Adaptive training (warm-up → adaptation)
 - Basic experiment runner and logging

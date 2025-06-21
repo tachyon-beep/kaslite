@@ -2,11 +2,11 @@
 
 This document provides a detailed overview of the pluggable grafting strategies used within the morphogenetic engine. The choice of strategy dictates how a new seed's influence (`alpha`) is increased during the `GRAFTING` phase of its lifecycle. Each strategy offers a different balance of speed, predictability, and safety.
 
-All strategies inherit from the `BlendingStrategy` abstract base class and implement an `update()` method that calculates the new `alpha` value on each step.
+All strategies inherit from the `GraftingStrategy` abstract base class and implement an `update()` method that calculates the new `alpha` value on each step.
 
 ---
 
-### 1. Fixed Ramp Grafting (`FixedRampBlending`)
+### 1. Fixed Ramp Grafting (`FixedRampGrafting`)
 
 This is the most basic and predictable strategy. It increases the `alpha` value linearly over a pre-configured number of steps.
 
@@ -15,7 +15,7 @@ This is the most basic and predictable strategy. It increases the `alpha` value 
 * **Use Case**: Ideal for scenarios where predictability is paramount or as a stable baseline for experiments. It is not responsive to the model's performance or stability.
 * **Safety**: It is the default strategy used by the factory function if a specified strategy name is not found, ensuring robust behavior.
 
-### 2. Performance-Linked Grafting (`PerformanceLinkedBlending`)
+### 2. Performance-Linked Grafting (`PerformanceLinkedGrafting`)
 
 This strategy dynamically adjusts the grafting speed based on the performance improvement of the seed.
 
@@ -24,7 +24,7 @@ This strategy dynamically adjusts the grafting speed based on the performance im
 * **Use Case**: Intended to quickly integrate "good" seeds.
 * **Critical Caveat**: This strategy links grafting speed to **reconstruction performance (MSE loss)**, not the main model's task performance (e.g., classification accuracy). This can be counterproductive, as it incentivizes the seed to become a better autoencoder, which may not contribute positively to the overall goal.
 
-### 3. Drift-Controlled Grafting (`DriftControlledBlending`)
+### 3. Drift-Controlled Grafting (`DriftControlledGrafting`)
 
 This is a stability-gated strategy that modulates the grafting speed based on the measured drift of the model's weights.
 
@@ -35,7 +35,7 @@ This is a stability-gated strategy that modulates the grafting speed based on th
   * **High Drift**: If the model is unstable (drift exceeds the threshold), grafting is **paused** (`step_size = 0.0`) until stability returns.
 * **Use Case**: A crucial safety measure to prevent a new seed from destabilizing the parent network. It ensures that grafting only proceeds when the model is in a stable state.
 
-### 4. Gradient Norm-Gated Grafting (`GradNormGatedBlending`)
+### 4. Gradient Norm-Gated Grafting (`GradNormGatedGrafting`)
 
 This is another stability-gated strategy that uses the norm of the model's gradients as a health signal.
 

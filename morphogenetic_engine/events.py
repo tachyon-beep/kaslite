@@ -29,8 +29,8 @@ class EventType(Enum):
     GERMINATION = "germination"
     LOG_EVENT = "log_event"
     SEED_LOG_EVENT = "seed_log_event"
-    BLEND_STRATEGY_CHOSEN = "blend_strategy_chosen"
-    BLEND_COMPLETED = "blend_completed"
+    GRAFT_STRATEGY_CHOSEN = "graft_strategy_chosen"
+    GRAFT_COMPLETED = "graft_completed"
 
 
 # Import SeedState from the authoritative source in components
@@ -133,8 +133,8 @@ class GerminationPayload(TypedDict):
     timestamp: float
 
 
-class BlendStrategyChosenPayload(TypedDict):
-    """Payload for when a blending strategy is selected for a seed."""
+class GraftStrategyChosenPayload(TypedDict):
+    """Payload for when a grafting strategy is selected for a seed."""
 
     seed_id: tuple[int, int]
     epoch: int
@@ -143,8 +143,8 @@ class BlendStrategyChosenPayload(TypedDict):
     timestamp: float
 
 
-class BlendCompletedPayload(TypedDict):
-    """Payload for when a seed finishes the blending phase."""
+class GraftCompletedPayload(TypedDict):
+    """Payload for when a seed finishes the grafting phase."""
 
     seed_id: tuple[int, int]
     epoch: int
@@ -192,8 +192,8 @@ EventPayload = Union[
     SeedStateUpdatePayload,
     NetworkStrainGridUpdatePayload,
     GerminationPayload,
-    BlendStrategyChosenPayload,
-    BlendCompletedPayload,
+    GraftStrategyChosenPayload,
+    GraftCompletedPayload,
     LogPayload,
     SeedLogPayload,
     SeedMetricsUpdatePayload,

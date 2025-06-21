@@ -1,7 +1,7 @@
 """
-Defines a pluggable system for blending strategies in the morphogenetic engine.
+Defines a pluggable system for grafting strategies in the morphogenetic engine.
 
-This module provides an abstract base class for all blending strategies and includes
+This module provides an abstract base class for all grafting strategies and includes
 concrete implementations that can be selected and configured at runtime.
 """
 
@@ -13,16 +13,16 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .components import SentinelSeed
-    from .core import BlendingConfig
+    from .core import GraftingConfig
 
 
-class BlendingStrategy(ABC):
+class GraftingStrategy(ABC):
     """
-    Abstract base class for all blending strategies.
-    Each strategy is instantiated for a specific seed and manages its blending process.
+    Abstract base class for all grafting strategies.
+    Each strategy is instantiated for a specific seed and manages its grafting process.
     """
 
-    def __init__(self, seed: SentinelSeed, config: BlendingConfig):
+    def __init__(self, seed: SentinelSeed, config: GraftingConfig):
         self.seed = seed
         self.config = config
 
@@ -34,37 +34,42 @@ class BlendingStrategy(ABC):
         Returns:
             The new alpha value, capped at 1.0. The caller is responsible
             for updating the seed's state and handling the transition
-            once blending is complete (i.e., alpha >= 1.0).
+            once grafting is complete (i.e., alpha >= 1.0).
         """
         raise NotImplementedError
 
 
-class FixedRampBlending(BlendingStrategy):
+class FixedRampGrafting(GraftingStrategy):
     """
-    A simple, time-based blending strategy that increases the blend factor (`alpha`)
+    A simple, time-based grafting strategy that increases the blend factor (`alpha`)
     linearly over a fixed number of steps.
     """
 
     def update(self) -> float:
         """Increments alpha linearly based on the configured number of fixed_steps."""
-        # Aligns with the plan by using the central BlendingConfig.
+        # Aligns with the plan by using the central GraftingConfig.
         new_alpha = self.seed.alpha + (1.0 / self.config.fixed_steps)
         return min(1.0, new_alpha)
 
 
-class PerformanceLinkedBlending(BlendingStrategy):
+class PerformanceLinkedGrafting(GraftingStrategy):
     """
     Dynamically adjusts alpha based on ACTUAL performance improvement.
     Uses gradual progression with performance-based acceleration for stability.
+    
+    WARNING: This strategy is designed for task-loss-based performance and is
+    NOT suitable for the reconstruction-loss-based GRAFTING phase. Its use
+    during initial grafting is counterproductive. It should only be considered
+    for the FINE_TUNING phase in future implementations.
     """
 
     def update(self) -> float:
         seed_info = self.seed.seed_manager.seeds[self.seed.seed_id]
-        start_loss = seed_info.get("blend_initial_loss")
+        start_loss = seed_info.get("graft_initial_loss")
         if start_loss is None:
             # First call - capture baseline
             start_loss = self.seed.validate_on_holdout()
-            seed_info["blend_initial_loss"] = start_loss
+            seed_info["graft_initial_loss"] = start_loss
             return self.seed.alpha  # No progress until we have baseline
         
         current_loss = self.seed.validate_on_holdout()
@@ -84,9 +89,9 @@ class PerformanceLinkedBlending(BlendingStrategy):
         return min(1.0, new_alpha)  # Cap at 1.0
 
 
-class DriftControlledBlending(BlendingStrategy):
+class DriftControlledGrafting(GraftingStrategy):
     """
-    Dynamically controls blending rate based on measured weight drift.
+    Dynamically controls grafting rate based on measured weight drift.
     Speeds up when stable, slows down when drifting, holds when unstable.
     """
 
@@ -116,10 +121,10 @@ class DriftControlledBlending(BlendingStrategy):
         return min(1.0, new_alpha)
 
 
-class GradNormGatedBlending(BlendingStrategy):
+class GradNormGatedGrafting(GraftingStrategy):
     """
-    Only allows blending progress when gradient norms are in stable range.
-    Prevents blending during gradient instability.
+    Only allows grafting progress when gradient norms are in stable range.
+    Prevents grafting during gradient instability.
     """
 
     def update(self) -> float:
@@ -142,21 +147,21 @@ class GradNormGatedBlending(BlendingStrategy):
 # =============================================================================
 
 STRATEGIES = {
-    "FIXED_RAMP": FixedRampBlending,
-    "PERFORMANCE_LINKED": PerformanceLinkedBlending,
-    "DRIFT_CONTROLLED": DriftControlledBlending,
-    "GRAD_NORM_GATED": GradNormGatedBlending,
+    "FIXED_RAMP": FixedRampGrafting,
+    "PERFORMANCE_LINKED": PerformanceLinkedGrafting,
+    "DRIFT_CONTROLLED": DriftControlledGrafting,
+    "GRAD_NORM_GATED": GradNormGatedGrafting,
 }
 
 
 def get_strategy(
-    strategy_name: str, seed: SentinelSeed, config: BlendingConfig
-) -> BlendingStrategy:
+    strategy_name: str, seed: SentinelSeed, config: GraftingConfig
+) -> GraftingStrategy:
     """
-    Factory function to create a blending strategy instance.
+    Factory function to create a grafting strategy instance.
 
-    If the requested strategy name is not found, it defaults to FixedRampBlending
+    If the requested strategy name is not found, it defaults to FixedRampGrafting
     to ensure backward compatibility and robustness.
     """
-    strategy_class = STRATEGIES.get(strategy_name, FixedRampBlending)
+    strategy_class = STRATEGIES.get(strategy_name, FixedRampGrafting)
     return strategy_class(seed, config)

@@ -17,9 +17,9 @@ SEED_EMOJI_MAP = {
     SeedState.DORMANT: "⚪",          # ⚪ White circle (dormant)
     SeedState.GERMINATED: "🌱",   # 🌱 Seedling (germinated)
     SeedState.TRAINING: "🟢",    # 🟢 Green circle (training)
-    SeedState.BLENDING: "🟡",      # 🟡 Yellow circle (blending)
-    SeedState.SHADOWING: "👻",  # 👻 Ghost (shadowing)
-    SeedState.PROBATIONARY: "👮",  # 👮 Police (probationary)
+    SeedState.GRAFTING: "🟡",      # 🟡 Yellow circle (grafting)
+    SeedState.STABILIZATION: "👻",  # 👻 Ghost (stabilization)
+    SeedState.FINE_TUNING: "👮",  # 👮 Police (fine-tuning)
     SeedState.FOSSILIZED: "🦴",   # 🦴 Bone (fossilized)
     SeedState.CULLED: "🥀",         # 🥀 Wilted flower (culled)
 }

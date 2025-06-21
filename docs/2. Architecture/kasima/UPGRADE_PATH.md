@@ -1,12 +1,12 @@
 ## Migration and Enhancement Plan: Morphogenetic Seed Lifecycle
 
-This document outlines a phased implementation plan to migrate the Kaslite morphogenetic engine to a new, more robust seed lifecycle. The plan also includes an overhaul of the blending (now "grafting") strategies and fixes for critical bugs in the current implementation.
+This document outlines a phased implementation plan to migrate the Kaslite morphogenetic engine to a new, more robust seed lifecycle. The plan also includes an overhaul of the grafting strategies and fixes for critical bugs in the current implementation.
 
 ### **Executive Summary**
 
 The primary goals of this migration are:
 
-1. **Fix Critical Bugs:** Correct the forward pass logic to ensure the `alpha` blending factor is properly applied, making the grafting strategies functional.
+1. **Fix Critical Bugs:** Correct the forward pass logic to ensure the `alpha` grafting factor is properly applied, making the grafting strategies functional.
 2. **Streamline the Seed Lifecycle:** Migrate from the complex `BLENDING` → `SHADOWING` → `PROBATIONARY` path to a more intuitive `GRAFTING` → `STABILIZATION` → `FINE-TUNING` lifecycle.
 3. **Enhance Grafting Strategies:** Improve the intelligence of the grafting process by fixing flawed strategies and implementing a dynamic, heuristic-based strategy selector.
 
@@ -16,7 +16,7 @@ The plan is divided into five phases, starting with critical fixes and progressi
 
 This phase addresses the most critical issues preventing the current system from functioning as intended.
 
-#### **1.1. Fix the Forward Pass Blending Logic**
+#### **1.1. Fix the Forward Pass Grafting Logic**
 
 The bug where the `alpha` value is calculated but not used in the forward pass is the highest priority.
 
@@ -24,7 +24,7 @@ The bug where the `alpha` value is calculated but not used in the forward pass i
 
 * **Class to Modify:** `BaseNet`
 
-* **Action:** Modify the `forward` method in `BaseNet`. The current implementation replaces the main layer's output with the seed's output. It needs to be updated to correctly blend the two.
+* **Action:** Modify the `forward` method in `BaseNet`. The current implementation replaces the main layer's output with the seed's output. It needs to be updated to correctly graft the two.
 
     **Current (Bugged) Logic:**
 
@@ -49,19 +49,19 @@ The bug where the `alpha` value is calculated but not used in the forward pass i
     # We retrieve the alpha value from the seed itself.
     x_seed_out = seed(x_main) 
 
-    # THE FIX: Blend the main output with the seed's output using the seed's alpha.
+    # THE FIX: Graft the main output with the seed's output using the seed's alpha.
     # The SentinelSeed's forward pass should be modified to simply return its child's
-    # output during GRAFTING, and the blending happens here in the parent network.
-    # However, a simpler approach is to let the seed handle its own blending logic
-    # and return the correctly blended output, which it already does. The issue is that
+    # output during GRAFTING, and the grafting happens here in the parent network.
+    # However, a simpler approach is to let the seed handle its own grafting logic
+    # and return the correctly grafted output, which it already does. The issue is that
     # the BaseNet was not using the main layer's output at all.
 
     # Corrected approach: The seed's forward pass should take the main activation
-    # as input and return the blended result.
+    # as input and return the grafted result.
     x = seed(x_main)
     ```
 
-    To be more explicit, the `SentinelSeed.forward` method should be adjusted to correctly handle the blending based on its state. The current `SentinelSeed.forward` logic is already mostly correct, the main bug is in `BaseNet.forward`.
+    To be more explicit, the `SentinelSeed.forward` method should be adjusted to correctly handle the grafting based on its state. The current `SentinelSeed.forward` logic is already mostly correct, the main bug is in `BaseNet.forward`.
 
 #### **1.2. Update the SeedState Enum**
 
@@ -107,12 +107,12 @@ This phase implements the new lifecycle states and transitions within the `Senti
 #### **2.1. Implement the `GRAFTING` State**
 
 * **Transition:** Occurs after a successful soft-test at the end of the `TRAINING` state.
-* **Behavior:** The `alpha` blend factor ramps from 0 to 1. The `forward` pass now computes: `output = (1 - alpha) * x + alpha * child(x)`. This logic is already present in `SentinelSeed.forward` under the `BLENDING` state; it just needs to be triggered by the `GRAFTING` state instead.
+* **Behavior:** The `alpha` graft factor ramps from 0 to 1. The `forward` pass now computes: `output = (1 - alpha) * x + alpha * child(x)`. This logic is already present in `SentinelSeed.forward` under the `BLENDING` state; it just needs to be triggered by the `GRAFTING` state instead.
 
 #### **2.2. Implement the `STABILIZATION` State**
 
 * **Transition:** Occurs after `GRAFTING` is complete (`alpha` ≈ 1.0).
-* **Behavior:** Hold `alpha = 1.0` for a fixed number of epochs with no parameter updates. This allows residual blending artifacts to settle. The `SentinelSeed`'s `forward` pass will simply be `output = x + child(x)`.
+* **Behavior:** Hold `alpha = 1.0` for a fixed number of epochs with no parameter updates. This allows residual grafting artifacts to settle. The `SentinelSeed`'s `forward` pass will simply be `output = x + child(x)`.
 
 #### **2.3. Implement the `FINE-TUNING` State**
 
@@ -128,9 +128,9 @@ This phase implements the new lifecycle states and transitions within the `Senti
 
 ### **Phase 3: Grafting Strategy Overhaul**
 
-This phase refactors the blending strategy system to align with the new lifecycle and improve its intelligence.
+This phase refactors the grafting strategy system to align with the new lifecycle and improve its intelligence.
 
-* **File to Modify:** `morphogenetic_engine/blending.py`
+* **File to Modify:** `morphogenetic_engine/grafting.py`
 * **File to Modify:** `morphogenetic_engine/core.py` (class `KasminaMicro`)
 
 #### **3.1. Rename "Blending" to "Grafting"**
@@ -139,9 +139,9 @@ This phase refactors the blending strategy system to align with the new lifecycl
 * Rename `blending.py` to `grafting.py`.
 * Update all references, including the factory function `get_strategy`.
 
-#### **3.2. Fix `PerformanceLinkedBlending`**
+#### **3.2. Fix `PerformanceLinkedGrafting`**
 
-* **The Flaw:** As noted in `blending_strategy_implementation_plan.md`, this strategy currently links grafting speed to reconstruction loss, which is counterproductive.
+* **The Flaw:** As noted in `grafting_strategy_implementation_plan.md`, this strategy currently links grafting speed to reconstruction loss, which is counterproductive.
 * **The Fix:** This strategy should be disabled or redesigned. The recommended fix is to link it to the global validation loss *after* the `FINE-TUNING` phase has begun. For the `GRAFTING` phase, this strategy is not suitable. A new strategy could be created for the `FINE-TUNING` phase that adjusts the learning rate based on task performance.
 
 #### **3.3. Implement Heuristic Strategy Selector**
@@ -157,7 +157,7 @@ This phase refactors the blending strategy system to align with the new lifecycl
         info = self.seed_manager.seeds[seed_id]
         telemetry = info.get("telemetry", {})
         drift = telemetry.get("drift", 0.0)
-        cfg = self.blend_cfg
+        cfg = self.graft_cfg
 
         # Heuristic rules:
         if drift > cfg.high_drift_threshold:
@@ -175,7 +175,7 @@ This phase refactors the blending strategy system to align with the new lifecycl
 A comprehensive testing suite is required to validate the new lifecycle and bug fixes.
 
 * **Unit Tests:**
-  * Verify that the `BaseNet.forward` method correctly blends outputs with `alpha`.
+  * Verify that the `BaseNet.forward` method correctly grafts outputs with `alpha`.
   * Test each state transition in `SentinelSeed`'s lifecycle.
   * Test each `GraftingStrategy` to ensure it calculates `alpha` correctly.
   * Test the `_choose_graft_strategy` heuristic selector with mocked telemetry data.
@@ -189,6 +189,6 @@ Update all relevant project documentation to reflect these changes.
 
 * **`README.md`:** Update the main README to describe the new lifecycle and features.
 * **`docs/2. Architecture/kasima/SEED_LIFECYCLE.md`:** This document should be updated to be the new single source of truth for the lifecycle.
-* **`docs/2. Architecture/kasima/blending_strategy_implementation_plan.md`:** Rename to `grafting_strategy_implementation_plan.md` and update its contents.
+* **`docs/2. Architecture/kasima/grafting_strategy_implementation_plan.md`:** Rename to `grafting_strategy_implementation_plan.md` and update its contents.
 
 By following this phased plan, the `kaslite` morphogenetic engine can be systematically and safely migrated to the new, more robust and functional architecture.

@@ -18,8 +18,8 @@ from .ui_dashboard import RichDashboard
 
 
 @dataclass(frozen=True)
-class BlendingConfig:
-    """Configuration for blending strategies."""
+class GraftingConfig:
+    """Configuration for grafting strategies."""
 
     fixed_steps: int = 30
     stabilization_epochs: int = 5  # Number of epochs to hold alpha=1.0 during stabilization
@@ -28,7 +28,7 @@ class BlendingConfig:
     performance_loss_factor: float = 0.8
     grad_norm_lower: float = 0.1
     grad_norm_upper: float = 1.0
-    """Configuration for blending strategies."""
+    """Configuration for grafting strategies."""
 
 class SeedManager:
     """
@@ -202,7 +202,7 @@ class KasminaMicro:
         delta: float = 1e-4,
         acc_threshold: float = 0.95,
         logger: ExperimentLogger | None = None,
-        blending_config: BlendingConfig | None = None,  # Add new config
+        grafting_config: GraftingConfig | None = None,  # Add new config
     ) -> None:
         self.seed_manager = seed_manager
         self.patience = patience
@@ -212,7 +212,7 @@ class KasminaMicro:
         self.prev_loss = float("inf")
         self.logger = logger
         self.cull_embargo_epochs = 50  # Number of epochs to wait before replacing a culled seed
-        self.graft_cfg = blending_config or BlendingConfig()
+        self.graft_cfg = grafting_config or GraftingConfig()
 
     def _handle_culled_seeds(self, epoch: int):
         """Check for culled seeds whose embargo period has expired and replace them."""
@@ -276,16 +276,16 @@ class KasminaMicro:
                     
                     # Log the strategy choice with rich telemetry
                     if self.logger:
-                        from .events import EventType, BlendStrategyChosenPayload, LogEvent
+                        from .events import EventType, GraftStrategyChosenPayload, LogEvent
                         import time
-                        payload = BlendStrategyChosenPayload(
+                        payload = GraftStrategyChosenPayload(
                             seed_id=seed_id,
                             epoch=epoch,
                             strategy_name=strategy_name,
                             telemetry=telemetry_data,
                             timestamp=time.time()
                         )
-                        event = LogEvent(EventType.BLEND_STRATEGY_CHOSEN, payload)
+                        event = LogEvent(EventType.GRAFT_STRATEGY_CHOSEN, payload)
                         self.logger.log_event(epoch, event)
                         
                         # Record in analytics for Phase 2 dashboard

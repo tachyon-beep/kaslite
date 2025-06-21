@@ -28,7 +28,7 @@ def generate_experiment_slug(args) -> str:
     """Generate a unique slug for an experiment configuration."""
     return (
         f"{args.problem_type}_dim{args.input_dim}_{args.device}"
-        f"_h{args.hidden_dim}_bs{args.blend_steps}"
+        f"_h{args.hidden_dim}_bs{args.graft_steps}"
         f"_lr{args.shadow_lr}_dw{args.drift_warn}"
     )
 
@@ -49,7 +49,7 @@ def create_experiment_config(args, device) -> Dict[str, Any]:
         "hidden_dim": args.hidden_dim,
         "num_layers": args.num_layers,
         "seeds_per_layer": args.seeds_per_layer,
-        "blend_steps": args.blend_steps,
+        "graft_steps": args.graft_steps,
         "shadow_lr": args.shadow_lr,
         "drift_warn": args.drift_warn,
         "acc_threshold": args.acc_threshold,
@@ -105,7 +105,7 @@ def write_experiment_log_header(log_f, config: Dict[str, Any], args) -> None:
         "hidden_dim",
         "num_layers",
         "seeds_per_layer",
-        "blend_steps",
+        "graft_steps",
         "shadow_lr",
         "drift_warn",
         "acc_threshold",

@@ -47,7 +47,7 @@ SEED_HEALTH_SIGNAL = Gauge(
 
 SEED_STATE = Gauge(
     "kaslite_seed_state",
-    "Current state of each seed (0=dormant, 1=training, 2=blending, 3=active)",
+    "Current state of each seed (encoded as enum value)",
     ["seed_id", "experiment_id"],
 )
 
