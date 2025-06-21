@@ -54,14 +54,17 @@ def _perform_per_step_seed_updates(
         if epoch is not None:
             info["last_epoch"] = epoch
 
-        batch = _get_seed_training_batch(info, device)
+        # Match on the seed's state to determine the primary action.
+        match seed.state:
+            case SeedState.TRAINING.value:
+                batch = _get_seed_training_batch(info, device)
+                if batch is not None and hasattr(seed, "train_child_step"):
+                    seed.train_child_step(batch, epoch=epoch)
+            case SeedState.FINE_TUNING.value:
+                if hasattr(seed, "perform_fine_tuning_step"):
+                    seed.perform_fine_tuning_step(epoch=epoch)
 
-        # A seed in the TRAINING state trains its child network on its buffer data.
-        if seed.state == SeedState.TRAINING.value and batch is not None:
-            if hasattr(seed, "train_child_step"):
-                seed.train_child_step(batch, epoch=epoch)
-
-        # Grafting alpha is a continuous value that can be updated per-step.
+        # Grafting is a continuous process that can happen alongside other states.
         if hasattr(seed, "update_grafting"):
             seed.update_grafting(epoch)
 
@@ -86,7 +89,8 @@ def train_epoch(
     for i, (X, y) in enumerate(loader):
         X, y = X.to(device), y.to(device)
         optimiser.zero_grad(set_to_none=True)
-        preds = model(X)
+        # Pass labels to the model for fine-tuning data collection
+        preds = model(X, y)
         loss = criterion(preds, y)
         if loss.requires_grad:
             loss.backward()
@@ -118,7 +122,8 @@ def evaluate(model: nn.Module, loader: DataLoader, criterion: nn.Module, device:
     loss_accum, correct, total = 0.0, 0, 0
     for X, y in loader:
         X, y = X.to(device), y.to(device)
-        preds = model(X)
+        # Pass labels to the model to ensure consistent forward pass
+        preds = model(X, y)
         loss_accum += criterion(preds, y).item()
         correct += (preds.argmax(1) == y).sum().item()
         total += y.numel()
@@ -143,6 +148,12 @@ def execute_phase_1(
     scheduler = torch.optim.lr_scheduler.StepLR(optimiser, 20, 0.1)
     criterion = nn.CrossEntropyLoss().to(device)
     best_acc = 0.0
+
+    # Set the validation loader and loss function on the model for fine-tuning evaluation
+    if hasattr(model, "val_loader"):
+        model.val_loader = val_loader
+    if hasattr(model, "loss_function"):
+        model.loss_function = criterion
 
     logger.log_phase_update(
         epoch=0,

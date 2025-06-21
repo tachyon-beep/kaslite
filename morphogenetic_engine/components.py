@@ -77,6 +77,12 @@ class SentinelSeed(nn.Module):
         # Optimizer will be created when child is initialized (germinated)
         self.child_optim: torch.optim.Optimizer | None = None
         self.child_loss = nn.MSELoss()
+        
+        # Task projection layer for fine-tuning (created when needed)
+        self.task_projection_layer: torch.nn.Module | None = None
+        self.task_loss_criterion: torch.nn.Module | None = None
+        self.finetune_buffer_activations: list[torch.Tensor] = []
+        self.finetune_buffer_labels: list[torch.Tensor] = []
 
         # Register with seed manager
         self.seed_manager = seed_manager
@@ -119,7 +125,7 @@ class SentinelSeed(nn.Module):
             
             return health_signal
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, y: torch.Tensor | None = None) -> torch.Tensor:
         """
         Forward pass through the sentinel seed, with behavior determined by its current state.
         """
@@ -128,6 +134,10 @@ class SentinelSeed(nn.Module):
         if self.state == SeedState.DORMANT.value:
             self.seed_manager.append_to_buffer(self.seed_id, x)
             return x
+
+        # If labels are provided, buffer them for fine-tuning.
+        if y is not None and self.state in [SeedState.STABILIZATION.value, SeedState.FINE_TUNING.value]:
+            self.append_to_buffer_with_labels(x, y)
 
         # In several states, the seed should act as a pass-through identity function
         # and not interfere with the parent network's forward pass.
@@ -166,6 +176,44 @@ class SentinelSeed(nn.Module):
         return output
 
     # ------------------------------------------------------------------
+    def _initialize_state_metrics(self, new_state: SeedState, epoch: int | None):
+        """Helper to initialize metrics and settings for a new state."""
+        info = self.seed_manager.seeds[self.seed_id]
+        current_epoch = epoch if epoch is not None else info.get('last_epoch', 0)
+
+        if new_state == SeedState.CULLED:
+            info["culling_epoch"] = current_epoch
+        elif new_state == SeedState.GRAFTING:
+            info["graft_start_epoch"] = current_epoch
+            info["graft_initial_loss"] = self.validate_on_holdout() if hasattr(self, 'validate_on_holdout') else 0.0
+            info["graft_initial_drift"] = info.get("telemetry", {}).get("drift", 0.0)
+        elif new_state == SeedState.STABILIZATION:
+            info["stabilization_start_epoch"] = current_epoch
+            info["stabilization_epochs_remaining"] = self.graft_cfg.stabilization_epochs
+        elif new_state == SeedState.TRAINING:
+            if self.child_optim is None:
+                self.child_optim = torch.optim.Adam(
+                    self.child.parameters(), 
+                    lr=self.shadow_lr,
+                    weight_decay=1e-4
+                )
+            self.create_train_val_split()
+            info["training_steps"] = 0
+            info["baseline_loss"] = None
+            info["current_loss"] = 0.0
+            logging.info(f"Seed {self.seed_id} training setup complete at epoch {current_epoch}")
+        elif new_state == SeedState.FINE_TUNING:
+            info["fine_tuning_start_epoch"] = current_epoch
+            info["fine_tuning_steps"] = 0
+            info["best_task_loss"] = float('inf')
+            info["task_patience_counter"] = 0
+            info["task_loss_history"] = []
+            for param in self.child.parameters():
+                param.requires_grad = True
+            parent_net = self.parent_net_ref()
+            if parent_net:
+                self.setup_task_projection(parent_net.output_dim, nn.CrossEntropyLoss())
+
     def _set_state(self, new_state: str | SeedState, epoch: int | None = None):
         """Set the seed state, validating against allowed transitions."""
 
@@ -181,51 +229,12 @@ class SentinelSeed(nn.Module):
         
         old_state = self.state
         self.state = new_state.value
-        info = self.seed_manager.seeds[self.seed_id]
-        info["state"] = new_state.value
+        self.seed_manager.seeds[self.seed_id]["state"] = new_state.value
 
-        # Use provided epoch or get the last known one for the record.
-        current_epoch = epoch if epoch is not None else info.get('last_epoch', 0)
-        
-        # Specifically record the culling epoch when a seed is culled.
-        if new_state == SeedState.CULLED:
-            info["culling_epoch"] = current_epoch
-        
-        # Track when grafting starts for duration calculation
-        if new_state == SeedState.GRAFTING:
-            info["graft_start_epoch"] = current_epoch
-            # Capture initial grafting metrics for dynamic strategies
-            info["graft_initial_loss"] = self.validate_on_holdout() if hasattr(self, 'validate_on_holdout') else 0.0
-            # Capture current drift measurement if available
-            current_drift = info.get("telemetry", {}).get("drift", 0.0)
-            info["graft_initial_drift"] = current_drift
-        
-        # Track when stabilization starts and initialize stabilization parameters
-        if new_state == SeedState.STABILIZATION:
-            info["stabilization_start_epoch"] = current_epoch
-            # Initialize stabilization counter - will be managed by transition handler
-            info["stabilization_epochs_remaining"] = self.graft_cfg.stabilization_epochs
+        # Initialize metrics for the new state
+        self._initialize_state_metrics(new_state, epoch)
 
-        # Set up training infrastructure when transitioning TO TRAINING state
-        if new_state == SeedState.TRAINING:
-            # Create optimizer if not already created
-            if self.child_optim is None:
-                self.child_optim = torch.optim.Adam(
-                    self.child.parameters(), 
-                    lr=self.shadow_lr,
-                    weight_decay=1e-4  # L2 regularization
-                )
-            
-            # Create train/validation split from buffer data
-            self.create_train_val_split()
-            
-            # Initialize training metrics
-            info["training_steps"] = 0
-            info["baseline_loss"] = None
-            info["current_loss"] = 0.0
-            
-            logging.info(f"Seed {self.seed_id} training setup complete at epoch {current_epoch}")
-            
+        current_epoch = epoch if epoch is not None else self.seed_manager.seeds[self.seed_id].get('last_epoch', 0)
         self.seed_manager.record_transition(self.seed_id, old_state, new_state.value, epoch=current_epoch)
 
     def _initialize_as_identity(self):
@@ -382,6 +391,135 @@ class SentinelSeed(nn.Module):
         seed_info["current_loss"] = current_loss
         
         return current_loss
+
+    # ------------------------------------------------------------------
+    # Fine-Tuning Infrastructure (Phase 2.3)
+    # ------------------------------------------------------------------
+
+    def setup_task_projection(self, num_classes: int, task_loss_criterion: nn.Module):
+        """Initializes the task-specific projection layer and loss function for fine-tuning."""
+        if num_classes <= 0:
+            raise ValueError("Number of classes for task projection must be positive.")
+        
+        self.task_projection_layer = nn.Linear(self.dim, num_classes)
+        self.task_loss_criterion = task_loss_criterion
+        
+        # Add new parameters to the existing optimizer
+        if self.child_optim and self.task_projection_layer:
+            # Move new layer to the same device as the child network
+            device = next(self.child.parameters()).device
+            self.task_projection_layer.to(device)
+            
+            self.child_optim.add_param_group(
+                {'params': self.task_projection_layer.parameters()}
+            )
+            logging.info(f"Seed {self.seed_id} task projection layer created and optimizer updated.")
+        else:
+            # This path is a fallback, optimizer should exist from TRAINING state
+            params = list(self.child.parameters())
+            if self.task_projection_layer:
+                params.extend(list(self.task_projection_layer.parameters()))
+            self.child_optim = torch.optim.Adam(params, lr=self.shadow_lr, weight_decay=1e-4)
+            logging.warning(f"Seed {self.seed_id} optimizer re-created for fine-tuning.")
+
+    def append_to_buffer_with_labels(self, inputs: torch.Tensor, labels: torch.Tensor):
+        """Appends activations and corresponding labels to local buffers for fine-tuning."""
+        self.finetune_buffer_activations.append(inputs.detach().cpu())
+        self.finetune_buffer_labels.append(labels.detach().cpu())
+
+        # Keep buffer size bounded to prevent memory issues
+        max_buffer_size = 256  # Configurable: number of batches
+        while len(self.finetune_buffer_activations) > max_buffer_size:
+            self.finetune_buffer_activations.pop(0)
+            self.finetune_buffer_labels.pop(0)
+
+    def get_training_batch_with_labels(self, batch_size: int) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Gets a random batch of activations and labels from the fine-tuning buffer."""
+        if not self.finetune_buffer_activations or not self.finetune_buffer_labels:
+            return None
+        
+        # Concatenate all buffered tensors
+        try:
+            all_activations = torch.cat(self.finetune_buffer_activations, dim=0)
+            all_labels = torch.cat(self.finetune_buffer_labels, dim=0)
+        except RuntimeError:
+            logging.error(f"Seed {self.seed_id}: Could not concatenate fine-tuning buffers. Clearing.")
+            self.finetune_buffer_activations.clear()
+            self.finetune_buffer_labels.clear()
+            return None
+
+        if len(all_activations) == 0:
+            return None
+
+        # Create a random permutation and select a batch
+        indices = torch.randperm(len(all_activations))[:batch_size]
+        return all_activations[indices], all_labels[indices]
+
+    def perform_fine_tuning_step(self, epoch: int | None = None):
+        """
+        Performs one training step using task loss.
+        This is called by the main training loop for seeds in the FINE_TUNING state.
+        """
+        if self.state != SeedState.FINE_TUNING.value:
+            return
+
+        if not self.child_optim or not self.task_projection_layer or not self.task_loss_criterion:
+            logging.warning(f"Seed {self.seed_id} cannot fine-tune: missing optimizer, projection, or criterion.")
+            return
+
+        batch = self.get_training_batch_with_labels(batch_size=32)
+        if batch is None:
+            return # Not enough data to train yet
+
+        inputs, labels = batch
+        
+        # Move data to the correct device (assuming child is on one device)
+        device = next(self.child.parameters()).device
+        inputs, labels = inputs.to(device), labels.to(device)
+
+        self.child_optim.zero_grad(set_to_none=True)
+        
+        # Forward pass through child and projection layer
+        child_output = self.child(inputs)
+        task_logits = self.task_projection_layer(child_output)
+        
+        loss = self.task_loss_criterion(task_logits, labels)
+        loss.backward()
+        self.child_optim.step()
+
+        # Record metrics for this fine-tuning step
+        task_loss = loss.item()
+        seed_info = self.seed_manager.seeds[self.seed_id]
+        seed_info.setdefault("task_loss_history", []).append(task_loss)
+        seed_info["fine_tuning_steps"] = seed_info.get("fine_tuning_steps", 0) + 1
+
+    def evaluate_task_performance(self, data_loader) -> float:
+        """Evaluates the network's performance on the main task, with this seed active."""
+        parent_net = self.parent_net_ref()
+        if not parent_net:
+            return float('inf')
+
+        device = next(parent_net.parameters()).device
+        parent_net.eval() # Set the whole network to evaluation mode
+        total_loss = 0
+        total_count = 0
+
+        with torch.no_grad():
+            for inputs, labels in data_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                
+                # We need to get the output from the final layer of the parent network
+                outputs = parent_net(inputs)
+                
+                # Assuming the parent network's loss is what we measure
+                # This requires the parent to have a loss function.
+                if hasattr(parent_net, 'loss_function'):
+                    loss = parent_net.loss_function(outputs, labels)
+                    total_loss += loss.item() * inputs.size(0)
+                    total_count += inputs.size(0)
+
+        parent_net.train() # Return to training mode
+        return total_loss / total_count if total_count > 0 else float('inf')
 
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
@@ -659,12 +797,72 @@ class SentinelSeed(nn.Module):
         
         # Check if stabilization period is complete
         if remaining <= 0:
+            # Before transitioning, capture baseline task performance.
+            # This requires access to a validation loader.
+            parent_net = self.parent_net_ref()
+            if parent_net and hasattr(parent_net, 'val_loader'):
+                baseline = self.evaluate_task_performance(parent_net.val_loader)
+                seed_info["task_performance_baseline"] = baseline
+                logging.info(f"Seed {self.seed_id} captured baseline task performance: {baseline:.4f}")
+            else:
+                seed_info["task_performance_baseline"] = float('inf') # Fallback
+                logging.warning(f"Seed {self.seed_id}: Could not find validation loader to capture task baseline.")
+
             # Re-enable child parameter training for fine-tuning
             for param in self.child.parameters():
                 param.requires_grad = True
             
             # Transition to FINE_TUNING state
             self._set_state(SeedState.FINE_TUNING, epoch=epoch)
+
+    def _handle_fine_tuning_transition(self, seed_info: dict, epoch: int | None):
+        """Handles the transition logic for a seed in the FINE_TUNING state."""
+        
+        # The actual training work is done by the training loop calling `perform_fine_tuning_step`.
+        # This handler's job is just to check for completion based on local task loss stability.
+        
+        task_loss_history = seed_info.get("task_loss_history", [])
+        if len(task_loss_history) > 0:  # Check if any fine-tuning has happened
+            # Use patience to check for plateau
+            patience_limit = seed_info.get("task_patience_limit", 20)
+            max_steps = 200  # Max fine-tuning steps to prevent running forever
+
+            # Early stopping logic based on local task loss
+            current_task_loss = task_loss_history[-1]
+            if current_task_loss < seed_info.get("best_task_loss", float('inf')):
+                seed_info["best_task_loss"] = current_task_loss
+                seed_info["task_patience_counter"] = 0
+            else:
+                seed_info["task_patience_counter"] = seed_info.get("task_patience_counter", 0) + 1
+
+            if (seed_info.get("task_patience_counter", 0) >= patience_limit or 
+                seed_info.get("fine_tuning_steps", 0) >= max_steps):
+                logging.info(f"Seed {self.seed_id} completing fine-tuning phase. Evaluating...")
+                self._evaluate_fine_tuning_and_complete(epoch)
+    
+    def _evaluate_fine_tuning_and_complete(self, epoch: int | None = None):
+        """Final evaluation after fine-tuning to decide between FOSSILIZED and CULLED."""
+        seed_info = self.seed_manager.seeds[self.seed_id]
+        task_baseline = seed_info.get("task_performance_baseline", float('inf'))
+
+        # Trigger a final evaluation of the whole network's task performance
+        parent_net = self.parent_net_ref()
+        if parent_net and hasattr(parent_net, 'val_loader'):
+            final_task_loss = self.evaluate_task_performance(parent_net.val_loader)
+        else:
+            final_task_loss = float('inf') # Cannot evaluate
+            logging.warning(f"Seed {self.seed_id}: Could not find validation loader to evaluate final task performance.")
+
+        logging.info(f"Seed {self.seed_id} fine-tuning evaluation: Baseline Task Loss={task_baseline:.4f}, Final Task Loss={final_task_loss:.4f}")
+
+        # Compare final global task loss with the baseline global task loss
+        improvement_threshold = 0.95 # Require 5% improvement
+        if final_task_loss < task_baseline * improvement_threshold:
+            self._set_state(SeedState.FOSSILIZED, epoch=epoch)
+            logging.info("Seed %s fossilized - task performance improved.", self.seed_id)
+        else:
+            self._cull_seed(epoch=epoch)
+            logging.info("Seed %s culled - insufficient task performance improvement.", self.seed_id)
 
     def assess_and_transition_state(self, epoch: int | None = None):
         """
@@ -686,6 +884,8 @@ class SentinelSeed(nn.Module):
                 self._handle_probationary_transition(seed_info, epoch)
             case SeedState.STABILIZATION.value:
                 self._handle_stabilization_transition(seed_info, epoch)
+            case SeedState.FINE_TUNING.value:
+                self._handle_fine_tuning_transition(seed_info, epoch)
             case _:
                 # No transitions for other states (DORMANT, FOSSILIZED, CULLED)
                 pass
@@ -826,6 +1026,10 @@ class BaseNet(nn.Module):
             graft_cfg = BlendingConfig()
         self.graft_cfg = graft_cfg
 
+        # Add placeholders for data loaders and loss function for fine-tuning evaluation
+        self.val_loader: "DataLoader | None" = None
+        self.loss_function: nn.Module | None = None
+
         # Store seed creation parameters for replacing culled seeds
         self.seed_manager_ref = seed_manager
         self.seed_probationary_steps = probationary_steps
@@ -933,6 +1137,10 @@ class BaseNet(nn.Module):
         """Get a flat list of all seeds for compatibility."""
         return list(self.all_seeds)
 
+    def get_seeds_in_state(self, state: SeedState) -> list:
+        """Get all seeds currently in a specific state."""
+        return [seed for seed in self.all_seeds if hasattr(seed, 'state') and seed.state == state.value]
+
     def get_seeds_for_layer(self, layer_idx: int) -> list:
         """Get all seeds for a specific layer."""
         if layer_idx < 0 or layer_idx >= self.num_layers:
@@ -948,7 +1156,26 @@ class BaseNet(nn.Module):
         return self.all_seeds
 
     # ------------------------------------------------------------------
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def _apply_layer_seeds(self, x: torch.Tensor, y: torch.Tensor | None, layer_idx: int) -> torch.Tensor:
+        """Helper function to apply all seeds for a given layer."""
+        layer_seeds = self.get_seeds_for_layer(layer_idx)
+
+        if not layer_seeds:
+            return x
+
+        # Define a helper to call a seed with optional labels
+        def call_seed(seed, data, labels):
+            if isinstance(seed, SentinelSeed):
+                return seed(data, labels)
+            return seed(data)
+
+        if self.seeds_per_layer == 1:
+            return call_seed(layer_seeds[0], x, y)
+        else:
+            seed_outputs = [call_seed(seed, x, y) for seed in layer_seeds]
+            return torch.stack(seed_outputs, dim=0).mean(dim=0)
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor | None = None) -> torch.Tensor:
         """Forward pass through the complete network."""
         # Input layer
         x = self.input_activation(self.input_layer(x))
@@ -957,23 +1184,7 @@ class BaseNet(nn.Module):
         for i in range(self.num_layers):
             # Apply linear layer and activation
             x = self.activations[i](self.layers[i](x))
-
-            # Apply seeds for this layer
-            layer_seeds = self.get_seeds_for_layer(i)
-
-            if self.seeds_per_layer == 1:
-                # Single seed case (backward compatible)
-                x = layer_seeds[0](x)
-            else:
-                # Multiple seeds case - apply all and average
-                seed_outputs = []
-                for seed in layer_seeds:
-                    seed_output = seed(x)
-                    seed_outputs.append(seed_output)
-
-                # Average the outputs from all seeds in this layer
-                x = torch.stack(seed_outputs, dim=0).mean(dim=0)
+            # Apply seeds for this layer using the helper
+            x = self._apply_layer_seeds(x, y, i)
 
         return self.out(x)
-
-    # ------------------------------------------------------------------
