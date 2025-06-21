@@ -54,19 +54,21 @@ class EventManager:
         if not self.seed_log_events:
             content = Text("No seed events yet...", style="dim")
         else:
-            # Show only the most recent events (approximately last 15-20 to fit in panel)
-            visible_events = list(self.seed_log_events)[-20:]  # Show last 20 events
+            # Show only the most recent events (last 20 to fit in panel without scrolling issues)
+            recent_events = list(self.seed_log_events)[-20:]
             
             # Add header showing total events if we're truncating
-            header_lines = []
+            lines = []
             if len(self.seed_log_events) > 20:
                 hidden_count = len(self.seed_log_events) - 20
-                header_lines.append(f"[dim]... {hidden_count} earlier events[/]")
-                header_lines.append("")  # Empty line separator
+                lines.append(f"[dim]... {hidden_count} earlier events[/]")
+                lines.append("")  # Empty line separator
             
-            # Combine header and visible events
-            all_lines = header_lines + visible_events
-            event_text = "\n".join(all_lines)
+            # Add all recent events 
+            lines.extend(recent_events)
+            
+            # Join all lines into single text content (same as event log panel)
+            event_text = "\n".join(lines)
             content = Text.from_markup(event_text)
         
         # Show event count in title

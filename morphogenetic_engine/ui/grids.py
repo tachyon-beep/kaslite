@@ -19,6 +19,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+import wcwidth
+
 from morphogenetic_engine.events import NetworkStrain, SeedState
 
 from .config import EMPTY_CELL_EMOJI, SEED_EMOJI_MAP, STRAIN_EMOJI_MAP
@@ -58,43 +60,55 @@ class GridManager:
             border_style="red",
         )
 
+    def pad_cell(self,text: str, width: int) -> str:
+        """Right-pad `text` so it occupies exactly `width` terminal cells."""
+        w = wcwidth.wcswidth(text)
+        if w < 0:
+            w = len(text)
+        return text + " " * max(0, width - w)
+
+
     def create_seed_legend_panel(self) -> Panel:
-        """Generate the legend for the seed box."""
-        # Create a hidden table for proper alignment
-        legend_table = Table(show_header=False, show_edge=False, box=None, padding=(0, 1))
-        
-        # Add columns for each emoji/label pair
-        legend_table.add_column("", justify="center")  # Col 1
-        legend_table.add_column("", justify="center")  # Col 2
-        legend_table.add_column("", justify="center")  # Col 3
-        legend_table.add_column("", justify="center")  # Col 4
-        legend_table.add_column("", justify="center")  # Col 5
-        
-        # First row
-        legend_table.add_row(
-            "⚪ Dormant",
-            "🌱 Germinated", 
-            "🟢 Training",
-            "🟡 Blending",
-            "👻 Shadowing",
+        # 1) Define your two rows of (emoji, label) pairs
+        row1 = [
+            ("⚪", "Dormant"),
+            ("🌱", "Germinated"),
+            ("🟢", "Training"),
+            ("🟡", "Blending"),
+            ("👻", "Shadowing"),
+        ]
+        row2 = [
+            ("🧑‍⚖️", "Probationary"),
+            ("🦴", "Fossilized"),
+            ("🥀", "Culled"),
+            (EMPTY_CELL_EMOJI, "Empty slot"),
+            ("", ""),  # blank filler
+        ]
+
+        # 2) Compute a uniform cell width for the widest entry
+        all_texts = [f"{e} {l}" for e, l in row1 + row2]
+        max_w = max(
+            (wcwidth.wcswidth(t) if wcwidth.wcswidth(t) > 0 else len(t))
+            for t in all_texts
         )
-        
-        # Second row
-        legend_table.add_row(
-            "🧑‍⚖️ Probationary",
-            "🦴 Fossilized",
-            "🥀 Culled",
-            f"{EMPTY_CELL_EMOJI} Empty",
-            "",  # Empty cell for alignment
-        )
-        
-        return Panel(
-            Align.center(legend_table),
+        CELL_WIDTH = max_w + 2  # add a little breathing room
+
+        # 3) Build the two padded lines
+        line1 = "".join(self.pad_cell(f"{e} {l}", CELL_WIDTH) for e, l in row1)
+        line2 = "".join(self.pad_cell(f"{e} {l}", CELL_WIDTH) for e, l in row2)
+
+        # 4) Render as a single Text block (monospaced!)
+        text = Text(f"{line1}\n{line2}", style="dim")
+
+        # 5) Wrap in a non‐expanding Panel and centre it
+        panel = Panel(
+            text,
             box=box.MINIMAL,
-            style="dim",
+            padding=0,
             border_style="green",
-            padding=(0, 1),
+            expand=False,
         )
+        return Align.center(panel)
 
     def create_strain_legend_panel(self) -> Panel:
         """Generate the legend for the network strain."""
